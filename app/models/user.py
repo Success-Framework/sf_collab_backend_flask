@@ -413,7 +413,7 @@ class User(db.Model):
         total_likes = 0
         total_likes += sum(idea.likes for idea in self.ideas)
         total_likes += sum(knowledge.likes for knowledge in self.knowledge_posts)
-        total_likes += sum(post.likes for post in self.user_posts)
+        total_likes += self.post_likes.count()
         return total_likes
     
     def _calculate_engagement_score(self):
@@ -428,9 +428,9 @@ class User(db.Model):
     
     def get_recent_activity(self, limit=10):
         """Get user's recent activity across all platforms"""
-        from models.task import Task
-        from models.idea import Idea
-        from models.ideaComment import IdeaComment
+        from app.models.task import Task
+        from app.models.idea import Idea
+        from app.models.ideaComment import IdeaComment
         
         activities = []
         

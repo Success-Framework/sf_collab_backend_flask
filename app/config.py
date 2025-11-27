@@ -15,8 +15,7 @@ class Config:
     
     # SQLAlchemy
     SQLALCHEMY_DATABASE_URI = os.getenv(
-        'DATABASE_URL',
-        'mysql+pymysql://root:@127.0.0.1:3306/sf_collab'
+        'DATABASE_URL'
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
