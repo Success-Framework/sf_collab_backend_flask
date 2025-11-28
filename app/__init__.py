@@ -71,7 +71,8 @@ def create_app(config_name=None):
                     "http://localhost:3000",
                     "http://127.0.0.1:3000",
                     "http://localhost:5173",
-                    "http://127.0.0.1:5173"
+                    "http://127.0.0.1:5173",
+                    "https://sfclb.netlify.app"
                 ]),
                 "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                 "allow_headers": [
