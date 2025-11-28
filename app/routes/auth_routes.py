@@ -473,6 +473,7 @@ def change_password():
 def google_login():
     """Initiate Google OAuth flow"""
     redirect_uri = url_for('auth.google_callback', _external=True)
+    print("🔥 GOOGLE REDIRECT URI:", redirect_uri)
     return oauth.google.authorize_redirect(redirect_uri)
 
 
