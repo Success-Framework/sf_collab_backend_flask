@@ -1,7 +1,7 @@
 from datetime import datetime
 from app.extensions import db
-from sqlalchemy import Enum
-from .Enums import SuggestionStatus
+# from sqlalchemy import Enum
+# from .Enums import SuggestionStatus
 
 class PostComment(db.Model):
     __tablename__ = 'post_comments'

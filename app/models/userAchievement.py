@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
-from sqlalchemy import Enum
+# from sqlalchemy import Enum
 from app.extensions import db
 
 class UserAchievement(db.Model):

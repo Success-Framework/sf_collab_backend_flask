@@ -52,7 +52,9 @@ class TeamPerformance(db.Model):
         """Check if this performance record is for the current period"""
         now = datetime.utcnow()
         return self.period_start <= now <= self.period_end
-    
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self):
         return {
             'id': self.id,
@@ -60,7 +62,7 @@ class TeamPerformance(db.Model):
             'score_percentage': self.score_percentage,
             'active_members': self.active_members,
             'tasks_completed': self.tasks_completed,
-            'productivity_level': self.productivity_level,
+            'productivity_level':self._enum_to_value( self.productivity_level),
             'period_start': self.period_start.isoformat(),
             'period_end': self.period_end.isoformat(),
             'is_current_period': self.is_current_period(),

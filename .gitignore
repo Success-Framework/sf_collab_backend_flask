@@ -23,10 +23,12 @@ __pycache__/
 *.py[cod]
 *.pyc
 instance/
-# .env
+.env
 # .env.*
 *.db
 *.sqlite3
+
+model_cache/
 
 # --- IDE / Editors ---
 .vscode/

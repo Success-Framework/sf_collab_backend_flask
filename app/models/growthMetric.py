@@ -85,12 +85,15 @@ class GrowthMetric(db.Model):
         else:
             return f"{self.current_value:,.0f}"
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self):
         return {
             'id': self.id,
             'startup_id': self.startup_id,
             'user_id': self.user_id,
-            'metric_type': self.metric_type,
+            'metric_type': self._enum_to_value(self.metric_type),
             'current_value': self.current_value,
             'previous_value': self.previous_value,
             'growth_percentage': self.growth_percentage,

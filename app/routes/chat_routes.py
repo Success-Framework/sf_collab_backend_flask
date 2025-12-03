@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, send_from_directory
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.chatConversation import ChatConversation, conversation_participants
 from app.models.chatMessage import ChatMessage
 from app.models.user import User
@@ -39,22 +40,22 @@ def validate_file_size(file, max_size=MAX_FILE_SIZE):
     file.seek(0)
     return size <= max_size
     
-    
+
+#! GET CONVERSATIONS
 @chat_bp.route('/conversations', methods=['GET'])
+@jwt_required()
 def get_conversations():
     """Get user's conversations with timezone-converted previews"""
     try:
-        user_id = request.args.get('user_id', type=int)
-        if not user_id:
-            return error_response('User ID is required', 400)
+        current_user_id = get_jwt_identity()
         
-        user = User.query.get(user_id)
+        user = User.query.get(current_user_id)
         if not user:
             return error_response('User not found', 404)
         
         conversations = ChatConversation.query\
             .join(conversation_participants)\
-            .filter(conversation_participants.c.user_id == user_id)\
+            .filter(conversation_participants.c.user_id == current_user_id)\
             .filter(ChatConversation.is_active == True)\
             .order_by(ChatConversation.updated_at.desc())\
             .all()
@@ -75,28 +76,26 @@ def get_conversations():
     except Exception as e:
         logging.error(f'Error in get_conversations: {str(e)}')
         return error_response(f'Failed to load conversations: {str(e)}', 500)
-        
-        
+
+#! MARK CONVERSATION AS READ
 @chat_bp.route('/conversations/<int:conversation_id>/mark-read', methods=['POST'])
+@jwt_required()
 def mark_conversation_read(conversation_id):
     """Mark conversation as read for user"""
     try:
-        user_id = request.args.get('user_id', type=int) or request.json.get('user_id')
+        current_user_id = get_jwt_identity()
         
-        if not user_id:
-            return error_response('User ID is required', 400)
-        
-        user = User.query.get(user_id)
+        user = User.query.get(current_user_id)
         conversation = ChatConversation.query.get(conversation_id)
         
         if not user or not conversation:
             return error_response('User or conversation not found', 404)
         
-        if not conversation.is_user_participant(user_id):
+        if not conversation.is_user_participant(current_user_id):
             return error_response('Access denied', 403)
         
         # Mark conversation as read
-        conversation.mark_as_read(user_id)
+        conversation.mark_as_read(current_user_id)
         
         return success_response({
             'message': 'Conversation marked as read'
@@ -106,25 +105,23 @@ def mark_conversation_read(conversation_id):
         logging.error(f'Error marking conversation as read: {str(e)}')
         return error_response(f'Failed to mark conversation as read: {str(e)}', 500)
         
-
+#! GET MESSAGES
 @chat_bp.route('/conversations/<int:conversation_id>/messages', methods=['GET'])
+@jwt_required()
 def get_messages(conversation_id):
     """Get messages for conversation with timezone conversion"""
     try:
-        user_id = request.args.get('user_id', type=int)
+        current_user_id = get_jwt_identity()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         
-        if not user_id:
-            return error_response('User ID is required', 400)
-        
-        user = User.query.get(user_id)
+        user = User.query.get(current_user_id)
         conversation = ChatConversation.query.get(conversation_id)
         
         if not user or not conversation:
             return error_response('User or conversation not found', 404)
         
-        if not conversation.is_user_participant(user_id):
+        if not conversation.is_user_participant(current_user_id):
             return error_response('Access denied', 403)
         
         messages = conversation.get_messages_for_user(user, limit, offset)
@@ -138,10 +135,12 @@ def get_messages(conversation_id):
         logging.error(f'Error in get_messages: {str(e)}')
         return error_response(f'Failed to load messages: {str(e)}', 500)
 
-        
+#! SEND MESSAGE
 @chat_bp.route('/conversations/<int:conversation_id>/messages', methods=['POST'])
+@jwt_required()
 def send_message(conversation_id):
     """Send new message with timezone handling, file upload, and WebSocket emission"""
+    current_user_id = get_jwt_identity()
     
     is_file_upload = 'file' in request.files
     
@@ -159,23 +158,21 @@ def send_message(conversation_id):
         if not validate_file_size(file):
             return error_response(f'File size exceeds maximum limit of {MAX_FILE_SIZE / (1024*1024)}MB')
         
-        sender_id = request.form.get('sender_id', type=int)
         content = request.form.get('content', 'Sent a file')
         message_type = request.form.get('message_type', 'file')
         reply_to_id = request.form.get('reply_to_id', type=int)
         
     else:
         data = request.get_json()
-        sender_id = data.get('sender_id')
         content = data.get('content')
         message_type = data.get('message_type', 'text')
         reply_to_id = data.get('reply_to_id')
         file = None
     
-    if not sender_id or not content:
-        return error_response('Missing required fields: sender_id, content')
+    if not content:
+        return error_response('Missing required field: content')
     
-    user = User.query.get(sender_id)
+    user = User.query.get(current_user_id)
     conversation = ChatConversation.query.get(conversation_id)
     
     if not user or not conversation:
@@ -204,11 +201,9 @@ def send_message(conversation_id):
         file_type = None
         
         if file:
-            # os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-            
             filename = secure_filename(file.filename)
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            unique_filename = f"{timestamp}_{sender_id}_{filename}"
+            unique_filename = f"{timestamp}_{current_user_id}_{filename}"
             file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
             
             file.save(file_path)
@@ -262,65 +257,22 @@ def send_message(conversation_id):
         logging.error(f'Failed to send message: {str(e)}')
         return error_response(f'Failed to send message: {str(e)}', 500)
 
-
-# @chat_bp.route('/conversations/<int:conversation_id>/files', methods=['GET'])
-# def get_conversation_files(conversation_id):
-#     """Get all files from a conversation"""
-#     try:
-#         conversation = ChatConversation.query.get(conversation_id)
-        
-#         if not conversation:
-#             return error_response('Conversation not found', 404)
-        
-#         messages_with_files = ChatMessage.query.filter_by(
-#             conversation_id=conversation_id
-#         ).filter(
-#             ChatMessage.file_url.isnot(None)
-#         ).order_by(ChatMessage.created_at.desc()).all()
-        
-#         files = []
-#         for msg in messages_with_files:
-#             file_url = msg.file_url
-        
-#             if file_url:
-#                 clean_path = file_url.lstrip('/')
-#                 file_url = f"/api/chat/{clean_path}"
-#                 file_url = request.host_url.rstrip('/') + file_url
-        
-#             files.append({
-#                 'id': msg.id,
-#                 'file_name': msg.file_name,
-#                 'file_url': file_url,
-#                 'file_size': msg.file_size,
-#                 'file_type': msg.file_type,
-#                 'uploaded_by': {
-#                     'id': msg.sender_id,
-#                     'firstName': msg.message_sender.first_name,
-#                     'lastName': msg.message_sender.last_name
-#                 },
-#                 'uploaded_at': msg.created_at.isoformat(),
-#                 'is_image': msg.is_image(),
-#                 'is_document': msg.is_document()
-#             })
-        
-#         return success_response({
-#             'files': files,
-#             'total_count': len(files)
-#         }, 'Files retrieved successfully')
-    
-#     except Exception as e:
-#         logging.error(f'Failed to get conversation files: {str(e)}')
-#         return error_response(f'Failed to get files: {str(e)}', 500)
-        
-        
+#! GET CONVERSATION FILES
 @chat_bp.route('/conversations/<int:conversation_id>/files', methods=['GET'])
+@jwt_required()
 def get_conversation_files(conversation_id):
     """Get all files from a conversation"""
     try:
+        current_user_id = get_jwt_identity()
+        
         conversation = ChatConversation.query.get(conversation_id)
         
         if not conversation:
             return error_response('Conversation not found', 404)
+        
+        # Check if user is a participant
+        if not conversation.is_user_participant(current_user_id):
+            return error_response('Access denied', 403)
         
         messages_with_files = ChatMessage.query.filter_by(
             conversation_id=conversation_id
@@ -360,8 +312,9 @@ def get_conversation_files(conversation_id):
         logging.error(f'Failed to get conversation files: {str(e)}')
         return error_response(f'Failed to get files: {str(e)}', 500)
         
-        
+#! SERVE UPLOADED FILE
 @chat_bp.route('/uploads/<path:filename>', methods=['GET'])
+@jwt_required()
 def serve_uploaded_file(filename):
     """Serve uploaded files"""
     
@@ -373,17 +326,16 @@ def serve_uploaded_file(filename):
     except FileNotFoundError:
         return error_response('File not found', 404)
 
-
+#! EDIT MESSAGE
 @chat_bp.route('/conversations/<int:conversation_id>/messages/<int:message_id>', methods=['PUT'])
+@jwt_required()
 def edit_message(conversation_id, message_id):
     """Edit an existing message"""
+    current_user_id = get_jwt_identity()
     data = request.get_json()
     
     if not data.get('content'):
         return error_response('Content is required')
-    
-    if not data.get('user_id'):
-        return error_response('User ID is required')
     
     try:
         message = ChatMessage.query.get(message_id)
@@ -394,7 +346,7 @@ def edit_message(conversation_id, message_id):
         if message.conversation_id != conversation_id:
             return error_response('Message does not belong to this conversation', 400)
         
-        if message.sender_id != data.get('user_id'):
+        if message.sender_id != current_user_id:
             return error_response('You can only edit your own messages', 403)
         
         new_content = data.get('content')
@@ -412,7 +364,7 @@ def edit_message(conversation_id, message_id):
         
         RealtimeService.emit_message_edited(message.id)
         
-        user = User.query.get(data.get('user_id'))
+        user = User.query.get(current_user_id)
         response_data = message.to_dict(for_user=user)
         
         return success_response({
@@ -424,14 +376,12 @@ def edit_message(conversation_id, message_id):
         logging.error(f'Failed to edit message: {str(e)}')
         return error_response(f'Failed to edit message: {str(e)}', 500)
 
-
+#! DELETE MESSAGE
 @chat_bp.route('/conversations/<int:conversation_id>/messages/<int:message_id>', methods=['DELETE'])
+@jwt_required()
 def delete_message(conversation_id, message_id):
     """Delete a message"""
-    user_id = request.args.get('user_id', type=int)
-    
-    if not user_id:
-        return error_response('User ID is required')
+    current_user_id = get_jwt_identity()
     
     try:
         message = ChatMessage.query.get(message_id)
@@ -444,7 +394,7 @@ def delete_message(conversation_id, message_id):
             return error_response('Message does not belong to this conversation', 400)
         
         # Allow deletion by sender or conversation creator
-        if message.sender_id != user_id and conversation.created_by_id != user_id:
+        if message.sender_id != current_user_id and conversation.created_by_id != current_user_id:
             return error_response('You can only delete your own messages or you must be the conversation creator', 403)
         
         if message.file_url:
@@ -468,24 +418,22 @@ def delete_message(conversation_id, message_id):
         db.session.rollback()
         logging.error(f'Failed to delete message: {str(e)}')
         return error_response(f'Failed to delete message: {str(e)}', 500)
-
         
+#! GET SPECIFIC MESSAGE
 @chat_bp.route('/messages/<int:message_id>', methods=['GET'])
+@jwt_required()
 def get_message(message_id):
     """Get specific message with timezone conversion"""
     try:
-        user_id = request.args.get('user_id', type=int)
+        current_user_id = get_jwt_identity()
         
-        if not user_id:
-            return error_response('User ID is required', 400)
-        
-        user = User.query.get(user_id)
+        user = User.query.get(current_user_id)
         message = ChatMessage.query.get(message_id)
         
         if not user or not message:
             return error_response('User or message not found', 404)
         
-        if not message.conversation.is_user_participant(user_id):
+        if not message.conversation.is_user_participant(current_user_id):
             return error_response('Access denied', 403)
         
         return success_response({
@@ -495,19 +443,21 @@ def get_message(message_id):
     except Exception as e:
         logging.error(f'Error in get_message: {str(e)}')
         return error_response(f'Failed to get message: {str(e)}', 500)
-
         
+#! CREATE CONVERSATION
 @chat_bp.route('/conversations', methods=['POST'])
+@jwt_required()
 def create_conversation():
     """Create new conversation with WebSocket emission and avatar upload"""
     try:
+        current_user_id = get_jwt_identity()
+        
         # Check if avatar file is present
         has_avatar = 'avatar' in request.files
         
         if has_avatar:
             # Handle multipart form data
             data = {
-                'created_by_id': int(request.form.get('created_by_id')),
                 'participant_ids': json.loads(request.form.get('participant_ids', '[]')),
                 'name': request.form.get('name'),
                 'conversation_type': request.form.get('conversation_type', 'direct'),
@@ -519,11 +469,11 @@ def create_conversation():
             data = request.get_json()
             avatar_file = None
         
-        required_fields = ['created_by_id', 'participant_ids']
+        required_fields = ['participant_ids']
         if not all(field in data for field in required_fields):
-            return error_response('Missing required fields: created_by_id, participant_ids', 400)
+            return error_response('Missing required fields: participant_ids', 400)
         
-        creator = User.query.get(data['created_by_id'])
+        creator = User.query.get(current_user_id)
         if not creator:
             return error_response('Creator not found', 404)
         
@@ -540,7 +490,7 @@ def create_conversation():
             
             filename = secure_filename(avatar_file.filename)
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            unique_filename = f"avatar_{timestamp}_{data['created_by_id']}_{filename}"
+            unique_filename = f"avatar_{timestamp}_{current_user_id}_{filename}"
             file_path = os.path.join(AVATAR_UPLOAD_FOLDER, unique_filename)
             
             avatar_file.save(file_path)
@@ -584,22 +534,20 @@ def create_conversation():
         traceback.print_exc()
         return error_response(f'Failed to create conversation: {str(e)}', 500)
 
-
+#! UPDATE CONVERSATION
 @chat_bp.route('/conversations/<int:conversation_id>', methods=['PUT'])
+@jwt_required()
 def update_conversation(conversation_id):
     """Update conversation details (creator only)"""
     try:
-        user_id = request.args.get('user_id', type=int) or (request.form.get('user_id', type=int) if request.form else None)
-        
-        if not user_id:
-            return error_response('User ID is required', 400)
+        current_user_id = get_jwt_identity()
         
         conversation = ChatConversation.query.get(conversation_id)
         
         if not conversation:
             return error_response('Conversation not found', 404)
         
-        if conversation.created_by_id != user_id:
+        if conversation.created_by_id != current_user_id:
             return error_response('Only conversation creator can update conversation', 403)
         
         # Check if avatar file is present
@@ -636,7 +584,7 @@ def update_conversation(conversation_id):
             
             filename = secure_filename(avatar_file.filename)
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            unique_filename = f"avatar_{timestamp}_{user_id}_{filename}"
+            unique_filename = f"avatar_{timestamp}_{current_user_id}_{filename}"
             file_path = os.path.join(AVATAR_UPLOAD_FOLDER, unique_filename)
             
             avatar_file.save(file_path)
@@ -651,7 +599,7 @@ def update_conversation(conversation_id):
         conversation.updated_at = datetime.utcnow()
         db.session.commit()
         
-        user = User.query.get(user_id)
+        user = User.query.get(current_user_id)
         return success_response({
             'conversation': conversation.to_dict(for_user=user)
         }, 'Conversation updated successfully')
@@ -661,18 +609,20 @@ def update_conversation(conversation_id):
         logging.error(f'Failed to update conversation: {str(e)}')
         return error_response(f'Failed to update conversation: {str(e)}', 500)
 
-
+#! ADD PARTICIPANT
 @chat_bp.route('/conversations/<int:conversation_id>/participants', methods=['POST'])
+@jwt_required()
 def add_participant(conversation_id):
     """Add participant to conversation (creator only)"""
     try:
+        current_user_id = get_jwt_identity()
         data = request.get_json()
-        requester_id = data.get('requester_id')
+        
         user_id = data.get('user_id')
         role = data.get('role', 'member')
         
-        if not requester_id or not user_id:
-            return error_response('Requester ID and User ID are required', 400)
+        if not user_id:
+            return error_response('User ID is required', 400)
         
         conversation = ChatConversation.query.get(conversation_id)
         
@@ -680,7 +630,7 @@ def add_participant(conversation_id):
             return error_response('Conversation not found', 404)
         
         # Only creator can add participants
-        if conversation.created_by_id != requester_id:
+        if conversation.created_by_id != current_user_id:
             return error_response('Only conversation creator can add participants', 403)
         
         user = User.query.get(user_id)
@@ -694,12 +644,12 @@ def add_participant(conversation_id):
         conversation.add_participant(user, role)
         
         # Create notification message
-        creator = User.query.get(requester_id)
+        creator = User.query.get(current_user_id)
         notif_content = f"{creator.get_full_name()} (ADMIN) added {user.get_full_name()}"
         
         notif_message = ChatMessage(
             conversation_id=conversation_id,
-            sender_id=requester_id,
+            sender_id=current_user_id,
             original_content=notif_content,
             message_type='notif',
             metadata_data={'action': 'participant_added', 'user_id': user_id},
@@ -723,14 +673,13 @@ def add_participant(conversation_id):
         logging.error(f'Failed to add participant: {str(e)}')
         return error_response(f'Failed to add participant: {str(e)}', 500)
 
+#! REMOVE PARTICIPANT
 @chat_bp.route('/conversations/<int:conversation_id>/participants/<int:user_id>', methods=['DELETE'])
+@jwt_required()
 def remove_participant(conversation_id, user_id):
     """Remove participant from conversation (creator only)"""
     try:
-        requester_id = request.args.get('requester_id', type=int)
-        
-        if not requester_id:
-            return error_response('Requester ID is required', 400)
+        current_user_id = get_jwt_identity()
         
         conversation = ChatConversation.query.get(conversation_id)
         
@@ -738,7 +687,7 @@ def remove_participant(conversation_id, user_id):
             return error_response('Conversation not found', 404)
         
         # Only creator can remove participants
-        if conversation.created_by_id != requester_id:
+        if conversation.created_by_id != current_user_id:
             return error_response('Only conversation creator can remove participants', 403)
         
         # Cannot remove creator
@@ -756,12 +705,12 @@ def remove_participant(conversation_id, user_id):
         conversation.remove_participant(user)
         
         # Create notification message
-        creator = User.query.get(requester_id)
+        creator = User.query.get(current_user_id)
         notif_content = f"{creator.get_full_name()} (ADMIN) removed {user.get_full_name()}"
         
         notif_message = ChatMessage(
             conversation_id=conversation_id,
-            sender_id=requester_id,
+            sender_id=current_user_id,
             original_content=notif_content,
             message_type='notif',
             metadata_data={'action': 'participant_removed', 'user_id': user_id},
@@ -785,15 +734,13 @@ def remove_participant(conversation_id, user_id):
         logging.error(f'Failed to remove participant: {str(e)}')
         return error_response(f'Failed to remove participant: {str(e)}', 500)
 
-
+#! DELETE CONVERSATION
 @chat_bp.route('/conversations/<int:conversation_id>', methods=['DELETE'])
+@jwt_required()
 def delete_conversation(conversation_id):
     """Delete conversation (creator only)"""
     try:
-        user_id = request.args.get('user_id', type=int)
-        
-        if not user_id:
-            return error_response('User ID is required', 400)
+        current_user_id = get_jwt_identity()
         
         conversation = ChatConversation.query.get(conversation_id)
         
@@ -801,7 +748,7 @@ def delete_conversation(conversation_id):
             return error_response('Conversation not found', 404)
         
         # Only creator can delete conversation
-        if conversation.created_by_id != user_id:
+        if conversation.created_by_id != current_user_id:
             return error_response('Only conversation creator can delete conversation', 403)
         
         # Delete avatar if exists
@@ -824,8 +771,9 @@ def delete_conversation(conversation_id):
         logging.error(f'Failed to delete conversation: {str(e)}')
         return error_response(f'Failed to delete conversation: {str(e)}', 500)
 
-
+#! SERVE AVATAR FILE
 @chat_bp.route('/avatars/<path:filename>')
+@jwt_required()
 def serve_avatar(filename):
     """Serve avatar files"""
     try:

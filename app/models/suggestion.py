@@ -1,7 +1,7 @@
 from datetime import datetime
 from app.extensions import db
 from sqlalchemy import Enum
-from .Enums import SuggestionStatus
+from app.models.Enums import SuggestionStatus
 
 class Suggestion(db.Model):
     __tablename__ = 'suggestions'
@@ -65,6 +65,9 @@ class Suggestion(db.Model):
         """Check if suggestion is rejected"""
         return self.status == SuggestionStatus.rejected
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self):
         return {
             'id': self.id,
@@ -77,7 +80,7 @@ class Suggestion(db.Model):
                 'fullName': self.get_author_name(),
                 'profilePicture': self.author.profile_picture if self.author else None
             },
-            'status': self.status.value,
+            'status': self._enum_to_value(self.status.value),
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
             'isPending': self.is_pending(),

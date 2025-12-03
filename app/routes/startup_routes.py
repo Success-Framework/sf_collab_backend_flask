@@ -1,7 +1,9 @@
 from flask import Blueprint, request, jsonify, send_file
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.startup import Startup
 from app.models.startup_document import StartupDocument
 from app.models.startUpMember import StartupMember
+from app.models.user import User
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 import os 
@@ -41,8 +43,9 @@ def generate_unique_filename(original_filename):
     file_extension = os.path.splitext(original_filename)[1]
     return f"{timestamp}_{random_str}{file_extension}"
 
-#! FOR EVERYONE
+#! FOR EVERYONE (Public - no auth required)
 @startups_bp.route('', methods=['GET'])
+@jwt_required()
 def get_startups():
     """Get all startups with filtering"""
     page = request.args.get('page', 1, type=int)
@@ -85,8 +88,9 @@ def get_startups():
         }
     })
 
-#! GET SINGLE STARTUP
+#! GET SINGLE STARTUP (Public - no auth required)
 @startups_bp.route('/<int:startup_id>', methods=['GET'])
+@jwt_required()
 def get_startup(startup_id):
     """Get single startup by ID"""
     startup = Startup.query.get(startup_id)
@@ -100,8 +104,11 @@ def get_startup(startup_id):
 
 #! REGISTER NEW STARTUP
 @startups_bp.route('/register', methods=['POST'])
+@jwt_required()
 def register_startup():
     """Register new startup with file uploads to file system"""
+    current_user_id = get_jwt_identity()
+    
     try:
         # Check if request has form data
         if not request.form:
@@ -110,13 +117,18 @@ def register_startup():
         data = request.form
         files = request.files
         
-        required_fields = ['name', 'industry', 'creator_id', 'creator_first_name', 'creator_last_name']
+        required_fields = ['name', 'industry']
         if not all(field in data for field in required_fields):
             return error_response('Missing required fields')
         
         # Check if startup name already exists
         if Startup.query.filter_by(name=data['name']).first():
             return error_response('Startup name already exists', 409)
+        
+        # Get current user info
+        current_user = User.query.get(current_user_id)
+        if not current_user:
+            return error_response('User not found', 404)
         
         # Parse roles if it's a string (JSON)
         roles_data = data.get('roles', {})
@@ -167,9 +179,9 @@ def register_startup():
             runway_months=int(data.get('runway_months', 0)),
             valuation=float(data.get('valuation', 0)),
             financial_notes=data.get('financial_notes', ''),
-            creator_id=data['creator_id'],
-            creator_first_name=data['creator_first_name'],
-            creator_last_name=data['creator_last_name']
+            creator_id=current_user_id,
+            creator_first_name=current_user.first_name,
+            creator_last_name=current_user.last_name
         )
         
         db.session.add(startup)
@@ -237,11 +249,12 @@ def register_startup():
         
         # Add creator as first member
         startup_member = startup.add_member(
-            data['creator_id'],
-            data['creator_first_name'],
-            data['creator_last_name'],
+            current_user_id,
+            current_user.first_name,
+            current_user.last_name,
             'founder'
         )
+        
         
         return success_response({'startup': startup.to_dict()}, 'Startup created successfully', 201)
         
@@ -256,11 +269,18 @@ def register_startup():
 
 #! UPDATE STARTUP
 @startups_bp.route('/<int:startup_id>', methods=['PUT'])
+@jwt_required()
 def update_startup(startup_id):
     """Update startup"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get(startup_id)
     if not startup:
         return error_response('Startup not found', 404)
+    
+    # Check if user is authorized to update this startup
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized to update this startup', 403)
     
     data = request.get_json()
     
@@ -331,11 +351,18 @@ def update_startup(startup_id):
         
 #! GET STARTUP MEMBERS
 @startups_bp.route('/<int:startup_id>/members', methods=['GET'])
+@jwt_required()
 def get_startup_members(startup_id):
     """Get startup members"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get(startup_id)
     if not startup:
         return error_response('Startup not found', 404)
+    
+    # Check if user has access to this startup
+    if not has_startup_access(current_user_id, startup_id):
+        return error_response('Unauthorized to access this startup', 403)
     
     members = startup.get_active_members()
     return success_response({
@@ -344,11 +371,18 @@ def get_startup_members(startup_id):
 
 #! ADD STARTUP MEMBER
 @startups_bp.route('/<int:startup_id>/members', methods=['POST'])
+@jwt_required()
 def add_startup_member(startup_id):
     """Add member to startup"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get(startup_id)
     if not startup:
         return error_response('Startup not found', 404)
+    
+    # Check if user is authorized to add members
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized to add members to this startup', 403)
     
     data = request.get_json()
     required_fields = ['user_id', 'first_name', 'last_name']
@@ -368,11 +402,18 @@ def add_startup_member(startup_id):
 
 #! REMOVE STARTUP MEMBER
 @startups_bp.route('/<int:startup_id>/members/<int:member_id>', methods=['DELETE'])
+@jwt_required()
 def remove_startup_member(startup_id, member_id):
     """Remove member from startup"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get(startup_id)
     if not startup:
         return error_response('Startup not found', 404)
+    
+    # Check if user is authorized to remove members
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized to remove members from this startup', 403)
     
     try:
         startup.remove_member(member_id)
@@ -382,11 +423,18 @@ def remove_startup_member(startup_id, member_id):
 
 #! DELETE STARTUP
 @startups_bp.route('/<int:startup_id>', methods=['DELETE'])
+@jwt_required()
 def delete_startup(startup_id):
     """Delete startup and all associated files"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get(startup_id)
     if not startup:
         return error_response('Startup not found', 404)
+    
+    # Check if user is authorized to delete this startup
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized to delete this startup', 403)
     
     try:
         # Delete associated files from file system
@@ -402,7 +450,7 @@ def delete_startup(startup_id):
         db.session.rollback()
         return error_response(f'Failed to delete startup: {str(e)}', 500)
 
-#! GET STARTUP LOGO
+#! GET STARTUP LOGO (Public - no auth required)
 @startups_bp.route('/<int:startup_id>/logo')
 def get_startup_logo(startup_id):
     """Get startup logo from file system"""
@@ -417,7 +465,7 @@ def get_startup_logo(startup_id):
         download_name=f'logo_{startup.name}{os.path.splitext(startup.logo_path)[1]}'
     )
 
-#! GET STARTUP BANNER
+#! GET STARTUP BANNER (Public - no auth required)
 @startups_bp.route('/<int:startup_id>/banner')
 def get_startup_banner(startup_id):
     """Get startup banner from file system"""
@@ -434,13 +482,21 @@ def get_startup_banner(startup_id):
 
 #! GET STARTUP DOCUMENTS
 @startups_bp.route('/<int:startup_id>/documents', methods=['GET'])
+@jwt_required()
 def get_startup_documents(startup_id):
     """Get all startup documents"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get_or_404(startup_id)
+    
+    # Check if user has access to this startup
+    if not has_startup_access(current_user_id, startup_id):
+        return error_response('Unauthorized to access this startup documents', 403)
+    
     documents = [doc.to_dict() for doc in startup.get_documents()]
     return success_response({'documents': documents})
 
-#! SERVE STARTUP FILE
+#! SERVE STARTUP FILE (Public - no auth required)
 @startups_bp.route('/uploads/<int:startup_id>/<filename>', methods=['GET'])
 def serve_startup_file(startup_id, filename):
     """Serve uploaded startup files directly"""
@@ -465,12 +521,18 @@ def serve_startup_file(startup_id, filename):
     except Exception as e:
         return error_response(f'Failed to serve file: {str(e)}', 500)
         
-        
 #! DOWNLOAD DOCUMENT
 @startups_bp.route('/<int:startup_id>/documents/<int:document_id>/download')
+@jwt_required()
 def download_document(startup_id, document_id):
     """Download a specific document from file system"""
+    current_user_id = get_jwt_identity()
+    
     document = StartupDocument.query.filter_by(id=document_id, startup_id=startup_id).first_or_404()
+    
+    # Check if user has access to this startup
+    if not has_startup_access(current_user_id, startup_id):
+        return error_response('Unauthorized to download this document', 403)
     
     if not os.path.exists(document.file_path):
         return error_response('File not found on server', 404)
@@ -483,9 +545,16 @@ def download_document(startup_id, document_id):
 
 #! UPLOAD DOCUMENT
 @startups_bp.route('/<int:startup_id>/documents', methods=['POST'])
+@jwt_required()
 def upload_document(startup_id):
     """Upload additional documents to startup"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get_or_404(startup_id)
+    
+    # Check if user is authorized to upload documents
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized to upload documents to this startup', 403)
     
     if 'document' not in request.files:
         return error_response('No document provided')
@@ -531,9 +600,16 @@ def upload_document(startup_id):
         
 #! DELETE DOCUMENT
 @startups_bp.route('/<int:startup_id>/documents/<int:document_id>', methods=['DELETE'])
+@jwt_required()
 def delete_document(startup_id, document_id):
     """Delete a document from startup"""
+    current_user_id = get_jwt_identity()
+    
     document = StartupDocument.query.filter_by(id=document_id, startup_id=startup_id).first_or_404()
+    
+    # Check if user is authorized to delete documents
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized to delete documents from this startup', 403)
     
     try:
         # Delete file from file system
@@ -550,8 +626,17 @@ def delete_document(startup_id, document_id):
 
 #! GET USER'S STARTUPS
 @startups_bp.route('/user/<int:user_id>', methods=['GET'])
+@jwt_required()
 def get_user_startups(user_id):
     """Get all startups created by a specific user"""
+    current_user_id = get_jwt_identity()
+    
+    # Users can only see their own startups unless they're admin
+    if user_id != current_user_id:
+        current_user = User.query.get(current_user_id)
+        if not current_user or current_user.role != 'admin':
+            return error_response('Unauthorized to view other users startups', 403)
+    
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     
@@ -570,9 +655,16 @@ def get_user_startups(user_id):
 
 #! GET STARTUP STATS
 @startups_bp.route('/<int:startup_id>/stats', methods=['GET'])
+@jwt_required()
 def get_startup_stats(startup_id):
     """Get startup statistics"""
+    current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get_or_404(startup_id)
+    
+    # Check if user has access to this startup
+    if not has_startup_access(current_user_id, startup_id):
+        return error_response('Unauthorized to access this startup stats', 403)
     
     stats = {
         'views': startup.views,
@@ -584,7 +676,7 @@ def get_startup_stats(startup_id):
     
     return success_response({'stats': stats})
 
-#! GET AVAILABLE INDUSTRIES AND STAGES
+#! GET AVAILABLE INDUSTRIES AND STAGES (Public - no auth required)
 @startups_bp.route('/industries', methods=['GET'])
 def get_industries():
     """Get list of all available industries"""
@@ -600,6 +692,39 @@ def get_stages():
     stages = [stage.value for stage in StartupStage]
     
     return success_response({'stages': stages})
+
+# Helper functions for authorization
+def has_startup_access(user_id, startup_id):
+    """Check if user has access to view startup data"""
+    # Admin users can access all startups
+    current_user = User.query.get(user_id)
+    if current_user and current_user.role == 'admin':
+        return True
     
+    # Check if user is a member of the startup
+    membership = StartupMember.query.filter_by(
+        user_id=user_id, 
+        startup_id=startup_id
+    ).first()
     
+    return membership is not None
+
+def has_startup_management_access(user_id, startup_id):
+    """Check if user has permission to manage startup data"""
+    # Admin users can manage all startups
+    current_user = User.query.get(user_id)
+    if current_user and current_user.role == 'admin':
+        return True
     
+    # Check if user is the creator or has admin/manager role in the startup
+    startup = Startup.query.get(startup_id)
+    if startup and startup.creator_id == user_id:
+        return True
+    
+    # Check if user is an admin or manager of the startup
+    membership = StartupMember.query.filter_by(
+        user_id=user_id, 
+        startup_id=startup_id
+    ).first()
+    
+    return membership and membership.role in ['admin', 'manager', 'founder', 'owner']

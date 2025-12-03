@@ -119,6 +119,9 @@ class Knowledge(db.Model):
         """Check if knowledge is bookmarked by user"""
         return self.bookmarks.filter_by(user_id=user_id).first() is not None
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self, include_comments=False, include_author_details=True):
         data = {
             'id': self.id,
@@ -133,7 +136,7 @@ class Knowledge(db.Model):
                 'firstName': self.author_first_name,
                 'lastName': self.author_last_name
             },
-            'status': self.status.value,
+            'status': self._enum_to_value(self.status.value),
             'views': self.views,
             'downloads': self.downloads,
             'likes': self.likes,

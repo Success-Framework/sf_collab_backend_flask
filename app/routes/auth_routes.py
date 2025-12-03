@@ -93,6 +93,104 @@ def get_user_response_data(user):
     # Get recent activity
     recent_activity = user.get_recent_activity()
     
+    # ========== DASHBOARD METRICS CALCULATION ==========
+    
+    # Team Performance Metrics
+    team_performance_score = 0
+    active_members_count = 0
+    completed_tasks_count = 0
+    
+    try:
+        # Get team performance from user's startups
+        user_startups = user.startups.all()
+        if user_startups:
+            # Calculate average team performance
+            total_performance = 0
+            startup_count = 0
+            
+            for startup in user_startups:
+                # Get latest team performance record for each startup
+                latest_performance = startup.team_performance_records.order_by(
+                    startup.team_performance_records.created_at.desc()
+                ).first()
+                
+                if latest_performance:
+                    total_performance += latest_performance.score_percentage
+                    active_members_count += latest_performance.active_members
+                    completed_tasks_count += latest_performance.tasks_completed
+                    startup_count += 1
+            
+            if startup_count > 0:
+                team_performance_score = round(total_performance / startup_count, 1)
+    except:
+        team_performance_score = 0
+    
+    # Project Goals Progress
+    project_goals_progress = 0
+    milestones_completed = 0
+    next_goal = "No active goals"
+    
+    try:
+        user_goals = user.project_goals.all()
+        if user_goals:
+            completed_goals = [goal for goal in user_goals if goal.status == 'completed']
+            milestones_completed = len(completed_goals)
+            
+            # Calculate overall progress
+            total_goals = len(user_goals)
+            if total_goals > 0:
+                project_goals_progress = round((len(completed_goals) / total_goals) * 100, 1)
+            
+            # Find next upcoming goal
+            upcoming_goals = [goal for goal in user_goals if goal.status == 'in_progress']
+            if upcoming_goals:
+                next_goal = upcoming_goals[0].title
+    except:
+        project_goals_progress = 0
+    
+    # Growth Metrics
+    growth_percentage = 0
+    user_growth = 0
+    revenue_growth = 0
+    
+    try:
+        user_growth_metrics = user.growth_metrics.order_by(
+            user.growth_metrics.created_at.desc()
+        ).limit(2).all()
+        
+        if len(user_growth_metrics) >= 2:
+            # Calculate growth between last two metrics
+            current = user_growth_metrics[0]
+            previous = user_growth_metrics[1]
+            
+            if previous.metric_value > 0:
+                growth_percentage = round(
+                    ((current.metric_value - previous.metric_value) / previous.metric_value) * 100, 
+                    1
+                )
+        
+        # Get user growth from statistics
+        user_growth = statistics.get('total_ideas', 0) + statistics.get('total_startups', 0)
+        
+        # Revenue growth
+        revenue_growth = user.total_revenue
+        
+    except:
+        growth_percentage = 0
+    
+    # Achievements
+    achievements_count = user.user_achievements.filter_by(is_completed=True).count()
+    this_month_achievements = 0
+    try:
+        from datetime import datetime
+        current_month = datetime.utcnow().month
+        this_month_achievements = user.user_achievements.filter(
+            user.user_achievements.is_completed == True,
+            db.extract('month', user.user_achievements.completed_at) == current_month
+        ).count()
+    except:
+        this_month_achievements = 0
+    
     # Build complete user data with ALL fields from the User model including relationship data
     user_data = {
         # Core user information
@@ -172,11 +270,37 @@ def get_user_response_data(user):
         # Recent activity
         'recentActivity': recent_activity,
         
+        # ========== DASHBOARD METRICS ==========
+        'dashboardMetrics': {
+            'teamPerformance': {
+                'score': team_performance_score,
+                'activeMembers': active_members_count,
+                'tasksCompleted': completed_tasks_count,
+                'productivityLevel': 'high' if team_performance_score >= 80 else 'medium' if team_performance_score >= 60 else 'low'
+            },
+            'projectGoals': {
+                'progress': project_goals_progress,
+                'milestonesCompleted': milestones_completed,
+                'nextGoal': next_goal,
+                'totalGoals': len(user.project_goals.all()) if hasattr(user, 'project_goals') else 0
+            },
+            'growthMetrics': {
+                'growthPercentage': growth_percentage,
+                'userGrowth': user_growth,
+                'revenue': revenue_growth,
+                'marketShare': statistics.get('engagement_score', 0)
+            },
+            'achievements': {
+                'total': achievements_count,
+                'thisMonth': this_month_achievements,
+                'nextTarget': achievements_count + 5  # Next target is 5 more achievements
+            }
+        },
+        
         # Relationship DATA (not just counts)
         'relationships': {
             # Core Authentication & Profile
             'notifications': [notification.to_dict() for notification in user.notifications.limit(50).all()],
-            # 'refreshTokens': [token.to_dict() for token in user.refresh_tokens.limit(20).all()],
             
             # Content Creation
             'ideas': [idea.to_dict() for idea in user.ideas.limit(50).all()],
@@ -251,7 +375,6 @@ def get_user_response_data(user):
     }
     
     return user_data
-    
 
 # ========================== REGISTER ==========================
 @bp.route('/register', methods=['POST'])
@@ -488,7 +611,7 @@ def google_callback():
             return _oauth_error_response('google', 'Failed to get user info')
         
         # Check if user exists
-        user = User.query.filter_by(email=user_info['email'].lower()).first()
+        user = User.query.filter_by(email=user_info['email']).first()
         
         if not user:
             # Create new user

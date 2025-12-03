@@ -106,6 +106,9 @@ class Post(db.Model):
         """Get number of media items"""
         return self.media_items.count()
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self, include_comments=False, include_media=False, user_id=None):
         data = {
             'id': self.id,
@@ -117,7 +120,7 @@ class Post(db.Model):
                 'profilePicture': self.post_author.profile_picture if self.post_author else None
             },
             'content': self.content,
-            'type': self.type.value,
+            'type': self._enum_to_value(self.type.value),
             'tags': self.tags or [],
             'likes': self.likes,
             'commentsCount': self.comments_count,

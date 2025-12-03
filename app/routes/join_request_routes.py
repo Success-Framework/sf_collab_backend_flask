@@ -21,7 +21,7 @@ def get_join_requests():
     if user_id:
         query = query.filter(JoinRequest.user_id == user_id)
     if status:
-        from models.Enums import JoinRequestStatus
+        from app.models.Enums import JoinRequestStatus
         query = query.filter(JoinRequest.status == JoinRequestStatus(status))
     
     result = paginate(query.order_by(JoinRequest.created_at.desc()), page, per_page)

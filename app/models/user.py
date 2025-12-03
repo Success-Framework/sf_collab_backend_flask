@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from sqlalchemy import Enum, JSON
 from app.extensions import db
-from .Enums import UserStatus, Privacy, Theme, EmailDigest, UserRoles
+from app.models.Enums import UserStatus, Privacy, Theme, EmailDigest, UserRoles
 from werkzeug.security import generate_password_hash, check_password_hash
 
 class User(db.Model):
