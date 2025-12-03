@@ -1,7 +1,6 @@
 from flask import Flask, request
 from flask_cors import CORS
 from .extensions import db, migrate, jwt
-# from .utils.socketio import socketio
 from .routes import (
     auth_routes,
     user_routes,
@@ -37,22 +36,36 @@ from .routes import (
     story_view_routes,
     suggestion_routes,
     task_routes,
-    user_achievement_routes
+    user_achievement_routes,
+    # image_logo_generator_route,
+    # business_plan_route,
+    # qwen_chat_route
 )
 from .config import get_config
 import os
 from datetime import timedelta
+import logging
+import warnings
+
+# Suppress warnings first
+warnings.filterwarnings("ignore")
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_files')
 AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 
+# Set model cache location
+os.environ['HF_HOME'] = os.path.join(BASE_DIR, 'model_cache')
+os.environ['TRANSFORMERS_CACHE'] = os.path.join(BASE_DIR, 'model_cache')
+os.environ['TORCH_HOME'] = os.path.join(BASE_DIR, 'model_cache')
+
 def create_app(config_name=None):
     """Create and configure Flask application"""
-    app = Flask(__name__,instance_relative_config=True)
+    app = Flask(__name__, instance_relative_config=True)
     
-    # JWT Configuration - MAKE SURE THIS IS SET
-    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY","ksjxhcjkzcze5c4z53c1z531c5z1dczdchzecuzed51535e151qsqdcqcdze55@_")
+    # JWT Configuration
+    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "ksjxhcjkzcze5c4z53c1z531c5z1dczdchzecuzed51535e151qsqdcqcdze55@_")
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
     app.secret_key = os.getenv('SECRET_KEY')
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -63,10 +76,10 @@ def create_app(config_name=None):
     app.config.from_object(config_class)
     app.config.from_pyfile('config.py', silent=True)
     
-    # Configure CORS - FIXED: More permissive for development
+    # Configure CORS
     CORS(app, 
         resources={
-            r"/*": {  # Allow all routes, not just /api/*
+            r"/*": {
                 "origins": app.config.get('CORS_ORIGINS', [
                     "http://localhost:3000",
                     "http://127.0.0.1:3000",
@@ -100,16 +113,12 @@ def create_app(config_name=None):
             response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
             response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
         return response
-        
     
     # Initialize extensions
     db.init_app(app)
-    # socketio.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
     auth_routes.init_oauth(app)
-    
-
     
     # Register all blueprints
     app.register_blueprint(auth_routes.bp)
@@ -147,43 +156,24 @@ def create_app(config_name=None):
     app.register_blueprint(suggestion_routes.suggestions_bp)
     app.register_blueprint(task_routes.tasks_bp)
     app.register_blueprint(user_achievement_routes.user_achievements_bp)
+    # app.register_blueprint(image_logo_generator_route.image_generation_bp)
+    # app.register_blueprint(business_plan_route.business_plan_bp)
+    # app.register_blueprint(qwen_chat_route.qwen_chat_bp)
     
-    # Create tables
+    # 🚀 PRELOAD AI MODELS ON STARTUP (Optional - comment out for lazy loading)
+    
     # with app.app_context():
-    #     db.create_all()
-    
-    # Root endpoint
-    @app.route('/')
-    def index():
-        return {
-            'message': 'Flask API is running',
-            'version': '1.0.0',
-            'endpoints': {
-                'users': '/api/users',
-                'knowledge': '/api/knowledge',
-                'knowledge_comments': '/api/knowledge-comments',
-                'resource_views': '/api/resource-views',
-                'resource_likes': '/api/resource-likes',
-                'resource_downloads': '/api/resource-downloads',
-                'ideas': '/api/ideas',
-                'idea_comments': '/api/idea-comments',
-                'suggestions': '/api/suggestions',
-                'startups': '/api/startups',
-                'startup_members': '/api/startup-members',
-                'join_requests': '/api/join-requests',
-                'notifications': '/api/notifications',
-                'stories': '/api/stories',
-                'story_views': '/api/story-views',
-                'posts': '/api/posts',
-                'post_comments': '/api/post-comments',
-                'post_likes': '/api/post-likes',
-                'connections': '/api/connections',
-                'idea_bookmarks': '/api/idea-bookmarks',
-                'knowledge_bookmarks': '/api/knowledge-bookmarks',
-                'startup_bookmarks': '/api/startup-bookmarks',
-                'refresh_tokens': '/api/refresh-tokens'
-            }
-        }
+    #     logging.info("🚀 Preloading AI models...")
+    #     try:
+    #         from app.routes.qwen_chat_route import load_qwen_model
+    #         # from app.routes.business_plan_route import initialize_model
+    #         # initialize_models()
+    #         load_qwen_model()
+            
+    #         logging.info("✅ AI model preloaded successfully")
+    #     except Exception as e:
+    #         logging.error(f"⚠️  Failed to preload AI model: {e}")
+    #         logging.info("💡 Model will load on first request instead")
     
     # Health check endpoint
     @app.route('/health')

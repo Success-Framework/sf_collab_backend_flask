@@ -68,6 +68,9 @@ class JoinRequest(db.Model):
         """Get time since request was created"""
         return datetime.utcnow() - self.created_at
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self):
         return {
             'id': self.id,
@@ -78,7 +81,7 @@ class JoinRequest(db.Model):
             'lastName': self.last_name,
             'message': self.message,
             'role': self.role,
-            'status': self.status.value,
+            'status': self._enum_to_value(self.status.value),
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
             'isPending': self.is_pending(),

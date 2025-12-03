@@ -114,6 +114,9 @@ class Idea(db.Model):
     def get_team_size(self):
         """Get number of team members"""
         return self.team_members.count()
+        
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
     
     def to_dict(self, include_comments=False, include_team=True):
         data = {
@@ -123,7 +126,7 @@ class Idea(db.Model):
             'projectDetails': self.project_details,
             'industry': self.industry,
             'stage': self.stage,
-            'privacy': self.privacy,
+            'privacy': self._enum_to_value(self.privacy),
             'tags': self.tags or [],
             'creator': {
                 'id': self.creator_id,

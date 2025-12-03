@@ -24,7 +24,7 @@ def get_posts():
     if author_id:
         query = query.filter(Post.author_id == author_id)
     if post_type:
-        from models.Enums import PostType
+        from app.models.Enums import PostType
         query = query.filter(Post.type == PostType(post_type))
     if search:
         query = query.filter(
@@ -112,7 +112,7 @@ def update_post(post_id):
         if 'content' in data:
             post.content = data['content']
         if 'type' in data:
-            from models.Enums import PostType
+            from app.models.Enums import PostType
             post.type = PostType(data['type'])
         if 'tags' in data:
             post.tags = data['tags']

@@ -8,7 +8,7 @@ from reportlab.lib.units import inch
 # -----------------------------------------
 # CONFIG — EDIT THESE PATHS
 # -----------------------------------------
-SOURCE_DIR = "app/models"          # folder with your code
+SOURCE_DIR = "./models_cache"          # folder with your code
 OUTPUT_PDF = "all_models_structured.pdf"          # output PDF file
 # -----------------------------------------
 

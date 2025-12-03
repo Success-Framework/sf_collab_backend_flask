@@ -124,6 +124,9 @@ class ProjectGoal(db.Model):
             query = query.filter_by(is_completed=True)
         return query.order_by(GoalMilestone.order).all()
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self, include_milestones=False):
         data = {
             'id': self.id,
@@ -138,7 +141,7 @@ class ProjectGoal(db.Model):
             'next_milestone': self.next_milestone,
             'target_date': self.target_date.isoformat() if self.target_date else None,
             'completed_date': self.completed_date.isoformat() if self.completed_date else None,
-            'status': self.status,
+            'status': self._enum_to_value(self.status),
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
             'days_remaining': self._get_days_remaining()

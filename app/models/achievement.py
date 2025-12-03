@@ -52,18 +52,21 @@ class Achievement(db.Model):
         }
         return colors.get(self.rarity, '#6B7280')
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self, user_id=None):
         data = {
             'id': self.id,
             'title': self.title,
             'description': self.description,
             'icon': self.icon,
-            'category': self.category,
+            'category': self._enum_to_value(self.category),
             'points': self.points,
             'requirement_type': self.requirement_type,
             'requirement_value': self.requirement_value,
             'badge_color': self.badge_color or self.calculate_rarity_color(),
-            'rarity': self.rarity,
+            'rarity': self._enum_to_value(self.rarity),
             'unlocked_count': self.get_unlocked_count(),
             'created_at': self.created_at.isoformat()
         }

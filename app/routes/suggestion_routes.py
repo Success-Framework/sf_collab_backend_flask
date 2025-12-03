@@ -21,7 +21,7 @@ def get_suggestions():
     if author_id:
         query = query.filter(Suggestion.author_id == author_id)
     if status:
-        from models.Enums import SuggestionStatus
+        from app.models.Enums import SuggestionStatus
         query = query.filter(Suggestion.status == SuggestionStatus(status))
     
     result = paginate(query.order_by(Suggestion.created_at.desc()), page, per_page)

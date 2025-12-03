@@ -123,6 +123,9 @@ class Task(db.Model):
             return datetime.utcnow() > self.due_date
         return False
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self):
         return {
             'id': self.id,
@@ -130,8 +133,8 @@ class Task(db.Model):
             'startup_id': self.startup_id,
             'title': self.title,
             'description': self.description,
-            'priority': self.priority,
-            'status': self.status,
+            'priority': self._enum_to_value(self.priority),
+            'status':self._enum_to_value(self.status),
             'tags': self.tags or [],
             'labels': self.labels or [],
             'due_date': self.due_date.isoformat() if self.due_date else None,

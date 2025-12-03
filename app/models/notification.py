@@ -1,7 +1,7 @@
 from datetime import datetime
 from app.extensions import db
 from sqlalchemy import Enum, JSON
-from .Enums import SuggestionStatus
+# from .Enums import SuggestionStatus
 
 class Notification(db.Model):
     __tablename__ = 'notifications'
@@ -60,8 +60,8 @@ class Notification(db.Model):
             'updatedAt': self.updated_at.isoformat(),
             'isRecent': self.is_recent(),
             'user': {
-                'id': self.user.id,
-                'firstName': self.user.first_name,
-                'lastName': self.user.last_name
-            } if self.user else None
+                'id': self.notification_owner.id,
+                'firstName': self.notification_owner.first_name,
+                'lastName': self.notification_owner.last_name
+            } if self.notification_owner else None
         }

@@ -84,6 +84,9 @@ class CalendarEvent(db.Model):
         }
         return self.color or colors.get(self.category, '#6B7280')
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self):
         return {
             'id': self.id,
@@ -94,7 +97,7 @@ class CalendarEvent(db.Model):
             'start_date': self.start_date.isoformat(),
             'end_date': self.end_date.isoformat() if self.end_date else None,
             'all_day': self.all_day,
-            'category': self.category,
+            'category': self._enum_to_value(self.category),
             'color': self.get_category_color(),
             'location': self.location,
             'is_recurring': self.is_recurring,
@@ -108,12 +111,12 @@ class CalendarEvent(db.Model):
             'reminder_time': self.get_reminder_time().isoformat() if self.reminder_minutes > 0 else None,
             'should_remind': self.should_remind(),
             'user': {
-                'id': self.user.id,
-                'firstName': self.user.first_name,
-                'lastName': self.user.last_name
-            } if self.user else None,
+                'id': self.event_owner.id,
+                'firstName': self.event_owner.first_name,
+                'lastName': self.event_owner.last_name
+            } if self.event_owner else None,
             'startup': {
-                'id': self.startup.id,
-                'name': self.startup.name
-            } if self.startup else None
+                'id': self.parent_startup.id,
+                'name': self.parent_startup.name
+            } if self.parent_startup else None
         }

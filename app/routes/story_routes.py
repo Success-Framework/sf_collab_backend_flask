@@ -24,7 +24,7 @@ def get_stories():
     if author_id:
         query = query.filter(Story.author_id == author_id)
     if story_type:
-        from models.Enums import StoryType
+        from app.models.Enums import StoryType
         query = query.filter(Story.type == StoryType(story_type))
     if active_only:
         query = query.filter(Story.expires_at > datetime.utcnow())

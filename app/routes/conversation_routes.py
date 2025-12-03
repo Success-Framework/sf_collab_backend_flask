@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.chatConversation import ChatConversation, conversation_participants
 from app.models.user import User
 from app.extensions import db
@@ -7,23 +8,22 @@ from app.utils.helper import error_response, success_response, paginate
 conversations_bp = Blueprint('conversations', __name__, url_prefix='/api/conversations')
 
 @conversations_bp.route('', methods=['GET'])
+@jwt_required()
 def get_conversations():
     """Get all conversations for a user"""
-    user_id = request.args.get('user_id', type=int)
-    if not user_id:
-        return error_response('User ID is required', 400)
+    current_user_id = get_jwt_identity()
     
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     
     # Get user's conversations
-    user = User.query.get(user_id)
+    user = User.query.get(current_user_id)
     if not user:
         return error_response('User not found', 404)
     
     query = ChatConversation.query\
         .join(conversation_participants)\
-        .filter(conversation_participants.c.user_id == user_id)\
+        .filter(conversation_participants.c.user_id == current_user_id)\
         .filter(ChatConversation.is_active == True)
     
     result = paginate(query.order_by(ChatConversation.updated_at.desc()), page, per_page)
@@ -39,19 +39,18 @@ def get_conversations():
     })
 
 @conversations_bp.route('/<int:conversation_id>', methods=['GET'])
+@jwt_required()
 def get_conversation(conversation_id):
     """Get single conversation"""
-    user_id = request.args.get('user_id', type=int)
-    if not user_id:
-        return error_response('User ID is required', 400)
+    current_user_id = get_jwt_identity()
     
-    user = User.query.get(user_id)
+    user = User.query.get(current_user_id)
     conversation = ChatConversation.query.get(conversation_id)
     
     if not user or not conversation:
         return error_response('User or conversation not found', 404)
     
-    if not conversation.is_user_participant(user_id):
+    if not conversation.is_user_participant(current_user_id):
         return error_response('Access denied', 403)
     
     return success_response({
@@ -59,15 +58,17 @@ def get_conversation(conversation_id):
     })
 
 @conversations_bp.route('', methods=['POST'])
+@jwt_required()
 def create_conversation():
     """Create new conversation"""
+    current_user_id = get_jwt_identity()
     data = request.get_json()
     
-    required_fields = ['created_by_id', 'participant_ids']
+    required_fields = ['participant_ids']
     if not all(field in data for field in required_fields):
-        return error_response('Missing required fields: created_by_id, participant_ids')
+        return error_response('Missing required fields: participant_ids')
     
-    creator = User.query.get(data['created_by_id'])
+    creator = User.query.get(current_user_id)
     if not creator:
         return error_response('Creator not found', 404)
     
@@ -107,9 +108,12 @@ def create_conversation():
         return error_response(f'Failed to create conversation: {str(e)}', 500)
 
 @conversations_bp.route('/<int:conversation_id>/participants', methods=['POST'])
+@jwt_required()
 def add_participant(conversation_id):
     """Add participant to conversation"""
+    current_user_id = get_jwt_identity()
     data = request.get_json()
+    
     user_id = data.get('user_id')
     role = data.get('role', 'member')
     
@@ -122,6 +126,10 @@ def add_participant(conversation_id):
     if not user or not conversation:
         return error_response('User or conversation not found', 404)
     
+    # Check if current user is conversation creator
+    if conversation.created_by_id != current_user_id:
+        return error_response('Only conversation creator can add participants', 403)
+    
     try:
         conversation.add_participant(user, role)
         return success_response(message='Participant added successfully')
@@ -129,13 +137,24 @@ def add_participant(conversation_id):
         return error_response(f'Failed to add participant: {str(e)}', 500)
 
 @conversations_bp.route('/<int:conversation_id>/participants/<int:user_id>', methods=['DELETE'])
+@jwt_required()
 def remove_participant(conversation_id, user_id):
     """Remove participant from conversation"""
+    current_user_id = get_jwt_identity()
+    
     user = User.query.get(user_id)
     conversation = ChatConversation.query.get(conversation_id)
     
     if not user or not conversation:
         return error_response('User or conversation not found', 404)
+    
+    # Check if current user is conversation creator
+    if conversation.created_by_id != current_user_id:
+        return error_response('Only conversation creator can remove participants', 403)
+    
+    # Cannot remove creator
+    if user_id == conversation.created_by_id:
+        return error_response('Cannot remove conversation creator', 400)
     
     try:
         conversation.remove_participant(user)
@@ -144,11 +163,18 @@ def remove_participant(conversation_id, user_id):
         return error_response(f'Failed to remove participant: {str(e)}', 500)
 
 @conversations_bp.route('/<int:conversation_id>', methods=['DELETE'])
+@jwt_required()
 def delete_conversation(conversation_id):
     """Delete conversation (soft delete)"""
+    current_user_id = get_jwt_identity()
+    
     conversation = ChatConversation.query.get(conversation_id)
     if not conversation:
         return error_response('Conversation not found', 404)
+    
+    # Check if current user is conversation creator
+    if conversation.created_by_id != current_user_id:
+        return error_response('Only conversation creator can delete conversation', 403)
     
     try:
         conversation.is_active = False

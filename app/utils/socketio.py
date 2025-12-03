@@ -3,7 +3,7 @@ from flask import request
 import logging
 
 # Configure SocketIO with CORS support
-socketio = SocketIO(async_mode='eventlet')
+socketio = SocketIO(async_mode="gevent")
 
 __all__ = ['socketio']
 

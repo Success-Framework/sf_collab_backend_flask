@@ -10,13 +10,14 @@ class Config:
     
     # Flask
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-    DEBUG = False
+    DEBUG = True
     TESTING = False
     
     # SQLAlchemy
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DATABASE_URL'
     )
+    
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
     SQLALCHEMY_POOL_SIZE = 10
@@ -37,7 +38,9 @@ class Config:
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_files')
     AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
-
+    
+    INSTANCE_DIR = os.path.abspath(os.path.join(BASE_DIR, "instance"))
+    
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'mp4', 'mov', 'avi'}
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
@@ -117,6 +120,7 @@ class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
     SQLALCHEMY_ECHO = False  # Set to True for SQL debugging
+    
     TESTING = False
     
     # More permissive CORS for development

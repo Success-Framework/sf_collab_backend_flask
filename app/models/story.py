@@ -1,8 +1,8 @@
 from datetime import datetime
 from app.extensions import db
 from sqlalchemy import Enum
-from .Enums import StoryType
-from .storyView import StoryView
+from app.models.Enums import StoryType
+from app.models.storyView import StoryView
 
 class Story(db.Model):
     __tablename__ = 'stories'
@@ -63,6 +63,9 @@ class Story(db.Model):
         """Check if user has viewed this story"""
         return self.story_views.filter_by(user_id=user_id).first() is not None
     
+    def _enum_to_value(self,value):
+        return value.value if hasattr(value, "value") else value
+        
     def to_dict(self, include_viewers=False, user_id=None):
         data = {
             'id': self.id,
@@ -75,7 +78,7 @@ class Story(db.Model):
             },
             'mediaUrl': self.media_url,
             'caption': self.caption,
-            'type': self.type.value,
+            'type': self._enum_to_value(self.type.value),
             'views': self.views,
             'expiresAt': self.expires_at.isoformat(),
             'createdAt': self.created_at.isoformat(),
