@@ -1,3 +1,13 @@
+
+# # ===== SUPPRESS WARNINGS FIRST =====
+# # Configure logging to ignore specific warnings - DO THIS FIRST
+# warnings.filterwarnings("ignore", category=FutureWarning, module=".*torch.*")
+# warnings.filterwarnings("ignore", category=UserWarning, module=".*gevent.*")
+
+# # Set environment variables for better compatibility
+# os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+# ===== NOW IMPORT YOUR APP =====
 from gevent import monkey
 monkey.patch_all()
 
@@ -13,7 +23,7 @@ import json
 
 app = create_app()
 
-# ===== Custom Request Logging =====
+# ===== Custom Request Logging (status + data) =====
 @app.before_request
 def start_timer():
     g.start_time = time.time()
@@ -33,10 +43,12 @@ def log_response(response):
 
     # Log response data safely
     try:
+        # For JSON responses
         if response.is_json:
             data = response.get_json()
             data_str = json.dumps(data)[:500]
         else:
+            # For other responses
             data_str = response.data.decode("utf-8")[:500] if response.data else "No data"
     except Exception as e:
         data_str = f"Error reading response: {str(e)}"
@@ -52,6 +64,7 @@ def log_response(response):
 """)
 
     return response
+# ===================================================
 
 socketio.init_app(
     app,
@@ -60,9 +73,14 @@ socketio.init_app(
 )
 
 if __name__ == "__main__":
-
-    app.run(
+    port = int(os.getenv("PORT", 5000))
+    
+    socketio.run(
+        app,
         host="0.0.0.0",
-        port=int(os.getenv("PORT", 5000)),
-        debug=False  # Set to False for production
+        port= port,
+        debug=True,
+        use_reloader=False,
+        # threaded=True
     )
+    
