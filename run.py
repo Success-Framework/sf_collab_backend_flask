@@ -1,6 +1,3 @@
-import warnings
-import os
-import logging
 
 # # ===== SUPPRESS WARNINGS FIRST =====
 # # Configure logging to ignore specific warnings - DO THIS FIRST
@@ -11,6 +8,13 @@ import logging
 # os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 # ===== NOW IMPORT YOUR APP =====
+from gevent import monkey
+monkey.patch_all()
+
+import warnings
+import os
+import logging
+
 from app import create_app
 from app.utils.socketio import socketio
 from flask import request, g
