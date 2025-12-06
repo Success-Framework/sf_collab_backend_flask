@@ -51,7 +51,8 @@ def log_response(response):
 # init WITHOUT specifying async_mode
 socketio.init_app(
     app,
-    cors_allowed_origins="*"
+    cors_allowed_origins="*",
+    async_mode="eventlet"
 )
 
 if __name__ == "__main__":
