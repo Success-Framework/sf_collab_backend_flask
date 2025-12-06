@@ -37,8 +37,8 @@ from .routes import (
     suggestion_routes,
     task_routes,
     user_achievement_routes,
-    background_remover_route,
-    gemini_route,
+    gemini_route
+    # background_remover_route,
     # anime_converter_route
     # image_logo_generator_route,
     # business_plan_route,
@@ -168,7 +168,7 @@ def create_app(config_name=None):
     app.register_blueprint(task_routes.tasks_bp)
     app.register_blueprint(user_achievement_routes.user_achievements_bp)
     app.register_blueprint(gemini_route.gemini_bp)
-    app.register_blueprint(background_remover_route.bg_remover_bp)
+    # app.register_blueprint(background_remover_route.bg_remover_bp)
     # app.register_blueprint(anime_converter_route.anime_converter_bp)
     # app.register_blueprint(qwen_chat_route.qwen_chat_bp)
     
