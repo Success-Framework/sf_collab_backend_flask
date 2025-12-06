@@ -1,5 +1,3 @@
-import eventlet
-eventlet.monkey_patch()
 
 import os
 import warnings
@@ -55,7 +53,7 @@ def log_response(response):
 socketio.init_app(
     app,
     cors_allowed_origins="*",
-    async_mode="eventlet"
+    async_mode="gevent"
 )
 
 if __name__ == "__main__":
