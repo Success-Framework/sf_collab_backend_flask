@@ -13,7 +13,7 @@ bg_remover_bp = Blueprint('background_remover', __name__, url_prefix='/api/backg
 sessions = {
     # "portrait": new_session(model_name="birefnet-portrait"),
     "general": new_session(model_name="isnet-general-use"),
-    "anime": new_session(model_name="isnet-anime"),
+    # "anime": new_session(model_name="isnet-anime"),
     # "cloth": new_session(model_name="u2net_cloth"),
 }
 
