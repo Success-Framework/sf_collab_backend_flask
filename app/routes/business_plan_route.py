@@ -585,17 +585,17 @@ def initialize_model_endpoint():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # Pre-load model on import
-logger.info("📄 Pre-loading model in background...")
-try:
-    import threading
-    def load_model_background():
-        time.sleep(3)
-        try:
-            initialize_model()
-        except Exception as e:
-            logger.warning(f"⚠️ Background loading failed: {e}")
+# logger.info("📄 Pre-loading model in background...")
+# try:
+#     import threading
+#     def load_model_background():
+#         time.sleep(3)
+#         try:
+#             initialize_model()
+#         except Exception as e:
+#             logger.warning(f"⚠️ Background loading failed: {e}")
     
-    thread = threading.Thread(target=load_model_background, daemon=True)
-    thread.start()
-except:
-    logger.warning("⚠️ Could not start background loading")
+#     thread = threading.Thread(target=load_model_background, daemon=True)
+#     thread.start()
+# except:
+#     logger.warning("⚠️ Could not start background loading")

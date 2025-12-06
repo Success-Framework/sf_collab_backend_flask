@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, abort
 from flask_cors import CORS
 from .extensions import db, migrate, jwt
 from .routes import (
@@ -37,6 +37,9 @@ from .routes import (
     suggestion_routes,
     task_routes,
     user_achievement_routes,
+    background_remover_route,
+    gemini_route,
+    anime_converter_route
     # image_logo_generator_route,
     # business_plan_route,
     # qwen_chat_route
@@ -46,6 +49,10 @@ import os
 from datetime import timedelta
 import logging
 import warnings
+import hmac
+import hashlib
+
+WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
 # Suppress warnings first
 warnings.filterwarnings("ignore")
@@ -68,6 +75,10 @@ def create_app(config_name=None):
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "ksjxhcjkzcze5c4z53c1z531c5z1dczdchzecuzed51535e151qsqdcqcdze55@_")
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
     app.secret_key = os.getenv('SECRET_KEY')
+    
+    app.config['GITHUB_CLIENT_ID'] = os.getenv('GITHUB_CLIENT_ID')
+    app.config['GITHUB_CLIENT_SECRET'] = os.getenv('GITHUB_CLIENT_SECRET')
+
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     
@@ -156,8 +167,9 @@ def create_app(config_name=None):
     app.register_blueprint(suggestion_routes.suggestions_bp)
     app.register_blueprint(task_routes.tasks_bp)
     app.register_blueprint(user_achievement_routes.user_achievements_bp)
-    # app.register_blueprint(image_logo_generator_route.image_generation_bp)
-    # app.register_blueprint(business_plan_route.business_plan_bp)
+    app.register_blueprint(gemini_route.gemini_bp)
+    app.register_blueprint(background_remover_route.bg_remover_bp)
+    app.register_blueprint(anime_converter_route.anime_converter_bp)
     # app.register_blueprint(qwen_chat_route.qwen_chat_bp)
     
     # 🚀 PRELOAD AI MODELS ON STARTUP (Optional - comment out for lazy loading)
@@ -190,4 +202,25 @@ def create_app(config_name=None):
         db.session.rollback()
         return {'success': False, 'error': 'Internal server error'}, 500
     
+
+
+    @app.route('/api/webhook/github', methods=['POST'])
+    def github_webhook():
+        signature = request.headers.get('X-Hub-Signature-256')
+        if signature is None:
+            abort(400, "No signature provided")
+    
+        sha_name, signature = signature.split('=')
+        mac = hmac.new(os.getenv('WEBHOOK'), msg=request.data, digestmod=hashlib.sha256)
+    
+        if not hmac.compare_digest(mac.hexdigest(), signature):
+            abort(403, "Invalid signature")
+        
+        event = request.headers.get('X-GitHub-Event')
+        payload = request.json
+    
+        # Process your GitHub event here
+        print(event, payload)
+        return '', 200
+
     return app

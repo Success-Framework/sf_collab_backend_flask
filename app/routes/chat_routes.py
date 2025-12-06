@@ -314,7 +314,7 @@ def get_conversation_files(conversation_id):
         
 #! SERVE UPLOADED FILE
 @chat_bp.route('/uploads/<path:filename>', methods=['GET'])
-@jwt_required()
+# @jwt_required()
 def serve_uploaded_file(filename):
     """Serve uploaded files"""
     

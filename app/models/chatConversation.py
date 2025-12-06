@@ -124,7 +124,7 @@ class ChatConversation(db.Model):
     
     def is_user_participant(self, user_id):
         """Check if user is a participant in this conversation"""
-        return any(participant.id == user_id for participant in self.participants)
+        return any(str(participant.id) == str(user_id) for participant in self.participants)
     
     def get_unread_message_count(self, user_id):
         """Get count of unread messages for specific user"""

@@ -28,6 +28,16 @@ def init_oauth(app):
         client_kwargs={'scope': 'openid email profile'}
     )
 
+    # GitHub OAuth
+    oauth.register(
+        name='github',
+        client_id=app.config.get('GITHUB_CLIENT_ID'),
+        client_secret=app.config.get('GITHUB_CLIENT_SECRET'),
+        access_token_url='https://github.com/login/oauth/access_token',
+        authorize_url='https://github.com/login/oauth/authorize',
+        api_base_url='https://api.github.com/',
+        client_kwargs={'scope': 'read:user user:email'}
+    )
 
 # ========================== HELPER FUNCTIONS ==========================
 def generate_tokens(user_id):
@@ -666,6 +676,147 @@ def google_callback():
         print(f"Google OAuth error: {str(e)}")
         return _oauth_error_response('google', str(e))
 
+@bp.route('/github/login')
+def github_login():
+    """Initiate GitHub OAuth flow"""
+    redirect_uri = url_for('auth.github_callback', _external=True)
+    print("🔥 GITHUB REDIRECT URI:", redirect_uri)
+    return oauth.github.authorize_redirect(redirect_uri)
+
+@bp.route('/github/callback')
+def github_callback():
+    """Handle GitHub OAuth callback"""
+    try:
+        # Get the token properly
+        token = oauth.github.authorize_access_token()
+        
+        if not token:
+            return _oauth_error_response('github', 'No token received')
+            
+        print(f"GitHub Token: {token}")  # Debug log
+        
+        # Get user info
+        resp = oauth.github.get('user', token=token)
+        user_info = resp.json()
+        print(f"User Info: {user_info}")  # Debug log
+        
+        # Get email - GitHub sometimes returns email directly in user info
+        email_from_profile = user_info.get('email')
+        
+        # Try to get emails from API
+        resp = oauth.github.get('user/emails', token=token)
+        emails_response = resp.json()
+        print(f"Emails Response: {emails_response}")  # Debug log
+        
+        primary_email = None
+        
+        # Handle different response formats
+        if email_from_profile:
+            # GitHub returns email in user profile if it's public
+            primary_email = email_from_profile
+        elif isinstance(emails_response, list):
+            # Normal case: list of email objects
+            for e in emails_response:
+                if isinstance(e, dict):
+                    if e.get('primary') and e.get('verified'):
+                        primary_email = e['email']
+                        break
+                elif isinstance(e, str):
+                    # Handle case where it might be a list of email strings
+                    primary_email = e
+                    break
+        elif isinstance(emails_response, str):
+            # Sometimes it might just return a string email
+            primary_email = emails_response
+        elif isinstance(emails_response, dict) and 'email' in emails_response:
+            # Single email object
+            primary_email = emails_response.get('email')
+        
+        if not primary_email:
+            # Try alternative approach - use the token to make a direct request
+            try:
+                import requests
+                headers = {
+                    'Authorization': f'token {token["access_token"]}',
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+                email_resp = requests.get(
+                    'https://api.github.com/user/emails',
+                    headers=headers
+                )
+                if email_resp.status_code == 200:
+                    alt_emails = email_resp.json()
+                    print(f"Alternative emails response: {alt_emails}")
+                    if isinstance(alt_emails, list):
+                        for e in alt_emails:
+                            if isinstance(e, dict) and e.get('primary') and e.get('verified'):
+                                primary_email = e['email']
+                                break
+            except Exception as email_error:
+                print(f"Alternative email fetch error: {email_error}")
+        
+        if not primary_email:
+            # Last resort: use GitHub username to create placeholder
+            username = user_info.get('login')
+            if username:
+                primary_email = f"{username}@github.oauth"
+            else:
+                return _oauth_error_response('github', 'No email found and could not create placeholder')
+        
+        print(f"Selected email: {primary_email}")  # Debug log
+        
+        # Check if user exists
+        user = User.query.filter_by(email=primary_email).first()
+
+        if not user:
+            # Create new user
+            user = User(
+                first_name=user_info.get('name', '').split()[0] if user_info.get('name') else '',
+                last_name=' '.join(user_info.get('name', '').split()[1:]) if user_info.get('name') else '',
+                email=primary_email.lower(),
+                password=generate_password_hash(
+                    f"oauth_github_{user_info['id']}_{os.urandom(16).hex()}"
+                ),
+                is_email_verified=('@github.oauth' not in primary_email),  # Only verify if real email
+                status='active',
+                role='member',
+                profile_picture=user_info.get('avatar_url')
+            )
+            db.session.add(user)
+            db.session.commit()
+
+        # Update last login and activity
+        user.last_login = datetime.utcnow()
+        user.last_activity_date = datetime.utcnow().date()
+        db.session.commit()
+
+        # Generate tokens
+        access_token, refresh_token_str = generate_tokens(user.id)
+        save_refresh_token(user.id, refresh_token_str)
+
+        # Return HTML that posts message to parent window
+        user_json = jsonify(get_user_response_data(user)).get_data(as_text=True)
+        return f"""
+            <html>
+                <script>
+                    window.opener.postMessage({{
+                        type: 'oauth_success',
+                        provider: 'github',
+                        access_token: '{access_token}',
+                        refreshToken: '{refresh_token_str}',
+                        user: {user_json}
+                    }}, '*');
+                    window.close();
+                </script>
+            </html>
+        """
+
+    except Exception as e:
+        print(f"GitHub OAuth error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return _oauth_error_response('github', str(e))
+        
 
 def _oauth_error_response(provider, error_message):
     """Helper function to return OAuth error response"""
