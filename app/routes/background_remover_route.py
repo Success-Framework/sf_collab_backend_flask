@@ -9,12 +9,12 @@ import cv2
 # Create blueprint
 bg_remover_bp = Blueprint('background_remover', __name__, url_prefix='/api/background-remover')
 
+import onnxruntime as ort
+ort.set_default_logger_severity(3) 
 # Create session with models for different use cases
+# Create session with CPU
 sessions = {
-    # "portrait": new_session(model_name="birefnet-portrait"),
-    "general": new_session(model_name="isnet-general-use"),
-    # "anime": new_session(model_name="isnet-anime"),
-    # "cloth": new_session(model_name="u2net_cloth"),
+    "general": new_session(model_name="isnet-general-use", providers=["CPUExecutionProvider"]),
 }
 
 # Default session
