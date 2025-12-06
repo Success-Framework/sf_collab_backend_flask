@@ -28,7 +28,7 @@ class RealtimeService:
                 return
             
             conversation = message.conversation
-            sender = message.sender
+            sender = message.sender_id
             
             # Get message in sender's timezone (for sender's own display)
             sender_message_data = message.to_dict(for_user=sender)
