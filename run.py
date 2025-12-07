@@ -1,19 +1,25 @@
-from gevent import monkey
-monkey.patch_all()
-
-import os
 import warnings
+import os
 import logging
-import time
-import json
 
+# # ===== SUPPRESS WARNINGS FIRST =====
+# # Configure logging to ignore specific warnings - DO THIS FIRST
+# warnings.filterwarnings("ignore", category=FutureWarning, module=".*torch.*")
+# warnings.filterwarnings("ignore", category=UserWarning, module=".*gevent.*")
+
+# # Set environment variables for better compatibility
+# os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+# ===== NOW IMPORT YOUR APP =====
 from app import create_app
 from app.utils.socketio import socketio
 from flask import request, g
+import time
+import json
 
 app = create_app()
 
-# ===== Custom Request Logging =====
+# ===== Custom Request Logging (status + data) =====
 @app.before_request
 def start_timer():
     g.start_time = time.time()
@@ -31,11 +37,15 @@ def log_response(response):
     path = request.path
     status = response.status_code
 
+    # Log response data safely
     try:
+        # For JSON responses
         if response.is_json:
-            data_str = json.dumps(response.get_json())[:500]
+            data = response.get_json()
+            data_str = json.dumps(data)[:500]
         else:
-            data_str = (response.data.decode("utf-8") if response.data else "No data")[:500]
+            # For other responses
+            data_str = response.data.decode("utf-8")[:500] if response.data else "No data"
     except Exception as e:
         data_str = f"Error reading response: {str(e)}"
 
@@ -50,20 +60,20 @@ def log_response(response):
 """)
 
     return response
+# ===================================================
 
-# init WITHOUT specifying async_mode
 socketio.init_app(
     app,
-    cors_allowed_origins="*",
+    cors_allowed_origins=app.config.get("CORS_ORIGINS", "*"),
     async_mode="gevent"
 )
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
     socketio.run(
         app,
         host="0.0.0.0",
-        port=port,
+        port=5000,
         debug=True,
-        use_reloader=False
+        use_reloader=False,
+        # threaded=True
     )

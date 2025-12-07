@@ -60,7 +60,8 @@ class Config:
         'http://127.0.0.1:3000',
         'http://localhost:5173',
         'http://127.0.0.1:5173',
-        'https://sfclb.netlify.app'
+        'https://sfclb.netlify.app',
+        'https://sfclb.netlify.app/',
     ]
     CORS_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     CORS_ALLOW_HEADERS = [
@@ -135,7 +136,8 @@ class DevelopmentConfig(Config):
         'http://127.0.0.1:5173',
         'http://localhost:5174',  # Alternative Vite port
         'http://127.0.0.1:5174',
-        'https://sfclb.netlify.app'
+        'https://sfclb.netlify.app',
+        'https://sfclb.netlify.app/',
     ]
     
     # Disable some security features for easier development
