@@ -605,7 +605,7 @@ def change_password():
 @bp.route('/google/login')
 def google_login():
     """Initiate Google OAuth flow"""
-    redirect_uri = url_for('auth.google_callback', _external=True)
+    redirect_uri = url_for('auth.google_callback', _external=True, _scheme="https")
     print("🔥 GOOGLE REDIRECT URI:", redirect_uri)
     return oauth.google.authorize_redirect(redirect_uri)
 
