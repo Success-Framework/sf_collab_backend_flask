@@ -24,11 +24,16 @@ class RealtimeService:
         try:
             message = ChatMessage.query.get(message_id)
             if not message:
-                logging.error(f'Message {message_id} not found')
+                print(f'Message {message_id} not found')
                 return
             
             conversation = message.conversation
-            sender = message.sender_id
+            
+            # Get the sender as a User object
+            sender = User.query.get(message.sender_id)
+            if not sender:
+                print(f'Sender {message.sender_id} not found')
+                return
             
             # Get message in sender's timezone (for sender's own display)
             sender_message_data = message.to_dict(for_user=sender)
@@ -43,7 +48,6 @@ class RealtimeService:
                     participant_message_data = message.to_dict(for_user=participant)
                 
                 # Get participant's socket ID
-                # get_user_sid already imported at the top
                 participant_sid = get_user_sid(participant.id)
                 
                 if participant_sid:
@@ -60,11 +64,12 @@ class RealtimeService:
                 'updated_at': conversation.updated_at.isoformat()
             }, room=f'conversation_{conversation.id}', skip_sid=skip_sid)
             
-            logging.info(f'Emitted new_message event for message {message_id}')
+            print(f'Emitted new_message event for message {message_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting new_message event: {str(e)}')
-    
+            print(f'Error emitting new_message event: {str(e)}')
+            
+            
     @staticmethod
     def emit_message_edited(message_id):
         """
@@ -76,7 +81,7 @@ class RealtimeService:
         try:
             message = ChatMessage.query.get(message_id)
             if not message:
-                logging.error(f'Message {message_id} not found')
+                print(f'Message {message_id} not found')
                 return
             
             conversation = message.conversation
@@ -94,10 +99,10 @@ class RealtimeService:
                         'message': participant_message_data
                     }, room=participant_sid)
             
-            logging.info(f'Emitted message_edited event for message {message_id}')
+            print(f'Emitted message_edited event for message {message_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting message_edited event: {str(e)}')
+            print(f'Error emitting message_edited event: {str(e)}')
     
     @staticmethod
     def emit_message_deleted(message_id, conversation_id):
@@ -111,7 +116,7 @@ class RealtimeService:
         try:
             conversation = ChatConversation.query.get(conversation_id)
             if not conversation:
-                logging.error(f'Conversation {conversation_id} not found')
+                print(f'Conversation {conversation_id} not found')
                 return
             
             # Send to each participant
@@ -125,10 +130,10 @@ class RealtimeService:
                         'message_id': message_id
                     }, room=participant_sid)
             
-            logging.info(f'Emitted message_deleted event for message {message_id}')
+            print(f'Emitted message_deleted event for message {message_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting message_deleted event: {str(e)}')
+            print(f'Error emitting message_deleted event: {str(e)}')
     
     @staticmethod
     def emit_conversation_created(conversation_id, creator_id):
@@ -142,12 +147,12 @@ class RealtimeService:
         try:
             conversation = ChatConversation.query.get(conversation_id)
             if not conversation:
-                logging.error(f'Conversation {conversation_id} not found')
+                print(f'Conversation {conversation_id} not found')
                 return
             
             creator = User.query.get(creator_id)
             if not creator:
-                logging.error(f'Creator {creator_id} not found')
+                print(f'Creator {creator_id} not found')
                 return
             
             # Send to each participant with their timezone conversion
@@ -164,10 +169,10 @@ class RealtimeService:
                         'conversation': participant_conversation_data
                     }, room=participant_sid)
             
-            logging.info(f'Emitted conversation_created event for conversation {conversation_id}')
+            print(f'Emitted conversation_created event for conversation {conversation_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting conversation_created event: {str(e)}')
+            print(f'Error emitting conversation_created event: {str(e)}')
     
     @staticmethod
     def emit_conversation_updated(conversation_id):
@@ -180,7 +185,7 @@ class RealtimeService:
         try:
             conversation = ChatConversation.query.get(conversation_id)
             if not conversation:
-                logging.error(f'Conversation {conversation_id} not found')
+                print(f'Conversation {conversation_id} not found')
             # Cache the conversation data for each participant
             participant_data_cache = {
                 participant.id: conversation.to_dict(for_user=participant)
@@ -201,10 +206,10 @@ class RealtimeService:
                         'conversation': participant_conversation_data
                     }, room=participant_sid)
             
-            logging.info(f'Emitted conversation_updated event for conversation {conversation_id}')
+            print(f'Emitted conversation_updated event for conversation {conversation_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting conversation_updated event: {str(e)}')
+            print(f'Error emitting conversation_updated event: {str(e)}')
     
     @staticmethod
     def emit_user_typing(conversation_id, user_id, is_typing=True):
@@ -219,7 +224,7 @@ class RealtimeService:
         try:
             user = User.query.get(user_id)
             if not user:
-                logging.error(f'User {user_id} not found')
+                print(f'User {user_id} not found')
                 return
             
             typing_data = {
@@ -240,10 +245,10 @@ class RealtimeService:
                         if participant_sid:
                             socketio.emit('user_typing', typing_data, room=participant_sid)
                 
-                logging.debug(f'User {user_id} typing status: {is_typing} in conversation {conversation_id}')
+                print(f'User {user_id} typing status: {is_typing} in conversation {conversation_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting user_typing event: {str(e)}')
+            print(f'Error emitting user_typing event: {str(e)}')
     
     @staticmethod
     def emit_message_read(conversation_id, user_id, message_id):
@@ -274,10 +279,10 @@ class RealtimeService:
                         if participant_sid:
                             socketio.emit('message_read', read_data, room=participant_sid)
                 
-                logging.debug(f'User {user_id} read message {message_id}')
+                print(f'User {user_id} read message {message_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting message_read event: {str(e)}')
+            print(f'Error emitting message_read event: {str(e)}')
     
     @staticmethod
     def emit_participant_added(conversation_id, user_id, added_by_id):
@@ -295,7 +300,7 @@ class RealtimeService:
             added_by = User.query.get(added_by_id)
             
             if not conversation or not user or not added_by:
-                logging.error('Conversation, user, or added_by not found')
+                print('Conversation, user, or added_by not found')
                 return
             
             # Send to all participants in the conversation
@@ -322,10 +327,10 @@ class RealtimeService:
                     'added_by_name': f"{added_by.first_name} {added_by.last_name}"
                 }, room=user_sid)
             
-            logging.info(f'User {user_id} added to conversation {conversation_id}')
+            print(f'User {user_id} added to conversation {conversation_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting participant_added event: {str(e)}')
+            print(f'Error emitting participant_added event: {str(e)}')
     
     @staticmethod
     def emit_participant_removed(conversation_id, user_id, removed_by_id):
@@ -343,7 +348,7 @@ class RealtimeService:
             removed_by = User.query.get(removed_by_id)
             
             if not conversation or not user or not removed_by:
-                logging.error('Conversation, user, or removed_by not found')
+                print('Conversation, user, or removed_by not found')
                 return
             
             # Send to all remaining participants
@@ -370,10 +375,10 @@ class RealtimeService:
                     'removed_by_name': f"{removed_by.first_name} {removed_by.last_name}"
                 }, room=user_sid)
             
-            logging.info(f'User {user_id} removed from conversation {conversation_id}')
+            print(f'User {user_id} removed from conversation {conversation_id}')
             
         except Exception as e:
-            logging.error(f'Error emitting participant_removed event: {str(e)}')
+            print(f'Error emitting participant_removed event: {str(e)}')
     
     @staticmethod
     def emit_user_status_change(user_id, status):
@@ -387,7 +392,7 @@ class RealtimeService:
         try:
             user = User.query.get(user_id)
             if not user:
-                logging.error(f'User {user_id} not found')
+                print(f'User {user_id} not found')
                 return
             
             # Broadcast to all connected users
@@ -397,7 +402,272 @@ class RealtimeService:
                 'status': status
             }, broadcast=True)
             
-            logging.info(f'User {user_id} status changed to {status}')
+            print(f'User {user_id} status changed to {status}')
             
         except Exception as e:
-            logging.error(f'Error emitting user_status_change event: {str(e)}')
+            print(f'Error emitting user_status_change event: {str(e)}')
+            
+    #! new handlers:
+    #? Emit whiteboard drawing/image data to conversation participants
+    @staticmethod
+    def emit_whiteboard_image(conversation_id, image_data, sender_user_id):
+        """
+        Emit whiteboard drawing/image data to conversation participants
+        
+        Args:
+            conversation_id: ID of the conversation (used as whiteboard room)
+            image_data: Base64 image data or drawing coordinates
+            sender_user_id: ID of the user who sent the drawing
+        """
+        try:
+            conversation = ChatConversation.query.get(conversation_id)
+            if not conversation:
+                logging.error(f'Conversation {conversation_id} not found')
+                return
+            
+            sender = User.query.get(sender_user_id)
+            if not sender:
+                logging.error(f'Sender {sender_user_id} not found')
+                return
+            
+            image_payload = {
+                'conversation_id': conversation_id,
+                'image_data': image_data,
+                'sender_id': sender_user_id,
+                'sender_name': f"{sender.first_name} {sender.last_name}",
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Send to all participants in the conversation/whiteboard room
+            for participant in conversation.participants:
+                if participant.id != sender_user_id:  # Skip sender
+                    participant_sid = get_user_sid(participant.id)
+                    if participant_sid:
+                        socketio.emit('whiteboard_image', image_payload, room=participant_sid)
+            
+            # Also emit to the conversation's whiteboard room for any listening clients
+            socketio.emit('whiteboard_image', image_payload, room=f'whiteboard_{conversation_id}')
+            
+            logging.info(f'Emitted whiteboard image for conversation {conversation_id} from user {sender_user_id}')
+            
+        except Exception as e:
+            logging.error(f'Error emitting whiteboard image: {str(e)}')
+            logging.exception(e)
+    
+    #? Emit whiteboard clear event to conversation participants
+    @staticmethod
+    def emit_whiteboard_clear(conversation_id, cleared_by_user_id):
+        """
+        Emit whiteboard clear event to conversation participants
+        
+        Args:
+            conversation_id: ID of the conversation (whiteboard room)
+            cleared_by_user_id: ID of the user who cleared the whiteboard
+        """
+        try:
+            conversation = ChatConversation.query.get(conversation_id)
+            if not conversation:
+                logging.error(f'Conversation {conversation_id} not found')
+                return
+            
+            clearer = User.query.get(cleared_by_user_id)
+            if not clearer:
+                logging.error(f'User {cleared_by_user_id} not found')
+                return
+            
+            clear_payload = {
+                'conversation_id': conversation_id,
+                'cleared_by_id': cleared_by_user_id,
+                'cleared_by_name': f"{clearer.first_name} {clearer.last_name}",
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Send to all participants
+            for participant in conversation.participants:
+                participant_sid = get_user_sid(participant.id)
+                if participant_sid:
+                    socketio.emit('whiteboard_cleared', clear_payload, room=participant_sid)
+            
+            # Also emit to the whiteboard room
+            socketio.emit('whiteboard_cleared', clear_payload, room=f'whiteboard_{conversation_id}')
+            
+            logging.info(f'Emitted whiteboard clear for conversation {conversation_id} by user {cleared_by_user_id}')
+            
+        except Exception as e:
+            logging.error(f'Error emitting whiteboard clear: {str(e)}')
+            logging.exception(e)
+    
+    #? Emit whiteboard undo action to conversation participants
+    @staticmethod
+    def emit_whiteboard_undo(conversation_id, undone_by_user_id):
+        """
+        Emit whiteboard undo action to conversation participants
+        
+        Args:
+            conversation_id: ID of the conversation (whiteboard room)
+            undone_by_user_id: ID of the user who performed undo
+        """
+        try:
+            undo_payload = {
+                'conversation_id': conversation_id,
+                'undone_by_id': undone_by_user_id,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Emit to the whiteboard room only
+            socketio.emit('whiteboard_undo', undo_payload, room=f'whiteboard_{conversation_id}')
+            
+            logging.info(f'Emitted whiteboard undo for conversation {conversation_id} by user {undone_by_user_id}')
+            
+        except Exception as e:
+            logging.error(f'Error emitting whiteboard undo: {str(e)}')
+            logging.exception(e)
+    
+    #? Emit whiteboard redo action to conversation participants
+    @staticmethod
+    def emit_whiteboard_redo(conversation_id, redone_by_user_id):
+        """
+        Emit whiteboard redo action to conversation participants
+        
+        Args:
+            conversation_id: ID of the conversation (whiteboard room)
+            redone_by_user_id: ID of the user who performed redo
+        """
+        try:
+            redo_payload = {
+                'conversation_id': conversation_id,
+                'redone_by_id': redone_by_user_id,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Emit to the whiteboard room only
+            socketio.emit('whiteboard_redo', redo_payload, room=f'whiteboard_{conversation_id}')
+            
+            logging.info(f'Emitted whiteboard redo for conversation {conversation_id} by user {redone_by_user_id}')
+            
+        except Exception as e:
+            logging.error(f'Error emitting whiteboard redo: {str(e)}')
+            logging.exception(e)
+    
+    #? Emit when a user joins a whiteboard session
+    @staticmethod
+    def emit_user_joined_whiteboard(conversation_id, user_id):
+        """
+        Emit when a user joins a whiteboard session
+        
+        Args:
+            conversation_id: ID of the conversation (whiteboard room)
+            user_id: ID of the user who joined
+        """
+        try:
+            user = User.query.get(user_id)
+            if not user:
+                logging.error(f'User {user_id} not found')
+                return
+            
+            join_payload = {
+                'conversation_id': conversation_id,
+                'user_id': user_id,
+                'user_name': f"{user.first_name} {user.last_name}",
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Emit to all other participants in the whiteboard room
+            socketio.emit('user_joined_whiteboard', join_payload, 
+                         room=f'whiteboard_{conversation_id}', 
+                         skip_sid=get_user_sid(user_id))
+            
+            logging.info(f'Emitted user joined whiteboard for conversation {conversation_id}, user {user_id}')
+            
+        except Exception as e:
+            logging.error(f'Error emitting user joined whiteboard: {str(e)}')
+            logging.exception(e)
+    
+    #? Emit when a user leaves a whiteboard session
+    @staticmethod
+    def emit_user_left_whiteboard(conversation_id, user_id):
+        """
+        Emit when a user leaves a whiteboard session
+        
+        Args:
+            conversation_id: ID of the conversation (whiteboard room)
+            user_id: ID of the user who left
+        """
+        try:
+            user = User.query.get(user_id)
+            if not user:
+                logging.error(f'User {user_id} not found')
+                return
+            
+            leave_payload = {
+                'conversation_id': conversation_id,
+                'user_id': user_id,
+                'user_name': f"{user.first_name} {user.last_name}",
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Emit to all participants in the whiteboard room
+            socketio.emit('user_left_whiteboard', leave_payload, 
+                         room=f'whiteboard_{conversation_id}')
+            
+            logging.info(f'Emitted user left whiteboard for conversation {conversation_id}, user {user_id}')
+            
+        except Exception as e:
+            logging.error(f'Error emitting user left whiteboard: {str(e)}')
+            logging.exception(e)
+    
+    #? Emit list of active users in a whiteboard session
+    @staticmethod
+    def emit_active_whiteboard_users(conversation_id, user_ids):
+        """
+        Send list of active users in a whiteboard session
+        
+        Args:
+            conversation_id: ID of the conversation (whiteboard room)
+            user_ids: List of user IDs currently in the whiteboard
+        """
+        try:
+            users = User.query.filter(User.id.in_(user_ids)).all()
+            
+            active_users_payload = {
+                'conversation_id': conversation_id,
+                'active_users': [
+                    {
+                        'id': user.id,
+                        'name': f"{user.first_name} {user.last_name}",
+                        'profile_picture': user.profile_picture
+                    }
+                    for user in users
+                ],
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Emit to the whiteboard room
+            socketio.emit('active_whiteboard_users', active_users_payload, 
+                         room=f'whiteboard_{conversation_id}')
+            
+            logging.info(f'Emitted active whiteboard users for conversation {conversation_id}')
+            
+        except Exception as e:
+            logging.error(f'Error emitting active whiteboard users: {str(e)}')
+            logging.exception(e)
+            
+
+    # In realtime_service.py, add this method:
+    #? Emit user cursor movement to whiteboard
+    @staticmethod
+    def emit_user_cursor_move(conversation_id, user_id, x, y, color=None, user_name=None):
+        """Emit user cursor movement to whiteboard"""
+        try:
+            room_name = f'whiteboard_{conversation_id}'
+            socketio.emit('user_cursor_moved', {
+                'conversation_id': conversation_id,
+                'user_id': user_id,
+                'user_name': user_name or f'User {user_id}',
+                'x': x,
+                'y': y,
+                'color': color or '#3B82F6',
+                'timestamp': datetime.utcnow().isoformat()
+            }, room=room_name)
+        except Exception as e:
+            logging.error(f'Error emitting cursor move: {str(e)}')

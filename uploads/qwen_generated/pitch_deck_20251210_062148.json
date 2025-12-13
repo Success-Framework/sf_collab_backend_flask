@@ -1,0 +1,58 @@
+{
+  "title_slide": {
+    "company_name": "FinEdge Solutions",
+    "tagline": "Revolutionizing SMB Finance",
+    "presenter": "Alex Rivera",
+    "contact_info": {
+      "email": "alex@finedge.com",
+      "phone": "+1-555-123-4567",
+      "website": "https://finedge.com"
+    },
+    "date": "2025-12-10"
+  },
+  "problem_slide": {
+    "problem_statement": "SMBs struggle with fragmented financial tools, high costs, and slow onboarding, leading to cash flow bottlenecks and missed growth opportunities.",
+    "pain_points": [
+      "High transaction fees (3-5% per payment)",
+      "Complex onboarding (5-7 days)",
+      "Limited credit visibility",
+      "Inconsistent cash flow reporting"
+    ],
+    "current_solutions": [
+      "Traditional banks",
+      "Standalone invoicing software",
+      "Credit cards"
+    ],
+    "why_current_solutions_fail": [
+      "High overhead and slow response",
+      "No real-time credit insights",
+      "Limited integration across platforms"
+    ],
+    "market_gap": "A unified, AI-driven platform that offers instant credit scoring, automated invoicing, and real-time cash flow analytics tailored for SMBs."
+  },
+  "solution_slide": {
+    "solution_overview": "FinEdge provides an all-in-one digital banking suite for SMBs, delivering instant credit lines, automated invoicing, and AI-powered cash flow forecasting within a single, secure platform.",
+    "key_features": [
+      "Instant AI credit line up to 30% of monthly revenue",
+      "Automated invoicing & payment reminders",
+      "Real-time cash flow dashboard",
+      "Seamless API integrations",
+      "Blockchain audit trail"
+    ],
+    "unique_advantages": [
+      "AI-driven credit engine with 95% accuracy",
+      "Zero onboarding friction (under 2 minutes)",
+      "Zero transaction fees for SMBs",
+      "24/7 support with dedicated account managers"
+    ],
+    "technology_behind": "Hybrid cloud architecture, TensorFlow-based credit model, GraphQL API, Hyperledger Fabric for audit logs",
+    "demo_link": null
+  },
+  "market_opportunity": {
+    "tam": {
+      "value": 500000000000,
+      "currency": "USD",
+      "description": "Global SMB financial services market"
+    }
+  }
+}

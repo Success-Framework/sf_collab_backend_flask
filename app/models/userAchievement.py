@@ -24,12 +24,17 @@ class UserAchievement(db.Model):
     
     def update_progress(self, progress):
         """Update progress and check if achievement is unlocked"""
-        self.progress_percentage = max(0, min(100, progress))
-        
+        if progress is None:
+            progress = 0  # or some default value
+    
+        # Clamp progress between 0 and 100
+        self.progress_percentage = max(0, min(100, float(progress)))
+    
         if self.progress_percentage >= 100 and not self.is_completed:
             self.unlock()
-        
+    
         db.session.commit()
+
     
     def unlock(self):
         """Unlock achievement and award points"""

@@ -416,9 +416,12 @@ def register():
         db.session.add(user)
         db.session.commit()
         
+        
         # Generate tokens
         access_token, refresh_token_str = generate_tokens(user.id)
         save_refresh_token(user.id, refresh_token_str)
+        
+        # user.update_last_activity()
         
         return jsonify({
             'message': 'User registered successfully',
