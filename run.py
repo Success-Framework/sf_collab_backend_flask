@@ -9,9 +9,16 @@ import logging
 # # Configure logging to ignore specific warnings - DO THIS FIRST
 # warnings.filterwarnings("ignore", category=FutureWarning, module=".*torch.*")
 # warnings.filterwarnings("ignore", category=UserWarning, module=".*gevent.*")
+print("=" * 60)
+print("=== RUN.PY STARTING ===")
+print(f"PORT: {os.environ.get('PORT', 'NOT SET')}")
+print(f"Python: {os.sys.version}")
+print("=" * 60)
 
-# # Set environment variables for better compatibility
-# os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+warnings.filterwarnings("ignore")
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+
 
 # ===== NOW IMPORT YOUR APP =====
 from app import create_app
@@ -80,6 +87,8 @@ socketio.init_app(
     cors_allowed_origins=app.config.get("CORS_ORIGINS", "*"),
     async_mode="gevent"
 )
+
+application = app 
 
 if __name__ == "__main__":
 
