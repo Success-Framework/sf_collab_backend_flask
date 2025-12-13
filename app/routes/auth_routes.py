@@ -416,9 +416,12 @@ def register():
         db.session.add(user)
         db.session.commit()
         
+        
         # Generate tokens
         access_token, refresh_token_str = generate_tokens(user.id)
         save_refresh_token(user.id, refresh_token_str)
+        
+        # user.update_last_activity()
         
         return jsonify({
             'message': 'User registered successfully',
@@ -605,7 +608,8 @@ def change_password():
 @bp.route('/google/login')
 def google_login():
     """Initiate Google OAuth flow"""
-    redirect_uri = url_for('auth.google_callback', _external=True, __scheme='https')
+    redirect_uri = url_for('auth.google_callback', _external=True)
+    # redirect_uri = url_for('auth.google_callback', _external=True, __scheme='https')
     print("🔥 GOOGLE REDIRECT URI:", redirect_uri)
     return oauth.google.authorize_redirect(redirect_uri)
 

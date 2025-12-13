@@ -62,12 +62,9 @@ class ChatMessage(db.Model):
     
     # HELPER FUNCTIONS
     
-    def prepare_for_sending(self, sender_user=None):
+    def prepare_for_sending(self):
         """Prepare message for sending by adding time placeholder"""
         from app.utils.timezone_converter import TimezoneConverter
-        
-        if sender_user:
-            self.sender_timezone = sender_user.get_timezone()
         
         # Check if content already has time placeholders
         import re
@@ -93,23 +90,23 @@ class ChatMessage(db.Model):
         
         user_tz = user.get_timezone()
         
-        # Check if content already has time placeholders
-        import re
-        time_pattern = r'\[(\d{1,2}:\d{2})\]'
-        has_existing_placeholders = bool(re.search(time_pattern, self.original_content))
+        # # Check if content already has time placeholders
+        # import re
+        # time_pattern = r'\[(\d{1,2}:\d{2})\]'
+        # has_existing_placeholders = bool(re.search(time_pattern, self.original_content))
         
-        if has_existing_placeholders:
-            # Convert existing placeholders to user's timezone
-            converted_content = TimezoneConverter.replace_time_placeholder_for_user(
-                self.original_content,  # Use original content directly
-                self.created_at,
-                user_tz,
-                self.sender_timezone
-            )
-            return converted_content
-        else:
-            # No placeholders, use the standard preparation
-            return self.prepare_for_sending()
+        # if has_existing_placeholders:
+        #     # Convert existing placeholders to user's timezone
+        #     converted_content = TimezoneConverter.replace_time_placeholder_for_user(
+        #         self.original_content,  # Use original content directly
+        #         self.created_at,
+        #         user_tz,
+        #         self.sender_timezone
+        #     )
+        #     return converted_content
+        # else:
+        # No placeholders, use the standard preparation
+        return self.prepare_for_sending()
     
     def to_dict(self, for_user=None):
         """Convert message to dictionary, with timezone conversion if user provided"""

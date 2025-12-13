@@ -37,12 +37,18 @@ from .routes import (
     suggestion_routes,
     task_routes,
     user_achievement_routes,
-    gemini_route
-    # background_remover_route,
-    # anime_converter_route
-    # image_logo_generator_route,
-    # business_plan_route,
-    # qwen_chat_route
+    gemini_route,
+    pdf_signing_routes,
+    background_remover,
+    qwen_chat_bp_pdg_br,
+    image_editor_routes,
+    cf_img_proccessing_routes
+    
+    #! removed background_remover_route,
+    #! removed anime_converter_route
+    #! removed image_logo_generator_route,
+    #! removed business_plan_route,
+    #! removed qwen_chat_route
 )
 from .config import get_config
 import os
@@ -169,25 +175,13 @@ def create_app(config_name=None):
     app.register_blueprint(task_routes.tasks_bp)
     app.register_blueprint(user_achievement_routes.user_achievements_bp)
     app.register_blueprint(gemini_route.gemini_bp)
-    # app.register_blueprint(background_remover_route.bg_remover_bp)
-    # app.register_blueprint(anime_converter_route.anime_converter_bp)
-    # app.register_blueprint(qwen_chat_route.qwen_chat_bp)
     
-    # 🚀 PRELOAD AI MODELS ON STARTUP (Optional - comment out for lazy loading)
-    
-    # with app.app_context():
-    #     logging.info("🚀 Preloading AI models...")
-    #     try:
-    #         from app.routes.qwen_chat_route import load_qwen_model
-    #         # from app.routes.business_plan_route import initialize_model
-    #         # initialize_models()
-    #         load_qwen_model()
-            
-    #         logging.info("✅ AI model preloaded successfully")
-    #     except Exception as e:
-    #         logging.error(f"⚠️  Failed to preload AI model: {e}")
-    #         logging.info("💡 Model will load on first request instead")
-    
+    app.register_blueprint(pdf_signing_routes.pdf_bp)
+    app.register_blueprint(background_remover.background_bp)
+    app.register_blueprint(qwen_chat_bp_pdg_br.qwen_bp)
+    app.register_blueprint(image_editor_routes.image_editor_bp)
+    app.register_blueprint(cf_img_proccessing_routes.cf_bp)
+
     # Health check endpoint
     @app.route('/health')
     def health():
