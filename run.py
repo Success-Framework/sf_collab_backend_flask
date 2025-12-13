@@ -84,7 +84,7 @@ print(f"App object created: {app}")
 application = app
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 10000))
+    port = int(os.environ.get('PORT', 8000))
     print(f"=== Starting on port {port} ===")
     socketio.run(
         app,
