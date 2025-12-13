@@ -65,11 +65,6 @@ def log_response(response):
     return response
 # ===================================================
 
-socketio.init_app(
-    app,
-    cors_allowed_origins=app.config.get("CORS_ORIGINS", "*"),
-    async_mode="gevent"
-)
 
 
 # ADD THIS FOR DEBUGGING
@@ -80,16 +75,19 @@ print(f"Files in directory: {os.listdir('.')}")
 print(f"App object created: {app}")
 
 
-# For Gunicorn
-application = app
+socketio.init_app(
+    app,
+    cors_allowed_origins=app.config.get("CORS_ORIGINS", "*"),
+    async_mode="gevent"
+)
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8000))
-    print(f"=== Starting on port {port} ===")
+
     socketio.run(
         app,
         host="0.0.0.0",
-        port=port,
-        debug=False,  # Change to False for production
+        port=5000,
+        debug=True,
         use_reloader=False,
+        # threaded=True
     )
