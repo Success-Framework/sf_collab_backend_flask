@@ -71,12 +71,25 @@ socketio.init_app(
     async_mode="gevent"
 )
 
+
+# ADD THIS FOR DEBUGGING
+print(f"=== GUNICORN DEBUG INFO ===")
+print(f"PORT env var: {os.environ.get('PORT')}")
+print(f"Current directory: {os.getcwd()}")
+print(f"Files in directory: {os.listdir('.')}")
+print(f"App object created: {app}")
+
+
+# For Gunicorn
+application = app
+
 if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 5000))
+    print(f"=== Starting on port {port} ===")
     socketio.run(
         app,
         host="0.0.0.0",
-        port=5000,
-        debug=True,
+        port=port,
+        debug=False,  # Change to False for production
         use_reloader=False,
-        # threaded=True
     )
