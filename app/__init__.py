@@ -37,9 +37,10 @@ from .routes import (
     suggestion_routes,
     task_routes,
     user_achievement_routes,
-    gemini_route,
+    
+    # gemini_route,
     pdf_signing_routes,
-    background_remover,
+    # background_remover,
     qwen_chat_bp_pdg_br,
     image_editor_routes,
     cf_img_proccessing_routes
@@ -69,9 +70,9 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_files')
 AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 
 # Set model cache location
-os.environ['HF_HOME'] = os.path.join(BASE_DIR, 'model_cache')
-os.environ['TRANSFORMERS_CACHE'] = os.path.join(BASE_DIR, 'model_cache')
-os.environ['TORCH_HOME'] = os.path.join(BASE_DIR, 'model_cache')
+# os.environ['HF_HOME'] = os.path.join(BASE_DIR, 'model_cache')
+# os.environ['TRANSFORMERS_CACHE'] = os.path.join(BASE_DIR, 'model_cache')
+# os.environ['TORCH_HOME'] = os.path.join(BASE_DIR, 'model_cache')
 
 def create_app(config_name=None):
     """Create and configure Flask application"""
@@ -174,10 +175,10 @@ def create_app(config_name=None):
     app.register_blueprint(suggestion_routes.suggestions_bp)
     app.register_blueprint(task_routes.tasks_bp)
     app.register_blueprint(user_achievement_routes.user_achievements_bp)
-    app.register_blueprint(gemini_route.gemini_bp)
+    # app.register_blueprint(gemini_route.gemini_bp)
     
     app.register_blueprint(pdf_signing_routes.pdf_bp)
-    app.register_blueprint(background_remover.background_bp)
+    # app.register_blueprint(background_remover.background_bp)
     app.register_blueprint(qwen_chat_bp_pdg_br.qwen_bp)
     app.register_blueprint(image_editor_routes.image_editor_bp)
     app.register_blueprint(cf_img_proccessing_routes.cf_bp)
