@@ -1,6 +1,16 @@
 from gevent import monkey
 monkey.patch_all()
 
+# Reduce gevent memory
+import gevent.monkey
+gevent.monkey.patch_all()
+import resource
+
+# Set memory limit (450MB to stay under 512MB)
+soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+resource.setrlimit(resource.RLIMIT_AS, (450 * 1024 * 1024, hard))
+print(f"=== Memory limit set to 450MB ===")
+
 import warnings
 import os
 import logging
@@ -88,14 +98,15 @@ socketio.init_app(
     async_mode="gevent"
 )
 
-application = app 
 
 if __name__ == "__main__":
 
+    port=int(os.environ.get('PORT',5000))
+    
     socketio.run(
         app,
         host="0.0.0.0",
-        port=5000,
+        port=port,
         debug=True,
         use_reloader=False,
         # threaded=True
