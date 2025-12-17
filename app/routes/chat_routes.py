@@ -6,7 +6,6 @@ from app.models.user import User
 from app.extensions import db
 from app.utils.helper import error_response, success_response
 from app.utils.timezone_converter import TimezoneConverter, get_user_timezone
-from app.services.realtime_service import RealtimeService
 import logging
 import re
 from datetime import datetime
@@ -241,7 +240,6 @@ def send_message(conversation_id):
         
         db.session.commit()
         
-        RealtimeService.emit_new_message(message.id)
         
         response_data = message.to_dict(for_user=user)
         
@@ -362,7 +360,6 @@ def edit_message(conversation_id, message_id):
         
         message.edit_message(new_content, metadata_data)
         
-        RealtimeService.emit_message_edited(message.id)
         
         user = User.query.get(current_user_id)
         response_data = message.to_dict(for_user=user)
@@ -408,7 +405,6 @@ def delete_message(conversation_id, message_id):
         db.session.delete(message)
         db.session.commit()
         
-        RealtimeService.emit_message_deleted(message_id, conversation_id)
         
         return success_response({
             'message_id': message_id
@@ -518,10 +514,6 @@ def create_conversation():
         
         db.session.commit()
         
-        try:
-            RealtimeService.emit_conversation_created(conversation.id, creator.id)
-        except Exception as ws_error:
-            logging.warning(f'WebSocket emission failed: {str(ws_error)}')
         
         return success_response({
             'conversation': conversation.to_dict(for_user=creator)
@@ -660,8 +652,6 @@ def add_participant(conversation_id):
         conversation.updated_at = datetime.utcnow()
         db.session.commit()
         
-        # Emit real-time event
-        RealtimeService.emit_new_message(notif_message.id)
         
         return success_response({
             'message': 'Participant added successfully',
@@ -721,8 +711,6 @@ def remove_participant(conversation_id, user_id):
         conversation.updated_at = datetime.utcnow()
         db.session.commit()
         
-        # Emit real-time event
-        RealtimeService.emit_new_message(notif_message.id)
         
         return success_response({
             'message': 'Participant removed successfully',
