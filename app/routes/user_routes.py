@@ -69,7 +69,7 @@ def save_uploaded_file(file, user_id, file_type='file'):
         'name': filename,
         'size': os.path.getsize(file_path),
         'type': file.content_type,
-        'url': f"/api/users/uploads/{unique_filename}",
+        'url': f"/uploads/{unique_filename}",
         'path': file_path,
         'filename': unique_filename
     }
@@ -79,6 +79,8 @@ def save_uploaded_file(file, user_id, file_type='file'):
 #! HANDLE FILE UPLOADS
 def handle_file_uploads(user_id, user, files):
     """Handle file uploads for user profile"""
+    from app.routes.auth_routes import get_user_response_data
+    
     uploaded_files = []
     
     try:
@@ -136,7 +138,7 @@ def handle_file_uploads(user_id, user, files):
         db.session.commit()
         
         response_data = {
-            'user': user.to_dict(),
+            'user': get_user_response_data(user),
             'uploaded_files': uploaded_files
         }
         
@@ -151,6 +153,8 @@ def handle_file_uploads(user_id, user, files):
 #! HANDLE USER DATA UPDATE
 def handle_user_data_update(user_id, user, data):
     """Handle user data updates from JSON"""
+    from app.routes.auth_routes import get_user_response_data
+    
     # Update basic fields
     if 'firstName' in data:
         user.first_name = data['firstName']
@@ -182,11 +186,11 @@ def handle_user_data_update(user_id, user, data):
     
     # Update profile
     if 'profile' in data:
-        user.update_user_profile(data['profile'])
+        user.update_profile(data['profile'])
     
     # Update preferences
     if 'preferences' in data:
-        user.update_user_preferences(data['preferences'])
+        user.update_preferences(data['preferences'])
     
     # Update notification settings
     if 'notificationSettings' in data:
@@ -197,8 +201,8 @@ def handle_user_data_update(user_id, user, data):
         update_user_password(user, data['currentPassword'], data['password'])
     
     db.session.commit()
-    
-    return success_response({'user': user.to_dict()}, 'User updated successfully')
+        
+    return success_response({'user': get_user_response_data(user)}, 'User updated successfully')
 
 #! UPDATE USER PASSWORD
 def update_user_password(user, current_password, new_password):
@@ -328,7 +332,7 @@ def update_user(user_id):
         return error_response('User not found', 404)
     
     # Authorization check - users can only update their own profile unless they're admin
-    if user_id != current_user_id and user.role != 'admin':
+    if int(user_id) != int(current_user_id) :
         return error_response('Unauthorized to update this user', 403)
     
     try:
