@@ -10,7 +10,9 @@ from flask_jwt_extended import (
 from app.models.user import User
 from app.models.refreshToken import RefreshToken
 from app.models.userPermission import UserPermission
-
+from app.models.activity import Activity
+from app.utils.helper import utc_now_str
+        
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
@@ -395,6 +397,67 @@ def get_user_response_data(user):
     
     return user_data
 
+
+# ========================== grant default permissions ============
+def grant_default_permissions(user_id):
+    """Grant default permissions to a new user"""
+    from app.models.userPermission import UserPermission
+    
+    # Get all permissions except AI/Media/Document tools
+    from app.models.permission import Permission
+    excluded_permissions = Permission.query.filter(
+        Permission.category.in_(['AI Tools', 'Media Tools', 'Document Tools'])
+        | Permission.key.in_([
+            'chat_ai_access',
+            'chat_ai_qwen', 
+            'chat_ai_gemini',
+            'tools_image_generate',
+            'tools_image_edit',
+            'tools_background_remove',
+            'tools_anime_convert',
+            'tools_pdf_sign',
+            'tools_pdf_edit',
+            'tools_logo_generate',
+            'tools_business_plan'
+        ])
+    ).all()
+    
+    excluded_permission_ids = [p.id for p in excluded_permissions]
+    
+    # Get all other permissions
+    default_permissions = Permission.query.filter(
+        ~Permission.id.in_(excluded_permission_ids)
+    ).all()
+    
+    # Grant each permission to the user
+    for permission in default_permissions:
+        # Check if user already has this permission (shouldn't happen for new users)
+        existing = UserPermission.query.filter_by(
+            user_id=user_id,
+            permission_id=permission.id
+        ).first()
+        
+        if not existing:
+            user_permission = UserPermission(
+                user_id=user_id,
+                permission_id=permission.id,
+                granted_by=user_id,  # Or use a system admin ID
+                starts_at=datetime.utcnow()
+            )
+            db.session.add(user_permission)
+    
+    db.session.commit()
+    
+    # Log the activity
+    from app.models.activity import Activity
+    Activity.log(
+        action="default_permissions_granted",
+        user_id=user_id,
+        details=f"Granted {len(default_permissions)} default permissions to new user"
+    )
+    
+    return len(default_permissions)
+    
 # ========================== REGISTER ==========================
 @bp.route('/register', methods=['POST'])
 def register():
@@ -425,18 +488,34 @@ def register():
         db.session.add(user)
         db.session.commit()
         
-        
+        # GRANT DEFAULT PERMISSIONS HERE
+        try:
+            permissions_count = grant_default_permissions(user.id)
+            print(f"Granted {permissions_count} default permissions to user {user.id}")
+        except Exception as perm_error:
+            print(f"Error granting default permissions: {str(perm_error)}")
+            
         # Generate tokens
         access_token, refresh_token_str = generate_tokens(user.id)
         save_refresh_token(user.id, refresh_token_str)
         
         # user.update_last_activity()
+        from app.models.activity import Activity
+        from app.utils.helper import utc_now_str
+        
+        Activity.log(
+            action="user_registered",
+            user_id=user.id,
+            is_new_user=True,
+            details=f"User account successfully created at {utc_now_str()}."
+        )
         
         return jsonify({
             'message': 'User registered successfully',
             'access_token': access_token,
             'refreshToken': refresh_token_str,
-            'user': get_user_response_data(user)
+            'user': get_user_response_data(user),
+            'permissions_granted': permissions_count if 'permissions_count' in locals() else 0
         }), 201
         
     except Exception as e:
@@ -478,6 +557,16 @@ def login():
         # Generate tokens
         access_token, refresh_token_str = generate_tokens(user.id)
         save_refresh_token(user.id, refresh_token_str)
+        
+        # Log the activity
+        from app.models.activity import Activity
+        from app.utils.helper import utc_now_str
+        
+        Activity.log(
+            action="default_permissions_granted",
+            user_id=user.id,
+            details=f"Successful authentication recorded at {utc_now_str()} UTC."
+        )
         
         return jsonify({
             'success':True,
@@ -634,6 +723,7 @@ def google_callback():
         
         # Check if user exists
         user = User.query.filter_by(email=user_info['email']).first()
+        is_new_user = False
         
         if not user:
             # Create new user
@@ -651,7 +741,8 @@ def google_callback():
             )
             db.session.add(user)
             db.session.commit()
-        
+            is_new_user = True
+            
         # Update last login
         user.last_login = datetime.utcnow()
         user.last_activity_date = datetime.utcnow().date()
@@ -661,6 +752,27 @@ def google_callback():
             user.profile_picture = user_info.get('picture')
         
         db.session.commit()
+        
+        # GRANT DEFAULT PERMISSIONS FOR NEW USERS
+        if is_new_user:
+            try:
+                
+                permissions_count = grant_default_permissions(user.id)
+                print(f"Granted {permissions_count} default permissions to OAuth user {user.id}")
+            except Exception as perm_error:
+                print(f"Error granting default permissions to OAuth user: {str(perm_error)}")
+            
+            Activity.log(
+                action="user_registered",
+                user_id=user.id,
+                is_new_user=True,
+                details=f"User account successfully created at {utc_now_str()}."
+            )
+        Activity.log(
+            action="default_permissions_granted",
+            user_id=user.id,
+            details=f"Successful authentication recorded at {utc_now_str()} UTC."
+        )
         
         # Generate tokens
         access_token, refresh_token_str = generate_tokens(user.id)
@@ -677,7 +789,8 @@ def google_callback():
                         provider: 'google',
                         access_token: '{access_token}',
                         refreshToken: '{refresh_token_str}',
-                        user: {user_json}
+                        user: {user_json},
+                        is_new_user: {str(is_new_user).lower()}
                     }}, '*');
                     window.close();
                 </script>
@@ -775,11 +888,12 @@ def github_callback():
             else:
                 return _oauth_error_response('github', 'No email found and could not create placeholder')
         
-        print(f"Selected email: {primary_email}")  # Debug log
+        # print(f"Selected email: {primary_email}")  # Debug log
         
         # Check if user exists
         user = User.query.filter_by(email=primary_email).first()
-
+        is_new_user=False
+        
         if not user:
             # Create new user
             user = User(
@@ -801,7 +915,28 @@ def github_callback():
         user.last_login = datetime.utcnow()
         user.last_activity_date = datetime.utcnow().date()
         db.session.commit()
-
+        is_new_user=True
+        
+        
+        if is_new_user:
+            try:
+                permissions_count = grant_default_permissions(user.id)
+                print(f"Granted {permissions_count} default permissions to OAuth user {user.id}")
+            except Exception as perm_error:
+                print(f"Error granting permissions: {str(perm_error)}")
+            
+            Activity.log(
+                action="user_registered",
+                user_id=user.id,
+                is_new_user=True,
+                details=f"User account successfully created at {utc_now_str()}."
+            )
+        Activity.log(
+            action="default_permissions_granted",
+            user_id=user.id,
+            details=f"Successful authentication recorded at {utc_now_str()} UTC."
+        )
+        
         # Generate tokens
         access_token, refresh_token_str = generate_tokens(user.id)
         save_refresh_token(user.id, refresh_token_str)
