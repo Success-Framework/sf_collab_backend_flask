@@ -62,6 +62,8 @@ class Config:
         'http://127.0.0.1:5173',
         'https://sfclb.netlify.app',
         'https://sfclb.netlify.app/',
+        "https://sfmanagers-frontend.vercel.app",
+        "https://sfmanagers-frontend.vercel.app/"
     ]
     CORS_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     CORS_ALLOW_HEADERS = [
@@ -138,6 +140,8 @@ class DevelopmentConfig(Config):
         'http://127.0.0.1:5174',
         'https://sfclb.netlify.app',
         'https://sfclb.netlify.app/',
+        "https://sfmanagers-frontend.vercel.app",
+        "https://sfmanagers-frontend.vercel.app/"
     ]
     
     # Disable some security features for easier development

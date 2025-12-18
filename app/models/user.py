@@ -265,6 +265,30 @@ class User(db.Model):
         cascade='all, delete-orphan',
         foreign_keys='GoalMilestone.user_id')
     
+    sent_requests = db.relationship(
+        "FriendRequest",
+        lazy='dynamic', 
+        foreign_keys="FriendRequest.sender_id",
+        back_populates="sender",
+        cascade="all, delete-orphan"
+    )
+
+    # Friend requests received by this user
+    received_requests = db.relationship(
+        "FriendRequest",
+        lazy='dynamic', 
+        foreign_keys="FriendRequest.receiver_id",
+        back_populates="receiver",
+        cascade="all, delete-orphan"
+    )
+    
+    permissions = db.relationship(
+        "UserPermission",
+        foreign_keys="[UserPermission.user_id]",
+        back_populates="permission_owner",
+        cascade="all, delete-orphan"
+    )
+    
     # ========== HELPER FUNCTIONS ==========
     
     def update_last_activity(self):
@@ -515,7 +539,8 @@ class User(db.Model):
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
             'fullName': self.get_full_name(),
-            'timezone': self.get_timezone()
+            'timezone': self.get_timezone(),
+            'permissions': [perm.to_dict() for perm in self.permissions]
         }
         
         if include_password:

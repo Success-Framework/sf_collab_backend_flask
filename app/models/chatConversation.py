@@ -131,8 +131,8 @@ class ChatConversation(db.Model):
         # Get the user's read status for this conversation
         read_status = db.session.execute(
             conversation_user_reads.select().where(
-                conversation_user_reads.c.conversation_id == self.id,
-                conversation_user_reads.c.user_id == user_id
+                (conversation_user_reads.c.conversation_id == self.id) &
+                (conversation_user_reads.c.user_id == user_id)
             )
         ).first()
         

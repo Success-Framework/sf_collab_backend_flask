@@ -6,11 +6,15 @@ from flask_jwt_extended import (
     jwt_required, 
     get_jwt_identity
 )
+
 from app.models.user import User
 from app.models.refreshToken import RefreshToken
+from app.models.userPermission import UserPermission
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
+
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -201,6 +205,8 @@ def get_user_response_data(user):
     except:
         this_month_achievements = 0
     
+    permissions=UserPermission.query.filter_by(user_id=int(user.id)).all()
+    
     # Build complete user data with ALL fields from the User model including relationship data
     user_data = {
         # Core user information
@@ -349,6 +355,7 @@ def get_user_response_data(user):
             'sentMessages': [message.to_dict() for message in user.sent_messages.limit(50).all()],
             'conversations': [conversation.to_dict() for conversation in user.conversations.limit(50).all()],
             'createdConversations': [conversation.to_dict() for conversation in user.created_conversations.limit(50).all()],
+            'unread_count':sum(conversation.get_unread_message_count(user.id) for conversation in user.conversations) ,
             
             # Views & Analytics
             'resourceViews': [view.to_dict() for view in user.resource_views.limit(50).all()],
@@ -381,7 +388,9 @@ def get_user_response_data(user):
             'growthMetrics': user.growth_metrics.count(),
             'calendarEvents': user.calendar_events.count(),
             'goalMilestones': user.goal_milestones.count()
-        }
+        },
+        
+        'permissions':[perm.to_dict() for perm in permissions]
     }
     
     return user_data
@@ -608,7 +617,7 @@ def change_password():
 @bp.route('/google/login')
 def google_login():
     """Initiate Google OAuth flow"""
-    redirect_uri = url_for('auth.google_callback', _external=True, _scheme="https")
+    redirect_uri = url_for('auth.google_callback', _external=True)
     print("🔥 GOOGLE REDIRECT URI:", redirect_uri)
     return oauth.google.authorize_redirect(redirect_uri)
 

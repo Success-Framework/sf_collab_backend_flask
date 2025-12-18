@@ -43,7 +43,14 @@ from .routes import (
     # background_remover,
     qwen_chat_bp_pdg_br,
     image_editor_routes,
-    cf_img_proccessing_routes
+    cf_img_proccessing_routes,
+    
+    permission_routes,
+    user_permission_routes,
+    activity_routes,
+    access_request_routes,
+    
+    friend_request_routes
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -105,6 +112,8 @@ def create_app(config_name=None):
                     "http://127.0.0.1:5173",
                     "https://sfclb.netlify.app",
                     "https://sfclb.netlify.app/",
+                    "https://sfmanagers-frontend.vercel.app",
+                    "https://sfmanagers-frontend.vercel.app/",
                 ]),
                 "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                 "allow_headers": [
@@ -175,7 +184,12 @@ def create_app(config_name=None):
     app.register_blueprint(suggestion_routes.suggestions_bp)
     app.register_blueprint(task_routes.tasks_bp)
     app.register_blueprint(user_achievement_routes.user_achievements_bp)
-    # app.register_blueprint(gemini_route.gemini_bp)
+    
+    app.register_blueprint(access_request_routes.access_requests_bp)
+    app.register_blueprint(permission_routes.permissions_bp)
+    app.register_blueprint(user_permission_routes.user_permissions_bp)
+    app.register_blueprint(friend_request_routes.friend_requests_bp)
+    app.register_blueprint(activity_routes.activities_bp)
     
     app.register_blueprint(pdf_signing_routes.pdf_bp)
     # app.register_blueprint(background_remover.background_bp)

@@ -1,15 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
 
-# Reduce gevent memory
-import gevent.monkey
-gevent.monkey.patch_all()
-import resource
-
-# Set memory limit (450MB to stay under 512MB)
-soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-resource.setrlimit(resource.RLIMIT_AS, (450 * 1024 * 1024, hard))
-print(f"=== Memory limit set to 450MB ===")
 
 import warnings
 import os
@@ -62,10 +53,10 @@ def log_response(response):
         # For JSON responses
         if response.is_json:
             data = response.get_json()
-            data_str = json.dumps(data)[:500]
+            data_str = json.dumps(data)[:400]
         else:
             # For other responses
-            data_str = response.data.decode("utf-8")[:500] if response.data else "No data"
+            data_str = response.data.decode("utf-8")[:400] if response.data else "No data"
     except Exception as e:
         data_str = f"Error reading response: {str(e)}"
 
@@ -88,7 +79,7 @@ def log_response(response):
 print(f"=== GUNICORN DEBUG INFO ===")
 print(f"PORT env var: {os.environ.get('PORT')}")
 print(f"Current directory: {os.getcwd()}")
-print(f"Files in directory: {os.listdir('.')}")
+# print(f"Files in directory: {os.listdir('.')}")
 print(f"App object created: {app}")
 
 

@@ -79,10 +79,7 @@ def create_notification():
     
     # Check if user is authorized to create notifications for other users
     target_user_id = data['user_id']
-    if target_user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != 'admin':
-            return error_response('Unauthorized to create notifications for other users', 403)
+    current_user = User.query.get(current_user_id)
     
     try:
         notification = Notification(
@@ -115,9 +112,7 @@ def mark_notification_read(notification_id):
     
     # Check if user is authorized to mark this notification as read
     if notification.user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != 'admin':
-            return error_response('Unauthorized to mark this notification as read', 403)
+        return error_response('Unauthorized to mark this notification as read', 403)
     
     try:
         notification.mark_as_read()
