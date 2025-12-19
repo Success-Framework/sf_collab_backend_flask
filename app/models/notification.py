@@ -8,7 +8,7 @@ class Notification(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    type = db.Column(db.String(50), default='system')
+    notification_type = db.Column(db.String(50), default='system')
     title = db.Column(db.String(255))
     message = db.Column(db.Text)
     data = db.Column(JSON, default={})
@@ -50,7 +50,7 @@ class Notification(db.Model):
         return {
             'id': self.id,
             'userId': self.user_id,
-            'type': self.type,
+            'type': self.notification_type,
             'title': self.title,
             'message': self.message,
             'data': self.data or {},
