@@ -1,8 +1,7 @@
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit
 from flask import request
 import logging
 from app.models.user import User
-from services.realtime_service import RealtimeService
 
 # Configure SocketIO with CORS support
 socketio = SocketIO(async_mode="gevent", cors_allowed_origins="*")
@@ -83,6 +82,7 @@ def handle_disconnect():
                 whiteboard_users[conversation_id].remove(user_id)
                 
                 # Notify others
+                from app.services.realtime_service import RealtimeService
                 RealtimeService.emit_user_left_whiteboard(conversation_id, user_id)
                 
                 # Update active users if any remain
@@ -177,7 +177,7 @@ def handle_start_typing(data):
     user_id = data.get('user_id')
     
     if conversation_id and user_id:
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_user_typing(conversation_id, user_id, True)
         
         return {'status': 'success'}
@@ -189,7 +189,7 @@ def handle_stop_typing(data):
     user_id = data.get('user_id')
     
     if conversation_id and user_id:
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_user_typing(conversation_id, user_id, False)
         
         return {'status': 'success'}
@@ -202,7 +202,7 @@ def handle_mark_message_read(data):
     message_id = data.get('message_id')
     
     if conversation_id and user_id and message_id:
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_message_read(conversation_id, user_id, message_id)
         
         return {'status': 'success'}
@@ -243,7 +243,7 @@ def handle_send_message(data):
         db.session.commit()
         
         # Emit new message via RealtimeService
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_new_message(new_message.id, skip_sid=request.sid)
         
         print(f'User {user_id} sent message in conversation {conversation_id}')
@@ -284,7 +284,7 @@ def handle_edit_message(data):
         message.edit_message(content, metadata)
         
         # Emit message edited via RealtimeService
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_message_edited(message_id)
         
         print(f'User {user_id} edited message {message_id}')
@@ -329,7 +329,7 @@ def handle_delete_message(data):
         db.session.commit()
         
         # Emit message deleted via RealtimeService
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_message_deleted(stored_message_id, stored_conversation_id)
         
         print(f'User {user_id} deleted message {message_id}')
@@ -363,7 +363,7 @@ def handle_join_whiteboard(data):
             whiteboard_users[conversation_id].append(user_id)
         
         # Notify others
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_user_joined_whiteboard(conversation_id, user_id)
         
         # Send current active users to the joining user
@@ -394,7 +394,7 @@ def handle_leave_whiteboard(data):
             whiteboard_users[conversation_id].remove(user_id)
             
             # Notify others
-            
+            from app.services.realtime_service import RealtimeService
             RealtimeService.emit_user_left_whiteboard(conversation_id, user_id)
             
             # Update active users
@@ -421,7 +421,7 @@ def handle_whiteboard_drawing(data):
     user_name=user.get_full_name()
     
     if conversation_id and user_id and image_data:
-        
+        from app.services.realtime_service import RealtimeService
         
         # Check if this is a cursor movement
         if image_data.get('type') == 'cursor_move':
@@ -446,7 +446,7 @@ def handle_whiteboard_clear(data):
     user_id = data.get('user_id')
     
     if conversation_id and user_id:
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_whiteboard_clear(conversation_id, user_id)
         
         return {'status': 'success'}
@@ -458,7 +458,7 @@ def handle_whiteboard_undo(data):
     user_id = data.get('user_id')
     
     if conversation_id and user_id:
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_whiteboard_undo(conversation_id, user_id)
         
         return {'status': 'success'}
@@ -470,7 +470,7 @@ def handle_whiteboard_redo(data):
     user_id = data.get('user_id')
     
     if conversation_id and user_id:
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_whiteboard_redo(conversation_id, user_id)
         
         return {'status': 'success'}
@@ -499,7 +499,7 @@ def handle_whiteboard_batch_drawings(data):
     drawings = data.get('drawings', [])
     
     if conversation_id and user_id and drawings:
-        
+        from app.services.realtime_service import RealtimeService
         # Emit each drawing in the batch
         for drawing in drawings:
             RealtimeService.emit_whiteboard_image(
@@ -517,7 +517,7 @@ def handle_set_user_status(data):
     status = data.get('status')  # online, away, busy, offline
     
     if user_id and status:
-        
+        from app.services.realtime_service import RealtimeService
         RealtimeService.emit_user_status_change(user_id, status)
         
         return {'status': 'success', 'user_id': user_id, 'new_status': status}
