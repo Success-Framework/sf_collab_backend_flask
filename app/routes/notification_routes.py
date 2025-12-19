@@ -32,7 +32,7 @@ def get_notifications():
     query = Notification.query.filter(Notification.user_id == user_id)
     
     if type_filter:
-        query = query.filter(Notification.type == type_filter)
+        query = query.filter(Notification.notification_type == type_filter)
     if is_read is not None:
         query = query.filter(Notification.is_read == is_read)
     
@@ -60,9 +60,7 @@ def get_notification(notification_id):
     
     # Check if user is authorized to view this notification
     if notification.user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != 'admin':
-            return error_response('Unauthorized to view this notification', 403)
+        return error_response('Unauthorized to view this notification', 403)
     
     return success_response({'notification': notification.to_dict()})
 
@@ -70,6 +68,8 @@ def get_notification(notification_id):
 @jwt_required()
 def create_notification():
     """Create new notification"""
+    import json
+
     current_user_id = get_jwt_identity()
     data = request.get_json()
     
@@ -77,17 +77,20 @@ def create_notification():
     if not all(field in data for field in required_fields):
         return error_response('Missing required fields: user_id, title, message')
     
-    # Check if user is authorized to create notifications for other users
     target_user_id = data['user_id']
-    current_user = User.query.get(current_user_id)
+    safe_data = data.get('data', {})
+
+    if not isinstance(safe_data, (dict, list)):
+        safe_data = {}
     
     try:
         notification = Notification(
             user_id=target_user_id,
-            type=data.get('type', 'system'),
+            notification_type=data.get('type', 'system'),
             title=data['title'],
             message=data['message'],
-            data=data.get('data', {})
+            data=json.loads(json.dumps(safe_data)),
+            is_read=data.get('isRead', False)
         )
         
         db.session.add(notification)
@@ -134,9 +137,7 @@ def mark_notification_unread(notification_id):
     
     # Check if user is authorized to mark this notification as unread
     if notification.user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != 'admin':
-            return error_response('Unauthorized to mark this notification as unread', 403)
+        return error_response('Unauthorized to mark this notification as unread', 403)
     
     try:
         notification.mark_as_unread()
@@ -249,7 +250,7 @@ def get_my_notifications():
     query = Notification.query.filter(Notification.user_id == current_user_id)
     
     if type_filter:
-        query = query.filter(Notification.type == type_filter)
+        query = query.filter(Notification.notification_type == type_filter)
     if is_read is not None:
         query = query.filter(Notification.is_read == is_read)
     
