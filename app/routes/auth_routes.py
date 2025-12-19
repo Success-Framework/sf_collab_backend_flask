@@ -400,36 +400,50 @@ def get_user_response_data(user):
 
 # ========================== grant default permissions ============
 def grant_default_permissions(user_id):
-    """Grant default permissions to a new user"""
+    """Grant default permissions to a new user (excludes admin and premium features)"""
     from app.models.userPermission import UserPermission
+    from datetime import datetime
     
-    # Get all permissions except AI/Media/Document tools
+    # Get all permissions except Admin, AI, Media, and Document tools
     from app.models.permission import Permission
+    
+    # Define excluded categories AND specific permission keys
+    excluded_categories = ['Administration', 'AI Tools', 'Media Tools', 'Document Tools']
+    
+    excluded_permission_keys = [
+        'admin',
+        'admin_dashboard',
+        'user_management',
+        'content_moderation',
+        'system_settings',
+        'chat_ai_access',
+        'chat_ai_qwen', 
+        'chat_ai_gemini',
+        'tools_image_generate',
+        'tools_image_edit',
+        'tools_background_remove',
+        'tools_anime_convert',
+        'tools_pdf_sign',
+        'tools_pdf_edit',
+        'tools_logo_generate',
+        'tools_business_plan'
+    ]
+    
+    # Get excluded permissions
     excluded_permissions = Permission.query.filter(
-        Permission.category.in_(['AI Tools', 'Media Tools', 'Document Tools'])
-        | Permission.key.in_([
-            'chat_ai_access',
-            'chat_ai_qwen', 
-            'chat_ai_gemini',
-            'tools_image_generate',
-            'tools_image_edit',
-            'tools_background_remove',
-            'tools_anime_convert',
-            'tools_pdf_sign',
-            'tools_pdf_edit',
-            'tools_logo_generate',
-            'tools_business_plan'
-        ])
+        Permission.category.in_(excluded_categories)
+        | Permission.key.in_(excluded_permission_keys)
     ).all()
     
     excluded_permission_ids = [p.id for p in excluded_permissions]
     
-    # Get all other permissions
+    # Get all other permissions (non-admin, non-premium)
     default_permissions = Permission.query.filter(
         ~Permission.id.in_(excluded_permission_ids)
     ).all()
     
     # Grant each permission to the user
+    permissions_granted = 0
     for permission in default_permissions:
         # Check if user already has this permission (shouldn't happen for new users)
         existing = UserPermission.query.filter_by(
@@ -445,18 +459,20 @@ def grant_default_permissions(user_id):
                 starts_at=datetime.utcnow()
             )
             db.session.add(user_permission)
+            permissions_granted += 1
     
-    db.session.commit()
+    if permissions_granted > 0:
+        db.session.commit()
     
     # Log the activity
     from app.models.activity import Activity
     Activity.log(
         action="default_permissions_granted",
         user_id=user_id,
-        details=f"Granted {len(default_permissions)} default permissions to new user"
+        details=f"Granted {permissions_granted} default permissions to new user (excluded admin/premium)"
     )
     
-    return len(default_permissions)
+    return permissions_granted
     
 # ========================== REGISTER ==========================
 @bp.route('/register', methods=['POST'])
