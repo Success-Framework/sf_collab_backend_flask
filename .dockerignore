@@ -1,0 +1,18 @@
+# Ignore Python virtual environment
+venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+.DS_Store
+
+# Git and other unnecessary files
+.git/
+.gitignore
+
+# Node / other build artifacts if any
+node_modules/
+dist/
+build/

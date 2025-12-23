@@ -29,7 +29,7 @@ import time
 import json
 
 app = create_app()
-
+env = os.environ.get('FLASK_ENV', 'development')
 # ===== Custom Request Logging (status + data) =====
 @app.before_request
 def start_timer():
@@ -93,12 +93,14 @@ socketio.init_app(
 if __name__ == "__main__":
 
     port=int(os.environ.get('PORT',5000))
-    
+    debug = True
+    if env == 'production':
+        debug = False
     socketio.run(
         app,
         host="0.0.0.0",
         port=port,
-        debug=True,
+        debug=debug,
         use_reloader=False,
         # threaded=True
     )

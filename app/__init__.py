@@ -66,6 +66,8 @@ import warnings
 import hmac
 import hashlib
 
+
+
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
 # Suppress warnings first
@@ -114,6 +116,8 @@ def create_app(config_name=None):
                     "https://sfclb.netlify.app/",
                     "https://sfmanagers-frontend.vercel.app",
                     "https://sfmanagers-frontend.vercel.app/",
+                    "https://sfcollab.com",
+                    "https://www.sfcollab.com"
                 ]),
                 "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                 "allow_headers": [
@@ -131,17 +135,18 @@ def create_app(config_name=None):
         supports_credentials=True
     )
     
-    # Add after_request handler for additional CORS headers
+    app.config['CORS_ORIGINS'] = ['https://sfcollab.com']
+
     @app.after_request
     def after_request(response):
         origin = request.headers.get('Origin')
-        if origin in app.config.get('CORS_ORIGINS', []):
+        if origin in app.config['CORS_ORIGINS']:
             response.headers.add('Access-Control-Allow-Origin', origin)
             response.headers.add('Access-Control-Allow-Credentials', 'true')
             response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
             response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
         return response
-    
+
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
