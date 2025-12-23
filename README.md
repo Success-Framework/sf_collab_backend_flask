@@ -37,7 +37,7 @@ A collaborative backend API built with Flask, featuring real-time communication 
 
 4. **Access the API**
 
-  - Development: `http://localhost:5000` for local, `https://sfcollab.com` for remote
+  - Development: `http://localhost:5000` for local
   - Production: `https://api.sfcollab.com`
 
 ## Key Features
