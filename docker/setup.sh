@@ -35,3 +35,6 @@ docker pull your_docker_username/sforger_api:latest
 
 # Run Docker Compose in detached mode and build
 sudo docker compose -f docker-compose-prod.yml up -d --build
+
+docker exec -i sfcollab-mysql \
+  mysql -u root -proot_pass defaultdb < ./db/init.sql
