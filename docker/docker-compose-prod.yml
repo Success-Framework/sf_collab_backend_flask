@@ -1,10 +1,12 @@
+version: "3.8"
+
 services:
   # ===== API SERVICE =====
   api:
     image: ivandagomez/sforger_api:latest
     container_name: sfcollab-api
     ports:
-      - "5000:5000"  # Internal only, Nginx will handle external traffic
+      - "5000:5000"
     env_file:
       - .env.production
     environment:
@@ -12,22 +14,30 @@ services:
       PORT: 5000
     volumes:
       - ./uploads:/app/uploads
+
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+
     restart: unless-stopped
+
+    # HARD memory limit (prevents EC2 freeze)
+    mem_limit: 900m
+
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 5s
       retries: 5
+
 
   # ===== MYSQL =====
   db:
@@ -38,41 +48,61 @@ services:
       MYSQL_USER: sfcollab
       MYSQL_PASSWORD: sfcollab_pass
       MYSQL_ROOT_PASSWORD: root_pass
+
+      # Reduce MySQL RAM usage
+      MYSQL_INITDB_SKIP_TZINFO: "1"
+
     ports:
       - "3306:3306"
+
     volumes:
       - mysqldata:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
     restart: unless-stopped
+
+    mem_limit: 700m
+
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "&&", "mysql", "-u", "sfcollab", "-psfcollab_pass", "-e", "SELECT COUNT(*) FROM defaultdb.posts"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 10s
       retries: 10
       start_period: 30s
+
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
 
   # ===== REDIS =====
   redis:
     image: redis:7
     container_name: sfcollab-redis
+
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
     ports:
       - "6379:6379"
+
     restart: unless-stopped
+
+    mem_limit: 100m
+
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
 
 volumes:
   mysqldata:

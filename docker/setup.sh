@@ -27,10 +27,10 @@ sudo systemctl start docker
 docker --version
 docker compose version
 # 9. Login to Docker Hub
-docker login --username your_docker_username --password-stdin <<EOF
-your_docker_password
+docker login --username your_docker_username --password-stdin <<EOF your_docker_password
 
 # Pull the latest image from Docker Hub
+
 docker pull your_docker_username/sforger_api:latest
 
 # Run Docker Compose in detached mode and build
@@ -38,3 +38,10 @@ sudo docker compose -f docker-compose-prod.yml up -d --build
 
 docker exec -i sfcollab-mysql \
   mysql -u root -proot_pass defaultdb < ./db/init.sql
+
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
