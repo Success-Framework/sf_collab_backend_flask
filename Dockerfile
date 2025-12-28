@@ -21,7 +21,7 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_ENV=production
 ENV PORT=5000
-ENV GUNICORN_CMD_ARGS="--bind=0.0.0.0:5000 --workers=4 --threads=2 --timeout=120"
+ENV GUNICORN_CMD_ARGS="--bind=0.0.0.0:5000 --workers=1 --worker-class=gevent --worker-connections=1000 --timeout=120"
 
 EXPOSE 5000
 

@@ -17,10 +17,32 @@
 SET @MYSQLDUMP_TEMP_LOG_BIN = @@SESSION.SQL_LOG_BIN;
 SET @@SESSION.SQL_LOG_BIN= 0;
 
+-- Ensure user exists with correct host
+CREATE USER IF NOT EXISTS 'sfcollab'@'%' IDENTIFIED BY 'sfcollab_pass';
+
+-- Always reset privileges
+GRANT ALL PRIVILEGES ON sfcollab_db.* TO 'sfcollab'@'%';
+
+FLUSH PRIVILEGES;
+
 --
 -- GTID state at the beginning of the backup 
 --
-
+CREATE TABLE `activities` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `action` varchar(255) NOT NULL,
+  `details` text,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `action` (`action`),
+  KEY `created_at` (`created_at`),
+  CONSTRAINT `activities_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 --
 -- Table structure for table `achievements`
 --
@@ -589,7 +611,7 @@ DROP TABLE IF EXISTS `notifications`;
 CREATE TABLE `notifications` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,
-  `type` varchar(50) DEFAULT NULL,
+  `notification_type` varchar(50) DEFAULT NULL,
   `title` varchar(255) DEFAULT NULL,
   `message` text,
   `data` json DEFAULT NULL,
@@ -1311,6 +1333,68 @@ LOCK TABLES `user_achievements` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `permissions`
+--
+
+DROP TABLE IF EXISTS `permissions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `permissions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `key` varchar(100) NOT NULL,
+  `description` text,
+  `category` varchar(50) DEFAULT 'General',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `key` (`key`),
+  KEY `ix_permissions_key` (`key`),
+  KEY `ix_permissions_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `permissions`
+--
+
+LOCK TABLES `permissions` WRITE;
+/*!40000 ALTER TABLE `permissions` DISABLE KEYS */;
+INSERT INTO `permissions` (`key`, `description`, `category`) VALUES
+('app_access', 'Access to the application', 'Basic'),
+('profile_edit', 'Edit own profile', 'Basic'),
+('notifications_view', 'View notifications', 'Basic'),
+('idea_create', 'Create ideas', 'Content'),
+('idea_edit', 'Edit own ideas', 'Content'),
+('knowledge_create', 'Create knowledge posts', 'Content'),
+('knowledge_edit', 'Edit own knowledge posts', 'Content'),
+('post_create', 'Create posts', 'Content'),
+('post_edit', 'Edit own posts', 'Content'),
+('startup_create', 'Create startups', 'Content'),
+('startup_edit', 'Edit own startups', 'Content'),
+('comment_create', 'Create comments', 'Social'),
+('like_content', 'Like content', 'Social'),
+('follow_users', 'Follow other users', 'Social'),
+('send_messages', 'Send messages', 'Social'),
+('admin', 'Full admin access', 'Administration'),
+('admin_dashboard', 'Access admin dashboard', 'Administration'),
+('user_management', 'Manage users', 'Administration'),
+('content_moderation', 'Moderate content', 'Administration'),
+('system_settings', 'Manage system settings', 'Administration'),
+('chat_ai_access', 'Access AI chat features', 'AI Tools'),
+('chat_ai_qwen', 'Access Qwen AI model', 'AI Tools'),
+('chat_ai_gemini', 'Access Gemini AI model', 'AI Tools'),
+('tools_image_generate', 'Generate images', 'Media Tools'),
+('tools_image_edit', 'Edit images', 'Media Tools'),
+('tools_background_remove', 'Remove image backgrounds', 'Media Tools'),
+('tools_anime_convert', 'Convert images to anime style', 'Media Tools'),
+('tools_pdf_sign', 'Sign PDF documents', 'Document Tools'),
+('tools_pdf_edit', 'Edit PDF documents', 'Document Tools'),
+('tools_logo_generate', 'Generate logos', 'Document Tools'),
+('tools_business_plan', 'Create business plans', 'Document Tools');
+/*!40000 ALTER TABLE `permissions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `users`
 --
 
@@ -1383,5 +1467,78 @@ SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+--
+-- Table structure for table `user_permissions`
+--
+
+DROP TABLE IF EXISTS `user_permissions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_permissions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `permission_id` int NOT NULL,
+  `granted_by` int DEFAULT NULL,
+  `starts_at` datetime DEFAULT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_user_permission` (`user_id`,`permission_id`),
+  KEY `idx_user_permissions_user_id` (`user_id`),
+  KEY `idx_user_permissions_permission_id` (`permission_id`),
+  KEY `idx_user_permissions_expires` (`expires_at`),
+  KEY `idx_user_permissions_active` (`user_id`,`permission_id`,`expires_at`),
+  CONSTRAINT `fk_user_permissions_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_user_permissions_permission_id` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_user_permissions_granted_by` FOREIGN KEY (`granted_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `user_permissions`
+--
+
+LOCK TABLES `user_permissions` WRITE;
+/*!40000 ALTER TABLE `user_permissions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `user_permissions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `access_requests`
+--
+
+DROP TABLE IF EXISTS `access_requests`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `access_requests` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `permission_id` int NOT NULL,
+  `status` varchar(20) DEFAULT 'pending',
+  `reason` text,
+  `reviewed_by` int DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_access_requests_user_id` (`user_id`),
+  KEY `idx_access_requests_permission_id` (`permission_id`),
+  KEY `idx_access_requests_status` (`status`),
+  CONSTRAINT `fk_access_requests_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_access_requests_permission_id` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_access_requests_reviewed_by` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `access_requests`
+--
+
+LOCK TABLES `access_requests` WRITE;
+/*!40000 ALTER TABLE `access_requests` DISABLE KEYS */;
+/*!40000 ALTER TABLE `access_requests` ENABLE KEYS */;
+UNLOCK TABLES;
 
 -- Dump completed on 2025-12-15 20:46:17

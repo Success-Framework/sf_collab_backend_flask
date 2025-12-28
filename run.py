@@ -30,6 +30,7 @@ import json
 
 app = create_app()
 env = os.environ.get('FLASK_ENV', 'development')
+print(os.environ.get("GOOGLE_CLIENT_ID"))
 # ===== Custom Request Logging (status + data) =====
 @app.before_request
 def start_timer():

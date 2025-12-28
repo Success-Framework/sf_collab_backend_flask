@@ -13,10 +13,8 @@ services:
     volumes:
       - ./uploads:/app/uploads
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - db
+      - redis
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -44,12 +42,7 @@ services:
       - mysqldata:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "&&", "mysql", "-u", "sfcollab", "-psfcollab_pass", "-e", "SELECT COUNT(*) FROM defaultdb.posts"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+
     logging:
       driver: "json-file"
       options:

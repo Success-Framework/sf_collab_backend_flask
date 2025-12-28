@@ -32,3 +32,4 @@ from .ResourceView import ResourceView
 from .ResourceLike import ResourceLike
 from .ResourceDownload import ResourceDownload
 from .refreshToken import RefreshToken
+from .waitlist import Waitlist
