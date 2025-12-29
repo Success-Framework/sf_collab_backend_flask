@@ -13,8 +13,11 @@ services:
     volumes:
       - ./uploads:/app/uploads
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -31,18 +34,19 @@ services:
   db:
     image: mysql:8.0.35
     container_name: sfcollab-mysql
-    environment:
-      MYSQL_DATABASE: defaultdb
-      MYSQL_USER: sfcollab
-      MYSQL_PASSWORD: sfcollab_pass
-      MYSQL_ROOT_PASSWORD: root_pass
+    env_file:
+      - .env.production
     ports:
       - "3306:3306"
     volumes:
       - mysqldata:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     restart: unless-stopped
-
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     logging:
       driver: "json-file"
       options:

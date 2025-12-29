@@ -24,7 +24,12 @@ bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 def init_oauth(app):
     """Initialize OAuth with Flask app"""
     oauth.init_app(app)
-    
+    if not app.config.get("GOOGLE_CLIENT_ID"):
+        raise RuntimeError("GOOGLE_CLIENT_ID is not set")
+
+    if not app.config.get("GOOGLE_CLIENT_SECRET"):
+        raise RuntimeError("GOOGLE_CLIENT_SECRET is not set")
+
     # Google OAuth
     oauth.register(
         name='google',
@@ -727,6 +732,10 @@ def change_password():
 def google_login():
     """Initiate Google OAuth flow"""
     from flask import session
+
+    session.permanent = True
+    session.modified = True
+
     redirect_uri = Config.GOOGLE_REDIRECT_URI
     print("🔥 GOOGLE REDIRECT URI:", redirect_uri)
     print(f"🔥 Session before redirect: {dict(session)}")
@@ -740,6 +749,10 @@ def google_login():
 def google_callback():
     """Handle Google OAuth callback"""
     from flask import session
+
+    session.permanent = True
+    session.modified = True
+
     print(f"🔥 Callback session: {dict(session)}")
     print(f"🔥 Callback cookies: {request.cookies}")
     print(f"🔥 Callback query params: {request.args}")

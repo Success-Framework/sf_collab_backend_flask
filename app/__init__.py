@@ -96,6 +96,7 @@ def create_app(config_name=None):
     # Session configuration for OAuth - Use SQLAlchemy (database-backed sessions)
     # This works across multiple workers and doesn't require Redis
     app.config['SESSION_TYPE'] = 'sqlalchemy'
+    app.config['SESSION_SQLALCHEMY'] = db
     app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
     # Note: SESSION_SQLALCHEMY will be set after db.init_app()
     print("Using SQLAlchemy (database) session storage for OAuth")
@@ -187,8 +188,9 @@ def create_app(config_name=None):
     jwt.init_app(app)
     
     # Set SESSION_SQLALCHEMY to use the same db instance
-    app.config['SESSION_SQLALCHEMY'] = db
-    sess.init_app(app)  # Initialize session for OAuth state
+    
+    with app.app_context():
+        sess.init_app(app)
     
     # Create sessions table if it doesn't exist
     with app.app_context():

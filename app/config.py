@@ -80,9 +80,10 @@ class Config:
     MAX_PAGE_SIZE = 100
     
     # Session
-    SESSION_COOKIE_SECURE = False  # Will be True in production
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = "None"
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     
     # Security
@@ -179,14 +180,19 @@ class ProductionConfig(Config):
     
     # Enhanced security
     SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = "None"
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Strict'
-    
+    SESSION_COOKIE_NAME = "sfcollab_session"
+
     # Production database with connection pooling
     SQLALCHEMY_POOL_SIZE = 20
     SQLALCHEMY_MAX_OVERFLOW = 40
     SQLALCHEMY_POOL_PRE_PING = True
-    
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
+
     # Logging
     LOG_LEVEL = 'WARNING'
 
