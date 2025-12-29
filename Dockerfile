@@ -5,19 +5,17 @@ WORKDIR /app
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    libpq-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for Docker layer caching)
+# Install Python deps first (cache-friendly)
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all app files
+# Copy app
 COPY . .
 
-# Environment variables
+# Environment
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_ENV=production
 ENV PORT=5000
@@ -25,8 +23,7 @@ ENV GUNICORN_CMD_ARGS="--bind=0.0.0.0:5000 --workers=1 --worker-class=gevent --w
 
 EXPOSE 5000
 
-# Healthcheck for Docker
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -f http://localhost:5000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
 
-# Run app using Gunicorn
 CMD ["gunicorn", "run:app"]
