@@ -43,15 +43,8 @@ services:
   db:
     image: mysql:8.0.35
     container_name: sfcollab-mysql
-    environment:
-      MYSQL_DATABASE: defaultdb
-      MYSQL_USER: sfcollab
-      MYSQL_PASSWORD: sfcollab_pass
-      MYSQL_ROOT_PASSWORD: root_pass
-
-      # Reduce MySQL RAM usage
-      MYSQL_INITDB_SKIP_TZINFO: "1"
-
+    env_file:
+      - .env.production
     ports:
       - "3306:3306"
 
@@ -66,10 +59,8 @@ services:
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-
+      timeout: 5s
+      retries: 5
     logging:
       driver: json-file
       options:

@@ -1,6 +1,6 @@
 from flask import Flask, request, abort
 from flask_cors import CORS
-from .extensions import db, migrate, jwt
+from .extensions import db, migrate, jwt, sess
 from .routes import (
     auth_routes,
     user_routes,
@@ -50,7 +50,8 @@ from .routes import (
     activity_routes,
     access_request_routes,
     
-    friend_request_routes
+    friend_request_routes,
+    waitlist_routes
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -90,7 +91,31 @@ def create_app(config_name=None):
     # JWT Configuration
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "ksjxhcjkzcze5c4z53c1z531c5z1dczdchzecuzed51535e151qsqdcqcdze55@_")
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
-    app.secret_key = os.getenv('SECRET_KEY')
+    app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    
+    # Session configuration for OAuth - Use SQLAlchemy (database-backed sessions)
+    # This works across multiple workers and doesn't require Redis
+    app.config['SESSION_TYPE'] = 'sqlalchemy'
+    app.config['SESSION_SQLALCHEMY'] = db
+    app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
+    # Note: SESSION_SQLALCHEMY will be set after db.init_app()
+    print("Using SQLAlchemy (database) session storage for OAuth")
+    
+    app.config['SESSION_PERMANENT'] = True  # Changed to True to persist session
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_COOKIE_NAME'] = 'session'
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_PATH'] = '/'
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    # Fix for OAuth CSRF state issues - use None (not Lax/Strict) for OAuth redirects
+    app.config['SESSION_COOKIE_SAMESITE'] = None  # Changed from 'Lax' to None for OAuth
+    app.config['SESSION_COOKIE_SECURE'] = True if os.getenv('FLASK_ENV') == 'production' else False
+    # Don't set SESSION_COOKIE_DOMAIN - let it default to the request domain
+    # if os.getenv('FLASK_ENV') == 'production':
+    #     app.config['SESSION_COOKIE_DOMAIN'] = '.sfcollab.com'
+    
+    # Ensure session keys have a prefix for Redis
+    app.config['SESSION_KEY_PREFIX'] = 'flask_session:'
     
     app.config['GITHUB_CLIENT_ID'] = os.getenv('GITHUB_CLIENT_ID')
     app.config['GITHUB_CLIENT_SECRET'] = os.getenv('GITHUB_CLIENT_SECRET')
@@ -135,7 +160,17 @@ def create_app(config_name=None):
         supports_credentials=True
     )
     
-    app.config['CORS_ORIGINS'] = ['https://sfcollab.com']
+    # Allowed origins for CORS (extended list)
+    app.config['CORS_ORIGINS'] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://sfclb.netlify.app",
+        "https://sfmanagers-frontend.vercel.app",
+        "https://sfcollab.com",
+        "https://www.sfcollab.com"
+    ]
 
     @app.after_request
     def after_request(response):
@@ -151,6 +186,21 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    
+    # Set SESSION_SQLALCHEMY to use the same db instance
+    
+    with app.app_context():
+        sess.init_app(app)
+    
+    # Create sessions table if it doesn't exist
+    with app.app_context():
+        try:
+            # Try to create the sessions table
+            db.create_all()
+            print("✓ Sessions table ready")
+        except Exception as e:
+            print(f"Warning: Could not create sessions table: {e}")
+    
     auth_routes.init_oauth(app)
     
     # Register all blueprints
@@ -195,6 +245,7 @@ def create_app(config_name=None):
     app.register_blueprint(user_permission_routes.user_permissions_bp)
     app.register_blueprint(friend_request_routes.friend_requests_bp)
     app.register_blueprint(activity_routes.activities_bp)
+    app.register_blueprint(waitlist_routes.waitlist_bp)
     
     app.register_blueprint(pdf_signing_routes.pdf_bp)
     # app.register_blueprint(background_remover.background_bp)

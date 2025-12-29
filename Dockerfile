@@ -19,20 +19,7 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_ENV=production
 ENV PORT=5000
-
-# IMPORTANT: tuned for t3.small
-ENV GUNICORN_CMD_ARGS="\
-    --bind 0.0.0.0:5000 \
-    --workers 2 \
-    --threads 1 \
-    --timeout 120 \
-    --graceful-timeout 30 \
-    --keep-alive 5 \
-    --max-requests 500 \
-    --max-requests-jitter 50 \
-    --access-logfile - \
-    --error-logfile - \
-    "
+ENV GUNICORN_CMD_ARGS="--bind=0.0.0.0:5000 --workers=1 --worker-class=gevent --worker-connections=1000 --timeout=120"
 
 EXPOSE 5000
 

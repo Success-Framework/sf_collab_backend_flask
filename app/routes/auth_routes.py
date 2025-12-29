@@ -6,7 +6,7 @@ from flask_jwt_extended import (
     jwt_required, 
     get_jwt_identity
 )
-
+from app.config import Config
 from app.models.user import User
 from app.models.refreshToken import RefreshToken
 from app.models.userPermission import UserPermission
@@ -24,7 +24,12 @@ bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 def init_oauth(app):
     """Initialize OAuth with Flask app"""
     oauth.init_app(app)
-    
+    if not app.config.get("GOOGLE_CLIENT_ID"):
+        raise RuntimeError("GOOGLE_CLIENT_ID is not set")
+
+    if not app.config.get("GOOGLE_CLIENT_SECRET"):
+        raise RuntimeError("GOOGLE_CLIENT_SECRET is not set")
+
     # Google OAuth
     oauth.register(
         name='google',
@@ -430,10 +435,15 @@ def grant_default_permissions(user_id):
     ]
     
     # Get excluded permissions
-    excluded_permissions = Permission.query.filter(
-        Permission.category.in_(excluded_categories)
-        | Permission.key.in_(excluded_permission_keys)
-    ).all()
+    try:
+        excluded_permissions = Permission.query.filter(
+            Permission.category.in_(excluded_categories)
+            | Permission.key.in_(excluded_permission_keys)
+        ).all()
+    except Exception as e:
+        print(f"Error querying permissions table: {str(e)}")
+        # If permissions table doesn't exist, return 0 (no permissions granted)
+        return 0
     
     excluded_permission_ids = [p.id for p in excluded_permissions]
     
@@ -522,7 +532,6 @@ def register():
         Activity.log(
             action="user_registered",
             user_id=user.id,
-            is_new_user=True,
             details=f"User account successfully created at {utc_now_str()}."
         )
         
@@ -546,7 +555,7 @@ def login():
     """Login user"""
     try:
         data = request.get_json()
-        
+        print(data)
         # Validate required fields
         if not data.get('email') or not data.get('password'):
             return jsonify({'error': 'Email and password are required'}), 400
@@ -722,14 +731,31 @@ def change_password():
 @bp.route('/google/login')
 def google_login():
     """Initiate Google OAuth flow"""
-    redirect_uri = url_for('auth.google_callback', _external=True, _scheme='https')
+    from flask import session
+
+    session.permanent = True
+    session.modified = True
+
+    redirect_uri = Config.GOOGLE_REDIRECT_URI
     print("🔥 GOOGLE REDIRECT URI:", redirect_uri)
-    return oauth.google.authorize_redirect(redirect_uri)
+    print(f"🔥 Session before redirect: {dict(session)}")
+    print(f"🔥 Cookies: {request.cookies}")
+    response = oauth.google.authorize_redirect(redirect_uri)
+    print(f"🔥 Session after redirect: {dict(session)}")
+    return response
 
 
 @bp.route('/google/callback')
 def google_callback():
     """Handle Google OAuth callback"""
+    from flask import session
+
+    session.permanent = True
+    session.modified = True
+
+    print(f"🔥 Callback session: {dict(session)}")
+    print(f"🔥 Callback cookies: {request.cookies}")
+    print(f"🔥 Callback query params: {request.args}")
     try:
         token = oauth.google.authorize_access_token()
         user_info = token.get('userinfo')
@@ -781,7 +807,6 @@ def google_callback():
             Activity.log(
                 action="user_registered",
                 user_id=user.id,
-                is_new_user=True,
                 details=f"User account successfully created at {utc_now_str()}."
             )
         Activity.log(
@@ -820,7 +845,7 @@ def google_callback():
 @bp.route('/github/login')
 def github_login():
     """Initiate GitHub OAuth flow"""
-    redirect_uri = url_for('auth.github_callback', _external=True)
+    redirect_uri = Config.GITHUB_REDIRECT_URI
     print("🔥 GITHUB REDIRECT URI:", redirect_uri)
     return oauth.github.authorize_redirect(redirect_uri)
 
@@ -944,7 +969,6 @@ def github_callback():
             Activity.log(
                 action="user_registered",
                 user_id=user.id,
-                is_new_user=True,
                 details=f"User account successfully created at {utc_now_str()}."
             )
         Activity.log(

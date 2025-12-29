@@ -27,9 +27,17 @@ from app.utils.socketio import socketio
 from flask import request, g
 import time
 import json
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 
 app = create_app()
+
+    
+
 env = os.environ.get('FLASK_ENV', 'development')
+if env == 'production':
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+print(os.environ.get("GOOGLE_CLIENT_ID"))
 # ===== Custom Request Logging (status + data) =====
 @app.before_request
 def start_timer():
