@@ -3,7 +3,7 @@ from app.models.postMedia import PostMedia
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-post_media_bp = Blueprint('post_media', __name__, url_prefix='/api/post-media')
+post_media_bp = Blueprint('post_media', __name__)
 
 @post_media_bp.route('', methods=['GET'])
 def get_post_media():

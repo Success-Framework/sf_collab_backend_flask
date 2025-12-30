@@ -3,7 +3,7 @@ from app.models.joinRequest import JoinRequest
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-join_requests_bp = Blueprint('join_requests', __name__, url_prefix='/api/join-requests')
+join_requests_bp = Blueprint('join_requests', __name__)
 
 @join_requests_bp.route('', methods=['GET'])
 def get_join_requests():

@@ -4,7 +4,7 @@ from app.models.permission import Permission
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-permissions_bp = Blueprint('permissions', __name__, url_prefix='/api/permissions')
+permissions_bp = Blueprint('permissions', __name__)
 
 @permissions_bp.route('', methods=['GET'])
 @jwt_required()

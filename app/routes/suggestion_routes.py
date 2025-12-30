@@ -3,7 +3,7 @@ from app.models.suggestion import Suggestion
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-suggestions_bp = Blueprint('suggestions', __name__, url_prefix='/api/suggestions')
+suggestions_bp = Blueprint('suggestions', __name__)
 
 @suggestions_bp.route('', methods=['GET'])
 def get_suggestions():

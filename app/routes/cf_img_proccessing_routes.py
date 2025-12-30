@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Create blueprint
-cf_bp = Blueprint('cf', __name__, url_prefix='/api/cf')
+cf_bp = Blueprint('cf', __name__)
 
 # Cloudflare configuration
 CF_ACCOUNT_ID = os.getenv('CF_ACCOUNT_ID')
@@ -23,7 +23,6 @@ MODELS = {
     'flux': '@cf/black-forest-labs/flux-schnell',
     'sdxl': '@cf/bytedance/stable-diffusion-xl-lightning',
     'sd15': '@cf/runwayml/stable-diffusion-v1-5-inpainting',
-    
 }
 
 def validate_image_parameters(prompt, width, height):

@@ -7,7 +7,7 @@ from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-achievements_bp = Blueprint('achievements', __name__, url_prefix='/api/achievements')
+achievements_bp = Blueprint('achievements', __name__)
 
 @achievements_bp.route('', methods=['GET'])
 @jwt_required()

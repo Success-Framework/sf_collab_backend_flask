@@ -5,7 +5,7 @@ from app.utils.helper import error_response, success_response, paginate
 from datetime import datetime, timedelta
 from sqlalchemy import func
     
-activities_bp = Blueprint('activities', __name__, url_prefix='/api/activities')
+activities_bp = Blueprint('activities', __name__)
 
 @activities_bp.route('', methods=['GET'])
 @jwt_required()

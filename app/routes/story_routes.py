@@ -4,7 +4,7 @@ from app.models.story import Story
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-stories_bp = Blueprint('stories', __name__, url_prefix='/api/stories')
+stories_bp = Blueprint('stories', __name__)
 
 @stories_bp.route('', methods=['GET'])
 def get_stories():

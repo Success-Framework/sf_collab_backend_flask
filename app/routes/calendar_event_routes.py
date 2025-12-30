@@ -7,7 +7,7 @@ from app.models.startUpMember import StartupMember
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-calendar_events_bp = Blueprint('calendar_events', __name__, url_prefix='/api/calendar-events')
+calendar_events_bp = Blueprint('calendar_events', __name__)
 
 @calendar_events_bp.route('', methods=['GET'])
 @jwt_required()

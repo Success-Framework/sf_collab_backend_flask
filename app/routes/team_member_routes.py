@@ -3,7 +3,7 @@ from app.models.teamMember import TeamMember
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-team_members_bp = Blueprint('team_members', __name__, url_prefix='/api/team-members')
+team_members_bp = Blueprint('team_members', __name__)
 
 @team_members_bp.route('', methods=['GET'])
 def get_team_members():

@@ -4,7 +4,7 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from datetime import datetime, timedelta
 
-resource_downloads_bp = Blueprint('resource_downloads', __name__, url_prefix='/api/resource-downloads')
+resource_downloads_bp = Blueprint('resource_downloads', __name__)
 
 @resource_downloads_bp.route('', methods=['GET'])
 def get_resource_downloads():

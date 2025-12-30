@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 import uuid
 import shutil
 
-startups_bp = Blueprint('startups', __name__, url_prefix='/api/startups')
+startups_bp = Blueprint('startups', __name__)
 
 # Upload configurations
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))

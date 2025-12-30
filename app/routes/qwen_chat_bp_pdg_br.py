@@ -13,7 +13,7 @@ from datetime import datetime
 load_dotenv()
 
 # Create blueprint
-qwen_bp = Blueprint('qwen', __name__, url_prefix='/api/qwen')
+qwen_bp = Blueprint('qwen', __name__)
 
 # Configuration
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')

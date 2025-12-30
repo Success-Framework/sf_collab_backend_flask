@@ -64,7 +64,9 @@ class Config:
         'https://sfclb.netlify.app',
         'https://sfclb.netlify.app/',
         "https://sfmanagers-frontend.vercel.app",
-        "https://sfmanagers-frontend.vercel.app/"
+        "https://sfmanagers-frontend.vercel.app/",
+                "https://sfcollab.com",
+        "https://www.sfcollab.com"
     ]
     CORS_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     CORS_ALLOW_HEADERS = [
@@ -131,20 +133,6 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_ECHO = False  # Set to True for SQL debugging
     
     TESTING = False
-    
-    # More permissive CORS for development
-    CORS_ORIGINS = [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'http://localhost:5174',  # Alternative Vite port
-        'http://127.0.0.1:5174',
-        'https://sfclb.netlify.app',
-        'https://sfclb.netlify.app/',
-        "https://sfmanagers-frontend.vercel.app",
-        "https://sfmanagers-frontend.vercel.app/"
-    ]
     
     # Disable some security features for easier development
     SESSION_COOKIE_SECURE = False

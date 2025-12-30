@@ -3,7 +3,7 @@ from app.models.knowledgeComment import KnowledgeComment
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-knowledge_comments_bp = Blueprint('knowledge_comments', __name__, url_prefix='/api/knowledge-comments')
+knowledge_comments_bp = Blueprint('knowledge_comments', __name__)
 
 @knowledge_comments_bp.route('', methods=['GET'])
 def get_knowledge_comments():

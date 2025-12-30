@@ -5,7 +5,7 @@ from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-ideas_bp = Blueprint('ideas', __name__, url_prefix='/api/ideas')
+ideas_bp = Blueprint('ideas', __name__)
 
 @ideas_bp.route('', methods=['GET'])
 def get_ideas():

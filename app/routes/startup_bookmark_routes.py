@@ -3,7 +3,7 @@ from app.models.startupBookmark import StartupBookmark
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-bookmarks_bp = Blueprint('startup_bookmarks', __name__, url_prefix='/api/startup-bookmarks')
+bookmarks_bp = Blueprint('startup_bookmarks', __name__)
 
 @bookmarks_bp.route('', methods=['GET'])
 def get_bookmarks():

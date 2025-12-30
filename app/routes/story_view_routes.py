@@ -6,7 +6,7 @@ from app.models.story import Story
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-story_views_bp = Blueprint('story_views', __name__, url_prefix='/api/story-views')
+story_views_bp = Blueprint('story_views', __name__)
 
 @story_views_bp.route('', methods=['GET'])
 def get_story_views():

@@ -3,7 +3,7 @@ from app.models.postComment import PostComment
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-post_comments_bp = Blueprint('post_comments', __name__, url_prefix='/api/post-comments')
+post_comments_bp = Blueprint('post_comments', __name__)
 
 @post_comments_bp.route('', methods=['GET'])
 def get_post_comments():

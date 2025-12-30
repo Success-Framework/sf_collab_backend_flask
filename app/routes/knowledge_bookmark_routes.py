@@ -3,7 +3,7 @@ from app.models.knowledgeBookmark import KnowledgeBookmark
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-knowledge_bookmarks_bp = Blueprint('knowledge_bookmarks', __name__, url_prefix='/api/knowledge-bookmarks')
+knowledge_bookmarks_bp = Blueprint('knowledge_bookmarks', __name__)
 
 @knowledge_bookmarks_bp.route('', methods=['GET'])
 def get_knowledge_bookmarks():

@@ -15,7 +15,7 @@ from reportlab.lib.utils import ImageReader
 from PIL import Image
 
 # Create blueprint
-pdf_bp = Blueprint('pdf', __name__, url_prefix='/api/pdf')
+pdf_bp = Blueprint('pdf', __name__)
 
 # Configuration
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))

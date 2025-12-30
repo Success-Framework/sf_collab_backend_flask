@@ -10,7 +10,7 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageDraw, ImageFont
 import uuid
 
 # Create blueprint
-image_editor_bp = Blueprint('image_editor', __name__, url_prefix='/api/image-editor')
+image_editor_bp = Blueprint('image_editor', __name__)
 
 # Configuration
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))

@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 import os
 
 
-bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+bp = Blueprint('auth', __name__)
 
 
 def init_oauth(app):
