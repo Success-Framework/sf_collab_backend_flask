@@ -6,7 +6,7 @@ from app.extensions import db
 from datetime import datetime
 from app.utils.helper import error_response, success_response, paginate
 
-access_requests_bp = Blueprint('access_requests', __name__, url_prefix='/api/access-requests')
+access_requests_bp = Blueprint('access_requests', __name__)
 
 @access_requests_bp.route('', methods=['GET'])
 @jwt_required()

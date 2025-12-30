@@ -3,7 +3,7 @@ from app.models.knowledge import Knowledge
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-knowledge_bp = Blueprint('knowledge', __name__, url_prefix='/api/knowledge')
+knowledge_bp = Blueprint('knowledge', __name__)
 
 @knowledge_bp.route('', methods=['GET'])
 def get_knowledge_posts():

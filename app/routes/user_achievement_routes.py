@@ -5,7 +5,7 @@ from app.models.user import User
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-user_achievements_bp = Blueprint('user_achievements', __name__, url_prefix='/api/user-achievements')
+user_achievements_bp = Blueprint('user_achievements', __name__)
 
 @user_achievements_bp.route('', methods=['GET'])
 @jwt_required()

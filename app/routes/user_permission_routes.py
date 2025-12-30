@@ -7,7 +7,7 @@ from app.extensions import db
 from datetime import datetime
 from app.utils.helper import error_response, success_response, paginate
 
-user_permissions_bp = Blueprint('user_permissions', __name__, url_prefix='/api/user-permissions')
+user_permissions_bp = Blueprint('user_permissions', __name__)
 
 @user_permissions_bp.route('', methods=['GET'])
 @jwt_required()

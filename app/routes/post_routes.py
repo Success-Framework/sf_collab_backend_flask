@@ -3,7 +3,7 @@ from app.models.post import Post
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-posts_bp = Blueprint('posts', __name__, url_prefix='/api/posts')
+posts_bp = Blueprint('posts', __name__)
 
 @posts_bp.route('', methods=['GET'])
 def get_posts():

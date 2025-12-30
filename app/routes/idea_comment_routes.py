@@ -4,7 +4,7 @@ from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-idea_comments_bp = Blueprint('idea_comments', __name__, url_prefix='/api/idea-comments')
+idea_comments_bp = Blueprint('idea_comments', __name__)
 
 @idea_comments_bp.route('', methods=['GET'])
 def get_idea_comments():

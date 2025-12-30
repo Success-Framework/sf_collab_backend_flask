@@ -3,7 +3,7 @@ from app.models.postLike import PostLike
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-post_likes_bp = Blueprint('post_likes', __name__, url_prefix='/api/post-likes')
+post_likes_bp = Blueprint('post_likes', __name__)
 
 @post_likes_bp.route('', methods=['GET'])
 def get_post_likes():

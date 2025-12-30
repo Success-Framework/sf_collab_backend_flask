@@ -1,64 +1,8 @@
 from flask import Flask, request, abort
 from flask_cors import CORS
 from .extensions import db, migrate, jwt, sess
-from .routes import (
-    auth_routes,
-    user_routes,
-    idea_routes,
-    knowledge_routes,
-    main_routes,
-    startup_routes,
-    api_routes,
-    project_goal_routes,
-    startup_bookmark_routes,
-    startup_member_routes,
-    team_member_routes,
-    team_performance_routes,
-    achievement_routes,
-    calendar_event_routes,
-    chat_routes,
-    conversation_routes,
-    goal_milestone_routes,
-    idea_bookmark_routes,
-    idea_comment_routes,
-    join_request_routes,
-    knowledge_bookmark_routes,
-    knowledge_comment_routes,
-    notification_routes,
-    post_routes,
-    post_comment_routes,
-    post_like_routes,
-    post_media_routes,
-    resource_download_routes,
-    resource_like_routes,
-    resource_view_routes,
-    story_routes,
-    story_view_routes,
-    suggestion_routes,
-    task_routes,
-    user_achievement_routes,
-    
-    # gemini_route,
-    pdf_signing_routes,
-    # background_remover,
-    qwen_chat_bp_pdg_br,
-    image_editor_routes,
-    cf_img_proccessing_routes,
-    
-    permission_routes,
-    user_permission_routes,
-    activity_routes,
-    access_request_routes,
-    
-    friend_request_routes,
-    waitlist_routes
-    
-    #! removed background_remover_route,
-    #! removed anime_converter_route
-    #! removed image_logo_generator_route,
-    #! removed business_plan_route,
-    #! removed qwen_chat_route
-)
+from app.config import Config
+from app.routes import auth_routes
 from .config import get_config
 import os
 from datetime import timedelta
@@ -66,6 +10,7 @@ import logging
 import warnings
 import hmac
 import hashlib
+from app.blueprints import blueprints
 
 
 
@@ -86,12 +31,13 @@ AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 
 def create_app(config_name=None):
     """Create and configure Flask application"""
+
     app = Flask(__name__, instance_relative_config=True)
     
     # JWT Configuration
-    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "ksjxhcjkzcze5c4z53c1z531c5z1dczdchzecuzed51535e151qsqdcqcdze55@_")
+    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
-    app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    app.secret_key = os.getenv('SECRET_KEY')
     
     # Session configuration for OAuth - Use SQLAlchemy (database-backed sessions)
     # This works across multiple workers and doesn't require Redis
@@ -117,8 +63,8 @@ def create_app(config_name=None):
     # Ensure session keys have a prefix for Redis
     app.config['SESSION_KEY_PREFIX'] = 'flask_session:'
     
-    app.config['GITHUB_CLIENT_ID'] = os.getenv('GITHUB_CLIENT_ID')
-    app.config['GITHUB_CLIENT_SECRET'] = os.getenv('GITHUB_CLIENT_SECRET')
+    app.config['GITHUB_CLIENT_ID'] = Config.GITHUB_CLIENT_ID
+    app.config['GITHUB_CLIENT_SECRET'] = Config.GITHUB_CLIENT_SECRET
 
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -132,26 +78,9 @@ def create_app(config_name=None):
     CORS(app, 
         resources={
             r"/*": {
-                "origins": app.config.get('CORS_ORIGINS', [
-                    "http://localhost:3000",
-                    "http://127.0.0.1:3000",
-                    "http://localhost:5173",
-                    "http://127.0.0.1:5173",
-                    "https://sfclb.netlify.app",
-                    "https://sfclb.netlify.app/",
-                    "https://sfmanagers-frontend.vercel.app",
-                    "https://sfmanagers-frontend.vercel.app/",
-                    "https://sfcollab.com",
-                    "https://www.sfcollab.com"
-                ]),
-                "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-                "allow_headers": [
-                    "Content-Type", 
-                    "Authorization", 
-                    "X-Requested-With",
-                    "Accept",
-                    "Origin"
-                ],
+                "origins": app.config.get('CORS_ORIGINS', Config.CORS_ORIGINS),
+                "methods": Config.CORS_METHODS,
+                "allow_headers": Config.CORS_ALLOW_HEADERS,
                 "supports_credentials": True,
                 "expose_headers": ["Content-Type", "Authorization"],
                 "max_age": 3600
@@ -161,16 +90,7 @@ def create_app(config_name=None):
     )
     
     # Allowed origins for CORS (extended list)
-    app.config['CORS_ORIGINS'] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://sfclb.netlify.app",
-        "https://sfmanagers-frontend.vercel.app",
-        "https://sfcollab.com",
-        "https://www.sfcollab.com"
-    ]
+    app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
 
     @app.after_request
     def after_request(response):
@@ -204,54 +124,9 @@ def create_app(config_name=None):
     auth_routes.init_oauth(app)
     
     # Register all blueprints
-    app.register_blueprint(auth_routes.bp)
-    app.register_blueprint(user_routes.users_bp)
-    app.register_blueprint(idea_routes.ideas_bp)
-    app.register_blueprint(knowledge_routes.knowledge_bp)
-    app.register_blueprint(main_routes.main_bp)
-    app.register_blueprint(startup_routes.startups_bp)
-    app.register_blueprint(api_routes.api_bp)
-    app.register_blueprint(project_goal_routes.project_goals_bp)
-    app.register_blueprint(startup_bookmark_routes.bookmarks_bp)
-    app.register_blueprint(startup_member_routes.startup_members_bp)
-    app.register_blueprint(team_member_routes.team_members_bp)
-    app.register_blueprint(team_performance_routes.team_performance_bp)
-    app.register_blueprint(achievement_routes.achievements_bp)
-    app.register_blueprint(calendar_event_routes.calendar_events_bp)
-    app.register_blueprint(chat_routes.chat_bp)
-    app.register_blueprint(conversation_routes.conversations_bp)
-    app.register_blueprint(goal_milestone_routes.milestones_bp)
-    app.register_blueprint(idea_bookmark_routes.idea_bookmarks_bp)
-    app.register_blueprint(idea_comment_routes.idea_comments_bp)
-    app.register_blueprint(join_request_routes.join_requests_bp)
-    app.register_blueprint(knowledge_bookmark_routes.knowledge_bookmarks_bp)
-    app.register_blueprint(knowledge_comment_routes.knowledge_comments_bp)
-    app.register_blueprint(notification_routes.notifications_bp)
-    app.register_blueprint(post_routes.posts_bp)
-    app.register_blueprint(post_comment_routes.post_comments_bp)
-    app.register_blueprint(post_like_routes.post_likes_bp)
-    app.register_blueprint(post_media_routes.post_media_bp)
-    app.register_blueprint(resource_download_routes.resource_downloads_bp)
-    app.register_blueprint(resource_like_routes.resource_likes_bp)
-    app.register_blueprint(resource_view_routes.resource_views_bp)
-    app.register_blueprint(story_routes.stories_bp)
-    app.register_blueprint(story_view_routes.story_views_bp)
-    app.register_blueprint(suggestion_routes.suggestions_bp)
-    app.register_blueprint(task_routes.tasks_bp)
-    app.register_blueprint(user_achievement_routes.user_achievements_bp)
-    
-    app.register_blueprint(access_request_routes.access_requests_bp)
-    app.register_blueprint(permission_routes.permissions_bp)
-    app.register_blueprint(user_permission_routes.user_permissions_bp)
-    app.register_blueprint(friend_request_routes.friend_requests_bp)
-    app.register_blueprint(activity_routes.activities_bp)
-    app.register_blueprint(waitlist_routes.waitlist_bp)
-    
-    app.register_blueprint(pdf_signing_routes.pdf_bp)
-    # app.register_blueprint(background_remover.background_bp)
-    app.register_blueprint(qwen_chat_bp_pdg_br.qwen_bp)
-    app.register_blueprint(image_editor_routes.image_editor_bp)
-    app.register_blueprint(cf_img_proccessing_routes.cf_bp)
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
+
 
     # Health check endpoint
     @app.route('/health')

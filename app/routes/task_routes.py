@@ -8,7 +8,7 @@ from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-tasks_bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
+tasks_bp = Blueprint('tasks', __name__)
 
 @tasks_bp.route('', methods=['GET'])
 @jwt_required()

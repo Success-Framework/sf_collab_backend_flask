@@ -6,7 +6,7 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from datetime import datetime, timedelta
 
-friend_requests_bp = Blueprint('friend_requests', __name__, url_prefix='/api/friend-requests')
+friend_requests_bp = Blueprint('friend_requests', __name__)
 
 @friend_requests_bp.route('', methods=['GET'])
 @jwt_required()

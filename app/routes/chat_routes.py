@@ -14,7 +14,7 @@ import os
 import json
 from flask import current_app
 
-chat_bp = Blueprint('chat', __name__, url_prefix='/api/chat')
+chat_bp = Blueprint('chat', __name__)
 
 # Upload configurations
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))

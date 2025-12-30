@@ -5,7 +5,7 @@ from app.models.user import User
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-conversations_bp = Blueprint('conversations', __name__, url_prefix='/api/conversations')
+conversations_bp = Blueprint('conversations', __name__)
 
 @conversations_bp.route('', methods=['GET'])
 @jwt_required()

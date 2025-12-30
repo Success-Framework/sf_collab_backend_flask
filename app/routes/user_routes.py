@@ -14,7 +14,7 @@ from datetime import datetime
 
 import os 
 
-users_bp = Blueprint('users', __name__, url_prefix='/api/users')
+users_bp = Blueprint('users', __name__)
 
 
 # Upload configurations

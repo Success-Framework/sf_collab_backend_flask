@@ -5,7 +5,7 @@ monkey.patch_all()
 import warnings
 import os
 import logging
-
+from app.config import Config
 # # ===== SUPPRESS WARNINGS FIRST =====
 # # Configure logging to ignore specific warnings - DO THIS FIRST
 # warnings.filterwarnings("ignore", category=FutureWarning, module=".*torch.*")
@@ -37,7 +37,7 @@ app = create_app()
 env = os.environ.get('FLASK_ENV', 'development')
 if env == 'production':
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-print(os.environ.get("GOOGLE_CLIENT_ID"))
+
 # ===== Custom Request Logging (status + data) =====
 @app.before_request
 def start_timer():
@@ -93,7 +93,7 @@ print(f"App object created: {app}")
 
 socketio.init_app(
     app,
-    cors_allowed_origins=app.config.get("CORS_ORIGINS", "*"),
+    cors_allowed_origins=app.config.get("CORS_ORIGINS", Config.CORS_ORIGINS),
     async_mode="gevent"
 )
 

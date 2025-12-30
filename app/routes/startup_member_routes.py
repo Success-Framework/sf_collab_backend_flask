@@ -3,7 +3,7 @@ from app.models.startUpMember import StartupMember
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-startup_members_bp = Blueprint('startup_members', __name__, url_prefix='/api/startup-members')
+startup_members_bp = Blueprint('startup_members', __name__)
 
 @startup_members_bp.route('', methods=['GET'])
 def get_startup_members():

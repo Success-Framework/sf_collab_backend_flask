@@ -3,7 +3,7 @@ from app.models.goalMilstone import GoalMilestone
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-milestones_bp = Blueprint('milestones', __name__, url_prefix='/api/milestones')
+milestones_bp = Blueprint('milestones', __name__)
 
 @milestones_bp.route('', methods=['GET'])
 def get_milestones():

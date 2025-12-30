@@ -4,7 +4,7 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from datetime import datetime, timedelta
 
-idea_bookmarks_bp = Blueprint('idea_bookmarks', __name__, url_prefix='/api/idea-bookmarks')
+idea_bookmarks_bp = Blueprint('idea_bookmarks', __name__)
 
 @idea_bookmarks_bp.route('', methods=['GET'])
 def get_idea_bookmarks():

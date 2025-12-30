@@ -4,7 +4,7 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response
 import re
 
-waitlist_bp = Blueprint('waitlist', __name__, url_prefix='/api/waitlist')
+waitlist_bp = Blueprint('waitlist', __name__)
 
 def is_valid_email(email):
     """Validate email format"""

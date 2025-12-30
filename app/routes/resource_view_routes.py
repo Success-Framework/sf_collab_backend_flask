@@ -4,7 +4,7 @@ from app.models.ResourceView import ResourceView
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-resource_views_bp = Blueprint('resource_views', __name__, url_prefix='/api/resource-views')
+resource_views_bp = Blueprint('resource_views', __name__)
 
 @resource_views_bp.route('', methods=['GET'])
 def get_resource_views():

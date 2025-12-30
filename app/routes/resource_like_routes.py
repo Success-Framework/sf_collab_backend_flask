@@ -4,7 +4,7 @@ from app.models.ResourceLike import ResourceLike
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-resource_likes_bp = Blueprint('resource_likes', __name__, url_prefix='/api/resource-likes')
+resource_likes_bp = Blueprint('resource_likes', __name__)
 
 @resource_likes_bp.route('', methods=['GET'])
 def get_resource_likes():

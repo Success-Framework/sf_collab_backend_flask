@@ -5,7 +5,7 @@ from app.models.goalMilstone import GoalMilestone
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
-project_goals_bp = Blueprint('project_goals', __name__, url_prefix='/api/project-goals')
+project_goals_bp = Blueprint('project_goals', __name__)
 
 @project_goals_bp.route('', methods=['GET'])
 def get_project_goals():
