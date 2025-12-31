@@ -12,7 +12,7 @@ from app.models.refreshToken import RefreshToken
 from app.models.userPermission import UserPermission
 from app.models.activity import Activity
 from app.utils.helper import utc_now_str
-        
+from app.models.waitlist import Waitlist
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
@@ -490,6 +490,9 @@ def register():
     """Register a new user"""
     try:
         data = request.get_json()
+        # print('Hola')
+        referral_code = data.get("referralCode", None)
+        # print(f'Referral code received: {referral_code}')
         
         # Validate required fields
         required_fields = ['first_name', 'last_name', 'email', 'password']
@@ -513,6 +516,8 @@ def register():
         
         db.session.add(user)
         db.session.commit()
+        if referral_code:
+            Waitlist.give_points(referral_code,Waitlist.POINTS_PER_REFERRAL, 'referral' )
         
         # GRANT DEFAULT PERMISSIONS HERE
         try:
@@ -732,6 +737,7 @@ def change_password():
 def google_login():
     """Initiate Google OAuth flow"""
     from flask import session
+    session["referral_code"] = request.args.get("ref")
 
     session.permanent = True
     session.modified = True
@@ -766,7 +772,10 @@ def google_callback():
         # Check if user exists
         user = User.query.filter_by(email=user_info['email']).first()
         is_new_user = False
+        referral_code = session.pop("referral_code", None)
+
         
+
         if not user:
             # Create new user
             user = User(
@@ -784,6 +793,8 @@ def google_callback():
             db.session.add(user)
             db.session.commit()
             is_new_user = True
+            if referral_code:
+                Waitlist.give_points(referral_code,Waitlist.POINTS_PER_REFERRAL, 'referral' )
             
         # Update last login
         user.last_login = datetime.utcnow()
@@ -845,6 +856,7 @@ def google_callback():
 @bp.route('/github/login')
 def github_login():
     """Initiate GitHub OAuth flow"""
+    
     redirect_uri = Config.GITHUB_REDIRECT_URI
     print("🔥 GITHUB REDIRECT URI:", redirect_uri)
     return oauth.github.authorize_redirect(redirect_uri)
