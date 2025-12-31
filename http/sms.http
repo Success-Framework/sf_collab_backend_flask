@@ -1,0 +1,39 @@
+### Send SMS Verification Code
+POST http://localhost:5000/api/waitlist/send-verification-code
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN
+
+{
+  "user_id": "user_123",
+  "email": "user@example.com",
+  "phone": "+573024690359",
+  "extension": "ext123"
+}
+
+### Test SMS Service (Direct)
+POST https://api.sendmator.com/v1/sms/send
+Content-Type: application/json
+
+{
+  "recipient_type": "direct_sms",
+  "phone_number": "+573024690359",
+  "content": "Your verification code is 123456. It expires in 5 minutes."
+}
+
+### Send SMS via Sendmator
+POST https://api.sendmator.com/api/v1/otp/send
+X-API-Key: sk_live_dd4da5f5e137de7d0cdce261aaa04df56dd7e3d4eb50886c39f7fff7b4f81188
+Content-Type: application/json
+
+{
+    "channels": ["sms", "whatsapp"],
+    "recipients": {
+      "sms": "+573024690359",
+      "whatsapp": "573024690359"
+    },
+    "metadata": {
+      "purpose": "phone_verification",
+      "user_id": "user_67890"
+    },
+    "sandbox_mode": true
+}

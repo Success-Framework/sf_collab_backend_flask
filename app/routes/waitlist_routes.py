@@ -3,7 +3,8 @@ from app.extensions import db
 from app.models.waitlist import Waitlist
 from app.utils.helper import success_response, error_response
 from flask_jwt_extended import jwt_required
-
+from app.models.user import User
+# from app.services.sms_service import SMSService
 waitlist_bp = Blueprint("waitlist", __name__)
 
 # -------------------------------------------------
@@ -13,17 +14,22 @@ waitlist_bp = Blueprint("waitlist", __name__)
 @waitlist_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json() or {}
-
+    phone = data.get("phone")
+    extension = data.get("extension")
     email = data.get("email")
     name = data.get("name")
     id = data.get("id")
     if not email:
         return error_response("email is required", 400)
-    
-    success, message, payload = Waitlist.register(email, name, id)
+    full_phone = f"+{extension}{phone}" if extension and phone else None
+    success, message, payload = Waitlist.register(email, name, id, full_phone)
 
     if not success:
-        return error_response(message, 400)
+        if message == "Phone number already registered":
+            return error_response(message, 400)
+        if message == "Email already registered":
+            return error_response(message, 409)
+        return error_response(message, 401)
 
     return success_response(
         {
@@ -154,3 +160,42 @@ def heartbeat(user_id):
         "pointsAdded": points_added,
         "totalActivityPoints": user.activity_points
     }, 200
+# -------------------------------------------------
+# Send phone verification code
+# POST /waitlist/send-verification-code
+# -------------------------------------------------
+@waitlist_bp.route("/send-verification-code", methods=["POST"])
+@jwt_required()
+def send_verification_code():
+    data = request.get_json() or {}
+    user_id = data.get("user_id")
+    email = data.get("email")
+    phone = data.get("phone")
+
+    extension = data.get("extension")
+    if not all([user_id, email, phone, extension]):
+        return error_response(
+            "user_id, email, phone, and extension are required",
+            400
+        )
+    full_phone = f"+{extension}{phone}"
+    # sms_service = SMSService()
+    user = User.get_user_by_phone_number(full_phone)
+    if user and user.id != user_id:
+        return error_response("Phone number already in use", 401)
+    try:
+        # verification_code, expires_at = sms_service.send_verification_code(phone)
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User not found", 404)
+        user.phone_number = full_phone
+        db.session.commit()
+    except Exception as e:
+        return error_response(str(e), 400)
+    return success_response(
+        # {"verification_code": verification_code,
+        #  "expires_at": expires_at * 60},
+        { "verified": True },
+        "Verification code sent successfully",
+        200
+    )

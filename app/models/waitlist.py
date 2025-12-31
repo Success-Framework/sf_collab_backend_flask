@@ -2,6 +2,7 @@ from app.extensions import db
 from datetime import datetime, timedelta
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import or_, and_
+from app.models.user import User
 class Waitlist(db.Model):
     __tablename__ = "waitlist"
 
@@ -26,7 +27,7 @@ class Waitlist(db.Model):
     contribution_points = db.Column(db.Integer, nullable=False, default=0)
     activity_points = db.Column(db.Integer, nullable=False, default=0)
     last_activity_at = db.Column(db.DateTime)
-    POINTS_PER_REFERRAL = 2
+    POINTS_PER_REFERRAL = 5
     POINTS_PER_CONTRIBUTION = 10
     POINTS_PER_ACTIVITY = 1
     ACTIVITY_INTERVAL = timedelta(minutes=30)
@@ -128,7 +129,7 @@ class Waitlist(db.Model):
     # Registration
     # -------------------------
     @classmethod
-    def register(cls, email: str, name: str | None = None, id: int | None = None):
+    def register(cls, email: str, name: str | None = None, id: int | None = None, phone: str | None = None) -> tuple[bool, str, dict | None]:
         email = email.strip().lower()
 
         existing = cls.query.filter_by(email=email).first()

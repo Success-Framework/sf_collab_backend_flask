@@ -1457,6 +1457,7 @@ CREATE TABLE `users` (
   `first_name` varchar(100) NOT NULL,
   `last_name` varchar(100) NOT NULL,
   `email` varchar(255) NOT NULL,
+  `phone_number` varchar(20) DEFAULT NULL,
   `password` varchar(255) NOT NULL,
   `is_email_verified` tinyint(1) DEFAULT NULL,
   `last_login` datetime DEFAULT NULL,
