@@ -1,127 +1,156 @@
-from flask import Blueprint, request, jsonify
-from app.models.waitlist import Waitlist
+from flask import Blueprint, request
 from app.extensions import db
-from app.utils.helper import error_response, success_response
-import re
+from app.models.waitlist import Waitlist
+from app.utils.helper import success_response, error_response
+from flask_jwt_extended import jwt_required
 
-waitlist_bp = Blueprint('waitlist', __name__)
+waitlist_bp = Blueprint("waitlist", __name__)
 
-def is_valid_email(email):
-    """Validate email format"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
+# -------------------------------------------------
+# Register to waitlist
+# POST /waitlist/register
+# -------------------------------------------------
+@waitlist_bp.route("/register", methods=["POST"])
+def register():
+    data = request.get_json() or {}
 
-@waitlist_bp.route('/join', methods=['POST'])
-def join_waitlist():
-    """Add email to waitlist"""
-    data = request.get_json()
-    
-    if not data:
-        return error_response('No data provided', 400)
-    
-    email = data.get('email', '').strip().lower()
-    source = data.get('source', 'web')
-    
+    email = data.get("email")
+    name = data.get("name")
+    id = data.get("id")
     if not email:
-        return error_response('Email is required', 400)
+        return error_response("email is required", 400)
     
-    if not is_valid_email(email):
-        return error_response('Invalid email format', 400)
-    
-    try:
-        # Check if email already exists
-        existing = Waitlist.query.filter_by(email=email).first()
-        if existing:
-            return error_response('Email already registered on waitlist', 409)
-        
-        # Create new waitlist entry
-        waitlist_entry = Waitlist(
-            email=email,
-            source=source
-        )
-        
-        db.session.add(waitlist_entry)
-        db.session.commit()
-        
-        return success_response(
-            {'waitlist': waitlist_entry.to_dict()},
-            'Successfully joined the waitlist!',
-            201
-        )
-    except Exception as e:
-        db.session.rollback()
-        return error_response(f'Failed to join waitlist: {str(e)}', 500)
+    success, message, payload = Waitlist.register(email, name, id)
 
-@waitlist_bp.route('', methods=['GET'])
-def get_waitlist():
-    """Get all waitlist entries (admin only in production)"""
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
-    status_filter = request.args.get('status', type=str)
-    
-    query = Waitlist.query
-    
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-    
-    # Order by creation date (newest first)
-    query = query.order_by(Waitlist.created_at.desc())
-    
-    # Paginate results
-    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
-    
+    if not success:
+        return error_response(message, 400)
+
+    return success_response(
+        {
+            "email": email,
+            "name": name,
+            **payload
+        },
+        message,
+        201
+    )
+
+# -------------------------------------------------
+# Check if email is on waitlist
+# POST /waitlist/check
+# -------------------------------------------------
+@waitlist_bp.route("/check", methods=["POST"])
+def check_waitlist():
+    data = request.get_json() or {}
+    email = data.get("email")
+
+    if not email:
+        return error_response("email is required", 400)
+
+    result = Waitlist.is_on_waitlist(email)
+
     return success_response({
-        'waitlist': [entry.to_dict() for entry in paginated.items],
-        'pagination': {
-            'page': paginated.page,
-            'per_page': paginated.per_page,
-            'total': paginated.total,
-            'pages': paginated.pages
-        }
+        "is_on_waitlist": result["on_waitlist"],
+        "position": result["position"]
     })
 
-@waitlist_bp.route('/<int:waitlist_id>', methods=['PATCH'])
-def update_waitlist_status(waitlist_id):
-    """Update waitlist entry status (admin only in production)"""
-    data = request.get_json()
-    
-    if not data:
-        return error_response('No data provided', 400)
-    
-    waitlist_entry = Waitlist.query.get(waitlist_id)
-    if not waitlist_entry:
-        return error_response('Waitlist entry not found', 404)
-    
-    status = data.get('status')
-    if status and status in ['pending', 'approved', 'rejected']:
-        try:
-            waitlist_entry.status = status
-            db.session.commit()
-            
-            return success_response(
-                {'waitlist': waitlist_entry.to_dict()},
-                'Waitlist entry updated successfully'
-            )
-        except Exception as e:
-            db.session.rollback()
-            return error_response(f'Failed to update waitlist entry: {str(e)}', 500)
-    else:
-        return error_response('Invalid status. Must be pending, approved, or rejected', 400)
+# -------------------------------------------------
+# Get total waitlist count
+# GET /waitlist/count
+# -------------------------------------------------
+@waitlist_bp.route("/count", methods=["GET"])
+def total_count():
+    count = Waitlist.query.count()
+    max_allowed = Waitlist.get_max_allowed()
 
-@waitlist_bp.route('/<int:waitlist_id>', methods=['DELETE'])
-def delete_waitlist_entry(waitlist_id):
-    """Delete waitlist entry (admin only in production)"""
-    waitlist_entry = Waitlist.query.get(waitlist_id)
-    if not waitlist_entry:
-        return error_response('Waitlist entry not found', 404)
-    
-    try:
-        db.session.delete(waitlist_entry)
-        db.session.commit()
-        
-        return success_response(
-            message='Waitlist entry deleted successfully'
+    return success_response({
+        "total": count,
+        "max_allowed": max_allowed,
+        "full": count >= max_allowed
+    })
+
+# -------------------------------------------------
+# Get my waitlist info + points
+# Protected (email from token or client)
+# GET /waitlist/me/<id>
+# -------------------------------------------------
+@waitlist_bp.route("/me/<int:user_id>", methods=["GET"])
+@jwt_required()
+def my_waitlist(user_id):
+    user = Waitlist.query.get(user_id)
+    if not user:
+        return error_response("User not found on waitlist", 404)
+
+    return success_response(user.to_dict())
+
+# -------------------------------------------------
+# Leaderboard (points-based)
+# GET /waitlist/leaderboard
+# -------------------------------------------------
+@waitlist_bp.route("/leaderboard", methods=["GET"])
+def leaderboard():
+    limit = request.args.get("limit", 10, type=int)
+
+    users = Waitlist.leaderboard(limit)
+
+    return success_response([
+        {
+            **user.to_dict(),
+            "rank": index + 1
+        }
+        for index, user in enumerate(users)
+    ])
+
+# -------------------------------------------------
+# Add points (ADMIN / SYSTEM ONLY)
+# POST /waitlist/add-points
+# -------------------------------------------------
+@waitlist_bp.route("/add-points", methods=["POST"])
+@jwt_required()
+def add_points():
+    data = request.get_json() or {}
+    user_id = data.get("user_id")
+    category = data.get("category")
+
+    if not all([user_id, category]):
+        return error_response(
+            "user_id and category are required",
+            400
         )
-    except Exception as e:
-        db.session.rollback()
-        return error_response(f'Failed to delete waitlist entry: {str(e)}', 500)
+
+    user = Waitlist.query.get(user_id)
+    if not user:
+        return error_response("User not found on waitlist", 404)
+
+    try:
+        points = {
+            'referral': Waitlist.POINTS_PER_REFERRAL,
+            'contribution': Waitlist.POINTS_PER_CONTRIBUTION,
+            'activity': Waitlist.POINTS_PER_ACTIVITY
+        }.get(category)
+        user.add_points(int(points), category)
+    except ValueError as e:
+        return error_response(str(e), 400)
+
+    return success_response(
+        user.to_dict(),
+        "Points added successfully"
+    )
+@waitlist_bp.route("/heartbeat/<int:user_id>", methods=["GET"])
+@jwt_required()
+def heartbeat(user_id):
+
+    print("Heartbeat received for user_id:", user_id)
+    user = Waitlist.query.filter_by(id=user_id).first()
+
+    if not user:
+        return {"error": "User not found"}, 404
+
+    points_added = user.register_activity()
+    db.session.commit()
+
+    return {
+        "success": True,
+        "pointsAdded": points_added,
+        "totalActivityPoints": user.activity_points
+    }, 200

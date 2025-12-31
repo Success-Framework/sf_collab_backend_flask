@@ -1,0 +1,54 @@
+from flask import Blueprint, request
+from app.extensions import db
+from app.models.feedback import Feedback
+from app.utils.helper import success_response, error_response
+
+feedback_bp = Blueprint('feedback', __name__)
+
+@feedback_bp.route('', methods=['POST'])
+def create_feedback():
+  data = request.get_json()
+  print(data)
+  feedback = Feedback(
+    user_id=data.get('userId'),
+    content=data.get('content')
+  )
+  print(feedback)
+  db.session.add(feedback)
+  db.session.commit()
+  
+  return success_response(feedback.to_dict(), "Feedback created successfully", 201)
+
+@feedback_bp.route('', methods=['GET'])
+def get_all_feedback():
+  feedbacks = Feedback.query.all()
+  return success_response([f.to_dict() for f in feedbacks], "Feedbacks retrieved successfully")
+
+@feedback_bp.route('/<int:feedback_id>', methods=['GET'])
+def get_feedback(feedback_id):
+  feedback = Feedback.query.get(feedback_id)
+  if not feedback:
+    return error_response('Feedback not found', 404)
+  return success_response(feedback.to_dict(), "Feedback retrieved successfully")
+
+@feedback_bp.route('/<int:feedback_id>', methods=['PUT'])
+def update_feedback(feedback_id):
+  feedback = Feedback.query.get(feedback_id)
+  if not feedback:
+    return error_response('Feedback not found', 404)
+  
+  data = request.get_json()
+  feedback.content = data.get('content', feedback.content)
+  
+  db.session.commit()
+  return success_response(feedback.to_dict(), "Feedback updated successfully")
+
+@feedback_bp.route('/<int:feedback_id>', methods=['DELETE'])
+def delete_feedback(feedback_id):
+  feedback = Feedback.query.get(feedback_id)
+  if not feedback:
+    return error_response('Feedback not found', 404)
+  
+  db.session.delete(feedback)
+  db.session.commit()
+  return success_response(message="Feedback deleted successfully")

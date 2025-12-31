@@ -1,0 +1,72 @@
+@baseUrl = http://localhost:5001/api
+@accessToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY3MTM5NTUwLCJqdGkiOiJmOTU3MjAxNi04NjI1LTQ4MGMtOWE4YS0yNGMwN2E5N2Y0ODkiLCJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiMTIwIiwibmJmIjoxNzY3MTM5NTUwLCJjc3JmIjoiYWI2MDc5YjItZThkNi00MTExLWIxM2ItMTBiNGYyNjgxZjU2IiwiZXhwIjoxNzY3MTYxMTUwfQ.DtqhSRFqvNxA6ZIiiKLfSmHtKzPA0l7OZG9WQ5SlJjo
+@userId = 1
+
+##################################################
+# Initialize ranking (call once per user)
+##################################################
+GET {{baseUrl}}/ranking/init
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{}
+
+##################################################
+# Get my ranking + points (JWT-based)
+##################################################
+GET {{baseUrl}}/ranking/me
+Authorization: Bearer {{accessToken}}
+
+##################################################
+# Get rank of a specific user (public)
+##################################################
+GET {{baseUrl}}/ranking/rank/{{userId}}
+
+##################################################
+# Add points (ADMIN / SYSTEM ONLY)
+##################################################
+POST {{baseUrl}}/ranking/add-points
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "user_id": {{userId}},
+  "points": 10,
+  "category": "referral"
+}
+
+##################################################
+# Add contribution points
+##################################################
+POST {{baseUrl}}/ranking/add-points
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "user_id": {{userId}},
+  "points": 5,
+  "category": "contribution"
+}
+
+##################################################
+# Add activity points
+##################################################
+POST {{baseUrl}}/ranking/add-points
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "user_id": {{userId}},
+  "points": 3,
+  "category": "activity"
+}
+
+##################################################
+# Get leaderboard (default limit = 10)
+##################################################
+GET {{baseUrl}}/ranking/leaderboard
+
+##################################################
+# Get leaderboard with custom limit
+##################################################
+GET {{baseUrl}}/ranking/leaderboard?limit=5

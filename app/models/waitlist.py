@@ -1,113 +1,230 @@
 from app.extensions import db
-from datetime import datetime
-
-
+from datetime import datetime, timedelta
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy import or_, and_
 class Waitlist(db.Model):
-    __tablename__ = 'waitlist'
-    
+    __tablename__ = "waitlist"
+
+    # -------------------------
+    # Core identity
+    # -------------------------
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), unique=True, nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     name = db.Column(db.String(255), nullable=True)
-    source = db.Column(db.String(100), default='web')  # Track signup source
-    status = db.Column(db.String(50), default='pending')  # pending, approved, rejected
-    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        server_default=db.func.now(),
+        index=True
+    )
+
+    # -------------------------
+    # Points system
+    # -------------------------
+    referral_points = db.Column(db.Integer, nullable=False, default=0)
+    contribution_points = db.Column(db.Integer, nullable=False, default=0)
+    activity_points = db.Column(db.Integer, nullable=False, default=0)
+    last_activity_at = db.Column(db.DateTime)
+    POINTS_PER_REFERRAL = 2
+    POINTS_PER_CONTRIBUTION = 10
+    POINTS_PER_ACTIVITY = 1
+    ACTIVITY_INTERVAL = timedelta(minutes=30)
+    # -------------------------
+    # Constants (business rules)
+    # -------------------------
+    MAX_MVP = 1000
+    MAX_V1 = 2500
+
+    JAN_10_DEADLINE = datetime(2026, 1, 10, 23, 59, 59)
+    FEB_7_DEADLINE = datetime(2026, 2, 7, 23, 59, 59)
+
     
-    # Reward tracking
-    reward_months = db.Column(db.Integer, default=0)  # Free subscription months earned
-    reward_claimed = db.Column(db.Boolean, default=False)
+
+
+    def register_activity(self):
+        now = datetime.utcnow()
+
+        # First activity ever
+        if not self.last_activity_at:
+            self.last_activity_at = now
+            return False  # no points yet
+
+        # Check interval
+        if now - self.last_activity_at >= Waitlist.ACTIVITY_INTERVAL:
+            self.activity_points += Waitlist.POINTS_PER_ACTIVITY
+            self.last_activity_at = now
+            return True
+
+        return False
+    # -------------------------
+    # Computed totals
+    # -------------------------
+    @hybrid_property
+    def total_points_value(self) -> int:
+        return (
+            (self.referral_points or 0) * 2
+            + (self.contribution_points or 0)
+            + (self.activity_points or 0)
+        )
+
+    @total_points_value.expression
+    def total_points_value(cls):
+        return (
+            (cls.referral_points * 2)
+            + cls.contribution_points
+            + cls.activity_points
+        )
+
     
-    def get_position(self):
-        """Get this user's position in the waitlist"""
-        position = Waitlist.query.filter(Waitlist.created_at <= self.created_at).count()
-        return position
-    
-    def calculate_reward(self):
-        """
-        Calculate reward based on position and signup date
-        - First 1000 by Jan 10th = 3 months
-        - First 10000 by Feb 2nd = 1 month
-        """
-        position = self.get_position()
-        
-        jan_10_deadline = datetime(2025, 1, 10, 23, 59, 59)
-        feb_2_deadline = datetime(2025, 2, 2, 23, 59, 59)
-        
-        if position <= 1000 and self.created_at <= jan_10_deadline:
-            return 3  # 3 months free
-        elif position <= 10000 and self.created_at <= feb_2_deadline:
-            return 1  # 1 month free
-        else:
-            return 0  # No reward
-    
-    @staticmethod
-    def signup(email, name=None):
-        """Sign up a new user to the waitlist"""
-        # Check if email already exists
-        existing = Waitlist.query.filter_by(email=email).first()
-        if existing:
-            return False, "Email already on waitlist", {
-                "position": existing.get_position(),
-                "reward_months": existing.calculate_reward()
-            }
-        
-        # Create new entry
-        new_entry = Waitlist(email=email, name=name)
-        db.session.add(new_entry)
-        db.session.commit()
-        
-        # Calculate reward after commit (so position is accurate)
-        reward = new_entry.calculate_reward()
-        new_entry.reward_months = reward
-        db.session.commit()
-        
-        return True, "Successfully joined waitlist", {
-            "position": new_entry.get_position(),
-            "reward_months": reward,
-            "email": new_entry.email
-        }
-    
-    @staticmethod
-    def get_all_entries():
-        """Get all waitlist entries ordered by signup date"""
-        entries = Waitlist.query.order_by(Waitlist.created_at).all()
-        result = []
-        for i, entry in enumerate(entries, 1):
-            result.append({
-                "position": i,
-                "email": entry.email,
-                "name": entry.name,
-                "reward_months": entry.calculate_reward(),
-                "created_at": entry.created_at.isoformat() if entry.created_at else None
-            })
-        return result
-    
-    @staticmethod
-    def get_stats():
-        """Get waitlist statistics"""
-        total = Waitlist.query.count()
-        
-        jan_10_deadline = datetime(2025, 1, 10, 23, 59, 59)
-        feb_2_deadline = datetime(2025, 2, 2, 23, 59, 59)
-        
-        early_birds = Waitlist.query.filter(Waitlist.created_at <= jan_10_deadline).count()
-        
+    @property
+    def total_points(self):
         return {
-            "total_signups": total,
-            "spots_for_3_months": max(0, 1000 - min(total, 1000)),
-            "spots_for_1_month": max(0, 10000 - min(total, 10000)),
-            "early_birds_count": early_birds
+            "referral": self.referral_points,
+            "contribution": self.contribution_points,
+            "activity": self.activity_points,
+            "total": self.total_points_value,
         }
-    
+
+    # -------------------------
+    # Waitlist logic
+    # -------------------------
+    def get_position(self) -> int:
+        """
+        Ranking position based on total points
+        Higher points = better rank
+        """
+        return (
+            Waitlist.query
+            .filter(
+                or_(
+                    Waitlist.total_points_value > self.total_points_value,
+                    and_(
+                        Waitlist.total_points_value == self.total_points_value,
+                        Waitlist.created_at < self.created_at
+                    ),
+                    and_(
+                        Waitlist.total_points_value == self.total_points_value,
+                        Waitlist.created_at == self.created_at,
+                        Waitlist.id < self.id
+                    ),
+                )
+            )
+            .count()
+            + 1
+        )
+
+    @staticmethod
+    def get_max_allowed() -> int:
+        now = datetime.utcnow()
+
+        if now <= Waitlist.JAN_10_DEADLINE:
+            return Waitlist.MAX_MVP
+        elif now <= Waitlist.FEB_7_DEADLINE:
+            return Waitlist.MAX_V1
+        return 10**9  # effectively unlimited
+
+    # -------------------------
+    # Registration
+    # -------------------------
+    @classmethod
+    def register(cls, email: str, name: str | None = None, id: int | None = None):
+        email = email.strip().lower()
+
+        existing = cls.query.filter_by(email=email).first()
+        if existing:
+            return False, "Email already registered", {
+                "position": existing.get_position()
+            }
+
+        if cls.query.count() >= cls.get_max_allowed():
+            return False, "Waitlist is full", None
+
+        user = cls(
+            email=email,
+            name=name,
+            id=id,
+            referral_points=0,
+            contribution_points=0,
+            activity_points=0,
+            created_at=datetime.utcnow(),  
+        )
+        db.session.add(user)
+        db.session.flush()  # assigns ID without committing
+
+        position = user.get_position()
+        user.activity_points += max(0, int((Waitlist.MAX_V1 - position) / 50)) # max 2500 / 50 = 50 points
+
+        db.session.commit()
+        return True, "Successfully joined waitlist", {
+            "position": position
+        }
+
+    # -------------------------
+    # Points mutation
+    # -------------------------
+    def add_points(self, points: int, category: str):
+        if category == "referral":
+            self.referral_points += points
+        elif category == "contribution":
+            self.contribution_points += points
+        elif category == "activity":
+            self.activity_points += points
+        else:
+            raise ValueError("Invalid point category")
+
+        db.session.commit()
+    @staticmethod
+    def give_points(user_id: int, points: int, category: str):
+        user = Waitlist.query.get(user_id)
+        if not user:
+            raise ValueError("User not found")
+        user.add_points(points, category)
+    # -------------------------
+    # Ranking & leaderboard
+    # -------------------------
+    @classmethod
+    def get_rank(cls, user_id: int):
+        user = cls.query.get(user_id)
+        if not user:
+            return None
+
+        return (
+            cls.query
+            .filter(cls.total_points_value > user.total_points_value)
+            .count()
+            + 1
+        )
+
+    @classmethod
+    def leaderboard(cls, limit=10):
+        return (
+            cls.query
+            .order_by(cls.total_points_value.desc(), cls.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+
+    # -------------------------
+    # Helpers
+    # -------------------------
+    @classmethod
+    def is_on_waitlist(cls, email: str):
+        user = cls.query.filter_by(email=email.strip().lower()).first()
+        return {
+            "on_waitlist": bool(user),
+            "position": user.get_position() if user else None
+        }
+
+    # -------------------------
+    # Serialization
+    # -------------------------
     def to_dict(self):
-        """Convert to dictionary for API responses"""
         return {
             "id": self.id,
             "email": self.email,
             "name": self.name,
-            "source": self.source,
-            "status": self.status,
+            "created_at": self.created_at.isoformat(),
             "position": self.get_position(),
-            "reward_months": self.calculate_reward(),
-            "reward_claimed": self.reward_claimed,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "points": self.total_points,
         }
