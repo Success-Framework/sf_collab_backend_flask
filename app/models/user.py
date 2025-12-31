@@ -11,6 +11,7 @@ class User(db.Model):
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    phone_number = db.Column(db.String(20), unique=True, nullable=True)
     password = db.Column(db.String(255), nullable=False)
     is_email_verified = db.Column(db.Boolean, default=False)
     last_login = db.Column(db.DateTime, nullable=True)
@@ -455,7 +456,7 @@ class User(db.Model):
         from app.models.task import Task
         from app.models.idea import Idea
         from app.models.ideaComment import IdeaComment
-        
+
         activities = []
         
         for idea in self.ideas.order_by(Idea.created_at.desc()).limit(5).all():
@@ -487,7 +488,30 @@ class User(db.Model):
     
     def _enum_to_value(self,value):
         return value.value if hasattr(value, "value") else value
+    @staticmethod
+    def get_user_by_phone_number(phone_number: str):
+        return db.session.query(User).filter_by(phone_number=phone_number).first()
 
+    def send_verification_code_to_sms(self):
+        import random
+        import string
+        from app.services.sms_service import SMSService
+        
+        """Send verification code to user's phone number via SMS"""
+        user = User.query.get(self.id)
+        if not user.phone_number:
+            raise ValueError("User phone number not set")
+        
+        # Generate random 6-digit code
+        verification_code = ''.join(random.choices(string.digits, k=6))
+        sms_service = SMSService()
+        # Send SMS
+        sms_service.send_sms(
+            phone_number=user.phone_number,
+            message=f"Your verification code is: {verification_code}"
+        )
+        
+        return verification_code
     def to_dict(self, include_password=False, include_statistics=False, include_recent_activity=False):
         data = {
             'id': self.id,
