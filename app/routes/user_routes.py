@@ -227,44 +227,6 @@ def serve_avatar_file(filename):
     """Serve avatar files"""
     return send_from_directory(AVATAR_UPLOAD_FOLDER, filename)
     
-    
-#! GET ALL USERS WITH PAGINATION AND FILTERING
-@users_bp.route('', methods=['GET'])
-@jwt_required()
-def get_users():
-    """Get all users with pagination and filtering"""
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-    status = request.args.get('status', type=str)
-    role = request.args.get('role', type=str)
-    search = request.args.get('search', type=str)
-    
-    query = User.query
-    
-    # Apply filters
-    if status:
-        query = query.filter(User.status == UserStatus(status))
-    if role:
-        query = query.filter(User.role == role)
-    if search:
-        query = query.filter(
-            (User.first_name.ilike(f'%{search}%')) |
-            (User.last_name.ilike(f'%{search}%')) |
-            (User.email.ilike(f'%{search}%'))
-        )
-    
-    result = paginate(query, page, per_page)
-    
-    return success_response({
-        'users': [user.to_dict() for user in result['items']],
-        'pagination': {
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'pages': result['pages']
-        }
-    })
-
 #! GET SINGLE USER BY ID
 @users_bp.route('/<int:user_id>', methods=['GET'])
 @jwt_required()
@@ -443,3 +405,76 @@ def update_user_status(user_id):
         return success_response({'user': user.to_dict()}, f'User status updated to {status}')
     except Exception as e:
         return error_response(f'Failed to update status: {str(e)}', 500)
+
+#! GET USERS LIST
+@users_bp.route('', methods=['GET'])
+@jwt_required()
+def get_users():
+    """Get paginated list of users with search and filters"""
+    current_user_id = get_jwt_identity()
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '').strip()
+    role = request.args.get('role', '')
+    status = request.args.get('status', '')
+    
+    # Base query
+    query = User.query
+    
+    # Apply search filter
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                User.first_name.ilike(search_term),
+                User.last_name.ilike(search_term),
+                User.email.ilike(search_term)
+            )
+        )
+    
+    # Apply role filter
+    if role:
+        query = query.filter(User.role == role)
+    
+    # Apply status filter
+    if status:
+        query = query.filter(User.status == status)
+    
+    # Exclude current user from results
+    query = query.filter(User.id != current_user_id)
+    
+    # Order by creation date (newest first)
+    query = query.order_by(User.created_at.desc())
+    
+    # Paginate results
+    result = paginate(query, page, per_page)
+    
+    # Format response
+    users_data = []
+    for user in result['items']:
+        users_data.append({
+            'id': user.id,
+            'firstName': user.first_name,
+            'lastName': user.last_name,
+            'email': user.email,
+            'role': user.role,
+            'status': user.status,
+            'profile': {
+                'picture': user.profile_picture,
+                'timezone': user.timezone,
+                'bio': user.bio
+            },
+            'created_at': user.created_at.isoformat() if user.created_at else None
+        })
+    
+    return success_response({
+        'users': users_data,
+        'pagination': {
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'pages': result['pages']
+        }
+    })
