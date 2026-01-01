@@ -1,0 +1,42 @@
+# Quantum Computing – A Comprehensive Overview
+
+Quantum computing is a paradigm that leverages the principles of quantum mechanics to perform computations in ways that classical computers cannot. While it’s still largely experimental, the field promises breakthroughs in cryptography, optimization, materials science, and more.
+
+---
+
+## 1. Why Quantum? Classical vs Quantum
+
+| Aspect | Classical Computer | Quantum Computer |
+|--------|--------------------|------------------|
+| **Basic unit** | Bit (0 or 1) | Qubit (superposition of 0 and 1) |
+| **Information state** | Deterministic | Probabilistic, described by a wavefunction |
+| **Processing** | Sequential operations | Parallel via superposition |
+| **Error sources** | Mostly deterministic (fault‑tolerant systems) | Decoherence, noise, gate errors |
+| **Typical speed** | Linear scaling with problem size | Potential exponential speedups for specific problems |
+
+---
+
+## 2. Core Quantum Concepts
+
+### 2.1 Qubit
+- **Definition**: The quantum analog of a bit; can exist in a superposition of `|0⟩` and `|1⟩`.
+- **State vector**: `|ψ⟩ = α|0⟩ + β|1⟩`, where `α` and `β` are complex amplitudes satisfying `|α|² + |β|² = 1`.
+
+### 2.2 Superposition
+- A qubit can encode multiple classical states simultaneously.
+- Enables a quantum computer to evaluate many inputs in parallel.
+
+### 2.3 Entanglement
+- Correlation between qubits that cannot be described classically.
+- When qubits are entangled, the state of one instantly influences the state of another, regardless of distance.
+
+### 2.4 Interference
+- Quantum algorithms harness constructive and destructive interference to amplify correct answers and cancel wrong ones.
+
+---
+
+## 3. Quantum Gates & Circuits
+
+| Gate | Matrix (2×2) | Effect |
+|------|--------------|--------|
+|

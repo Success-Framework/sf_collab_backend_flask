@@ -89,18 +89,11 @@ def create_app(config_name=None):
         supports_credentials=True
     )
     
+    
     # Allowed origins for CORS (extended list)
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
 
-    @app.after_request
-    def after_request(response):
-        origin = request.headers.get('Origin')
-        if origin in app.config['CORS_ORIGINS']:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-        return response
+
 
     # Initialize extensions
     db.init_app(app)

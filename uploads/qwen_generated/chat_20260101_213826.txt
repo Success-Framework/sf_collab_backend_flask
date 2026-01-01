@@ -1,0 +1,36 @@
+# Quantum Computing – A Beginner’s Guide
+
+Quantum computing is a paradigm that leverages the principles of quantum mechanics to process information in ways that classical computers cannot. Below is a structured overview that covers the fundamentals, core concepts, key technologies, and practical implications.
+
+---
+
+## 1. What is Quantum Computing?
+
+| Classical Computer | Quantum Computer |
+|--------------------|------------------|
+| Uses bits (0 or 1) | Uses qubits (superposition of 0 and 1) |
+| Deterministic operations | Probabilistic / wave‑function evolution |
+| Sequential logic gates | Parallel superposition & entanglement |
+| Exponential memory for certain problems | Potential polynomial‑time solutions for specific tasks |
+
+**Bottom line:** Quantum computers exploit quantum phenomena—superposition, interference, and entanglement—to perform certain computations far more efficiently than classical machines.
+
+---
+
+## 2. Core Quantum Principles
+
+| Principle | Explanation | Relevance to Computing |
+|-----------|-------------|------------------------|
+| **Superposition** | A qubit can be in a linear combination of states: \(|\psi\rangle = \alpha|0\rangle + \beta|1\rangle\). | Enables parallel evaluation of many inputs simultaneously. |
+| **Entanglement** | Two or more qubits share a joint state; measurement of one instantly affects the others. | Provides correlations that classical systems cannot replicate; key for quantum algorithms. |
+| **Interference** | Quantum amplitudes can add or cancel, amplifying correct outcomes while suppressing wrong ones. | Core to algorithmic speed‑ups (e.g., Grover, Shor). |
+| **Quantum Decoherence** | Loss of quantum coherence due to environmental interactions. | Major technical challenge; requires error correction & isolation. |
+
+---
+
+## 3. Qubit Realizations
+
+| Technology | Typical Platform | Strengths | Weaknesses |
+|------------|------------------|-----------|------------|
+| **Superconducting** | Transmon qubits (IBM, Google) | Fast gate times (~10 ns), scalable fabrication | Requires dilution refrigeration (~10 mK) |
+| **Trapped
