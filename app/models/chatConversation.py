@@ -243,6 +243,48 @@ class ChatConversation(db.Model):
         
         return data
 
+    @classmethod
+    def find_or_create_direct_conversation(cls, user1, user2):
+        """
+        Find existing direct conversation between two users, or create a new one.
+        Optimized for MySQL with proper indexing and query structure.
+        
+        Returns the conversation object.
+        """
+        if user1.id == user2.id:
+            raise ValueError("Cannot create direct conversation with self")
+        
+        # Find existing direct conversation between these two users
+        # Use a more efficient query for MySQL
+        existing_conversation = cls.query\
+            .join(conversation_participants)\
+            .filter(cls.conversation_type == 'direct')\
+            .filter(cls.is_active == True)\
+            .filter(conversation_participants.c.user_id.in_([user1.id, user2.id]))\
+            .group_by(cls.id)\
+            .having(db.func.count(conversation_participants.c.user_id) == 2)\
+            .first()
+        
+        if existing_conversation:
+            return existing_conversation
+        
+        # Create new direct conversation
+        conversation = cls(
+            name=None,  # Direct conversations don't need names
+            conversation_type='direct',
+            created_by_id=user1.id
+        )
+        
+        db.session.add(conversation)
+        db.session.flush()  # Get the ID before committing
+        
+        # Add both participants
+        conversation.add_participant(user1, 'member')
+        conversation.add_participant(user2, 'member')
+        
+        db.session.commit()
+        return conversation
+
 # Association table for conversation participants
 conversation_participants = db.Table('conversation_participants',
     db.Column('conversation_id', db.Integer, db.ForeignKey('chat_conversations.id'), primary_key=True),
