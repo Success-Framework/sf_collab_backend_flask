@@ -14,6 +14,7 @@ from app.models.userPermission import UserPermission
 from app.models.activity import Activity
 from app.utils.helper import utc_now_str
 from app.models.waitlist import Waitlist
+from app.models.chatConversation import ChatConversation
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
@@ -542,6 +543,8 @@ def register():
             details=f"User account successfully created at {utc_now_str()}."
         )
         brand_name = os.getenv("BRAND_NAME", "SFCollab")
+        # Add user to general chat
+        ChatConversation.add_to_general_chat(user)
 
         email_service.send_email(user.email, f"Welcome to {brand_name}!",
                                                 thank_email_template(
@@ -825,6 +828,8 @@ def google_callback():
                 brand_name = os.getenv("BRAND_NAME", "SFCollab")
                 permissions_count = grant_default_permissions(user.id)
                 print(f"Granted {permissions_count} default permissions to OAuth user {user.id}")
+                ChatConversation.add_to_general_chat(user)
+        
                 email_service.send_email(user.email, f"Welcome to {brand_name}!",
                         thank_email_template(
                                 data={
@@ -998,6 +1003,8 @@ def github_callback():
             try:                
                 brand_name = os.getenv("BRAND_NAME", "SFCollab")
                 permissions_count = grant_default_permissions(user.id)
+                ChatConversation.add_to_general_chat(user)
+        
                 email_service.send_email(user.email, f"Welcome to {brand_name}!",
                         thank_email_template(
                                 data={
