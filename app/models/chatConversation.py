@@ -27,7 +27,7 @@ class ChatConversation(db.Model):
     conversation_creator = db.relationship('User', back_populates='created_conversations', foreign_keys=[created_by_id])
     participants = db.relationship('User', secondary='conversation_participants', back_populates='conversations')
     messages = db.relationship('ChatMessage', back_populates='conversation', lazy='dynamic', cascade='all, delete-orphan')
-    
+
     # HELPER FUNCTIONS
     
     def add_participant(self, user, role='member'):
@@ -121,7 +121,26 @@ class ChatConversation(db.Model):
         db.session.commit()
         
         return message
-    
+    @staticmethod
+    def add_to_general_chat(user):
+        """Add user to general chat conversation"""
+        general_chat = ChatConversation.query.filter_by(conversation_type='general').first()
+
+        if general_chat:
+            general_chat.add_participant(user, role='member')
+            db.session.commit()
+        # if not general_chat create one
+        else:
+            general_chat = ChatConversation(
+                name='General Chat',
+                conversation_type='general',
+                created_by_id= user.id 
+            )
+            db.session.add(general_chat)
+            db.session.flush()  # Get ID before adding participant
+            general_chat.add_participant(user, role='member')
+            db.session.commit()
+        
     def is_user_participant(self, user_id):
         """Check if user is a participant in this conversation"""
         return any(str(participant.id) == str(user_id) for participant in self.participants)
