@@ -3,14 +3,26 @@ from flask import request
 import logging
 from app.models.user import User
 
-# Configure SocketIO with CORS support
-socketio = SocketIO(async_mode="gevent", cors_allowed_origins="*")
+# Configure SocketIO with CORS support and MySQL-friendly settings
+socketio = SocketIO(
+    async_mode="gevent", 
+    cors_allowed_origins="*",
+    logger=True,
+    engineio_logger=True,
+    ping_timeout=60,
+    ping_interval=25,
+    max_http_buffer_size=1e8  # 100MB for file uploads
+)
 
 __all__ = ['socketio']
 
 # Store connected users: {user_id: socket_id}
 connected_users = {}
 whiteboard_users = {}  # {conversation_id: [user_ids]}
+
+def get_user_sid(user_id):
+    """Get socket ID for a user"""
+    return connected_users.get(str(user_id))
 
 # Add this helper function at the top of socketio.py, after the imports:
 
@@ -211,7 +223,7 @@ def handle_mark_message_read(data):
 
 @socketio.on('send_message')
 def handle_send_message(data):
-    """Handle sending a new message"""
+    """Handle sending a new message via WebSocket"""
     try:
         conversation_id = data.get('conversation_id')
         user_id = data.get('user_id')
@@ -221,14 +233,29 @@ def handle_send_message(data):
         reply_to_id = data.get('reply_to_id')
         
         if not all([conversation_id, user_id, content]):
-            return {'error': 'Missing required fields'}
+            return {'error': 'Missing required fields: conversation_id, user_id, content'}
         
         # Import here to avoid circular imports
         from app.models.chatMessage import ChatMessage
+        from app.models.chatConversation import ChatConversation
+        from app.models.user import User
         from app.extensions import db
         from datetime import datetime
         
-        # Create new message
+        # Validate user and conversation exist
+        user = User.query.get(user_id)
+        conversation = ChatConversation.query.get(conversation_id)
+        
+        if not user or not conversation:
+            return {'error': 'User or conversation not found'}
+        
+        if not conversation.is_user_participant(user_id):
+            return {'error': 'Access denied - not a participant'}
+        
+        # Create new message with proper timezone handling
+        from app.utils.timezone_converter import get_user_timezone
+        sender_timezone = get_user_timezone(user)
+        
         new_message = ChatMessage(
             conversation_id=conversation_id,
             sender_id=user_id,
@@ -236,10 +263,13 @@ def handle_send_message(data):
             message_type=message_type,
             metadata_data=metadata,
             reply_to_id=reply_to_id,
+            sender_timezone=sender_timezone,
             created_at=datetime.utcnow()
         )
         
         db.session.add(new_message)
+        conversation.updated_at = datetime.utcnow()
+        conversation.increment_unread_count(user_id)
         db.session.commit()
         
         # Emit new message via RealtimeService
@@ -251,8 +281,9 @@ def handle_send_message(data):
         return {'status': 'success', 'message_id': new_message.id}
         
     except Exception as e:
-        logging.error(f'Error sending message: {str(e)}')
-        return {'error': str(e)}
+        db.session.rollback()
+        logging.error(f'Error sending message via WebSocket: {str(e)}')
+        return {'error': f'Failed to send message: {str(e)}'}
 
 @socketio.on('edit_message')
 def handle_edit_message(data):
