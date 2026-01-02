@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from app.extensions import db
 from app.models.waitlist import Waitlist
 from app.utils.helper import success_response, error_response
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.user import User
 # from app.services.sms_service import SMSService
 waitlist_bp = Blueprint("waitlist", __name__)
@@ -115,7 +115,7 @@ def leaderboard():
 @jwt_required()
 def add_points():
     data = request.get_json() or {}
-    user_id = data.get("user_id")
+    user_id = get_jwt_identity()
     category = data.get("category")
 
     if not all([user_id, category]):
@@ -130,18 +130,69 @@ def add_points():
 
     try:
         points = {
+            'new_startup': Waitlist.POINTS_PER_STARTUP,
             'referral': Waitlist.POINTS_PER_REFERRAL,
             'contribution': Waitlist.POINTS_PER_CONTRIBUTION,
-            'activity': Waitlist.POINTS_PER_ACTIVITY
+            'activity': Waitlist.POINTS_PER_ACTIVITY,
+            'small_contribution': Waitlist.POINTS_PER_SMALL_CONTRIBUTION,
+            'medium_contribution': Waitlist.POINTS_PER_CONTRIBUTION,
+            'large_contribution': Waitlist.POINTS_PER_LARGE_CONTRIBUTION,
         }.get(category)
         user.add_points(int(points), category)
     except ValueError as e:
         return error_response(str(e), 400)
 
     return success_response(
-        user.to_dict(),
+        {
+            **user.to_dict(),
+            "points": points
+        },
         "Points added successfully"
     )
+@waitlist_bp.route("/give-points", methods=["POST"])
+@jwt_required()
+def give_points():
+    data = request.get_json() or {}
+    admin_id = get_jwt_identity()
+    admin_user = User.query.get(admin_id)
+    
+    if not admin_user or not admin_user.is_admin():
+        return error_response("Admin access required", 403)
+    
+    user_id = data.get("user_id")
+    category = data.get("category")
+
+    if not all([user_id, category]):
+        return error_response(
+            "user_id and category are required",
+            400
+        )
+
+    user = Waitlist.query.get(user_id)
+    if not user:
+        return error_response("User not found on waitlist", 404)
+    try:
+        points = {
+            'new_startup': Waitlist.POINTS_PER_STARTUP,
+            'referral': Waitlist.POINTS_PER_REFERRAL,
+            'contribution': Waitlist.POINTS_PER_CONTRIBUTION,
+            'activity': Waitlist.POINTS_PER_ACTIVITY,
+            'small_contribution': Waitlist.POINTS_PER_SMALL_CONTRIBUTION,
+            'medium_contribution': Waitlist.POINTS_PER_CONTRIBUTION,
+            'large_contribution': Waitlist.POINTS_PER_LARGE_CONTRIBUTION,
+        }.get(category)
+        user.add_points(int(points), category)
+    except ValueError as e:
+        return error_response(str(e), 400)
+
+    return success_response(
+        {
+            **user.to_dict(),
+            "points": points
+        },
+        "Points added successfully"
+    )
+
 @waitlist_bp.route("/heartbeat/<int:user_id>", methods=["GET"])
 @jwt_required()
 def heartbeat(user_id):

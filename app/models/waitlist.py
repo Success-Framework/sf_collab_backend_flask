@@ -28,8 +28,11 @@ class Waitlist(db.Model):
     activity_points = db.Column(db.Integer, nullable=False, default=0)
     last_activity_at = db.Column(db.DateTime)
     POINTS_PER_REFERRAL = 5
+    POINTS_PER_SMALL_CONTRIBUTION = 5
     POINTS_PER_CONTRIBUTION = 10
+    POINTS_PER_LARGE_CONTRIBUTION = 20
     POINTS_PER_ACTIVITY = 1
+    POINTS_PER_STARTUP = 30
     ACTIVITY_INTERVAL = timedelta(minutes=30)
     # -------------------------
     # Constants (business rules)
@@ -167,10 +170,13 @@ class Waitlist(db.Model):
     def add_points(self, points: int, category: str):
         if category == "referral":
             self.referral_points += points
-        elif category == "contribution":
+        elif category in ["contribution", "small_contribution", "medium_contribution", "large_contribution"]:
             self.contribution_points += points
         elif category == "activity":
             self.activity_points += points
+        elif category == "new_startup":
+            self.activity_points += points
+        
         else:
             raise ValueError("Invalid point category")
 

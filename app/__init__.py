@@ -92,6 +92,15 @@ def create_app(config_name=None):
     # Allowed origins for CORS (extended list)
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
 
+
+    # Email service
+    app.config['SMTP_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.example.com')
+    app.config['SMTP_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't']
+    app.config['SMTP_PORT'] = int(os.getenv('MAIL_PORT', 587))
+    app.config['SMTP_USERNAME'] = os.getenv('MAIL_USERNAME', 'your_username')
+    app.config['SMTP_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_password')
+    app.config['SMTP_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'your_default_sender')
+    
     @app.after_request
     def after_request(response):
         origin = request.headers.get('Origin')
@@ -122,7 +131,6 @@ def create_app(config_name=None):
             print(f"Warning: Could not create sessions table: {e}")
     
     auth_routes.init_oauth(app)
-    
     # Register all blueprints
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
