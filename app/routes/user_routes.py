@@ -11,9 +11,11 @@ from flask_jwt_extended import (
 )
 from werkzeug.utils import secure_filename
 from datetime import datetime
-
+from app.services.email_service import EmailService
+from app.utils.email_templates.email_templates import templates
 import os 
-
+email_service = EmailService()
+contact_form_email_template = templates.get("contact_form_email")
 users_bp = Blueprint('users', __name__)
 
 
@@ -227,6 +229,42 @@ def serve_avatar_file(filename):
     """Serve avatar files"""
     return send_from_directory(AVATAR_UPLOAD_FOLDER, filename)
     
+    
+#! GET ALL USERS WITH PAGINATION AND FILTERING
+@users_bp.route('', methods=['GET'])
+@jwt_required()
+def get_users():
+    """Get all users with pagination and filtering"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    status = request.args.get('status', type=str)
+    role = request.args.get('role', type=str)
+    search = request.args.get('search', type=str)
+    query = User.query
+    # Apply filters
+    if status:
+        query = query.filter(User.status == UserStatus(status))
+    if role:
+        query = query.filter(User.role == role)
+    if search:
+        query = query.filter(
+            (User.first_name.ilike(f'%{search}%')) |
+            (User.last_name.ilike(f'%{search}%')) |
+            (User.email.ilike(f'%{search}%'))
+        )
+    
+    result = paginate(query, page, per_page)
+    
+    return success_response({
+        'users': [user.to_dict() for user in result['items']],
+        'pagination': {
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'pages': result['pages']
+        }
+    })
+
 #! GET SINGLE USER BY ID
 @users_bp.route('/<int:user_id>', methods=['GET'])
 @jwt_required()
@@ -244,7 +282,10 @@ def get_user(user_id):
 def create_user():
     """Create new user"""
     data = request.get_json()
-    
+    user_id = get_jwt_identity()
+    if not user_id:
+        return error_response('Unauthorized', 401)
+
     # Check required fields
     required_fields = ['first_name', 'last_name', 'email', 'password']
     if not all(field in data for field in required_fields):
@@ -253,7 +294,6 @@ def create_user():
     # Check if email already exists
     if User.query.filter_by(email=data['email']).first():
         return error_response('Email already exists', 409)
-    
     try:
         user = User(
             first_name=data['first_name'],
@@ -317,7 +357,10 @@ def update_user(user_id):
 @jwt_required()
 def delete_user(user_id):
     """Delete user"""
+    token_user_id = get_jwt_identity()
     user = User.query.get(user_id)
+    if int(token_user_id) != int(user_id):
+        return error_response('Unauthorized to delete this user', 403)
     if not user:
         return error_response('User not found', 404)
     
@@ -405,76 +448,37 @@ def update_user_status(user_id):
         return success_response({'user': user.to_dict()}, f'User status updated to {status}')
     except Exception as e:
         return error_response(f'Failed to update status: {str(e)}', 500)
+    
 
-#! GET USERS LIST
-@users_bp.route('', methods=['GET'])
-@jwt_required()
-def get_users():
-    """Get paginated list of users with search and filters"""
-    current_user_id = get_jwt_identity()
-    
-    # Get query parameters
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    search = request.args.get('search', '').strip()
-    role = request.args.get('role', '')
-    status = request.args.get('status', '')
-    
-    # Base query
-    query = User.query
-    
-    # Apply search filter
-    if search:
-        search_term = f"%{search}%"
-        query = query.filter(
-            db.or_(
-                User.first_name.ilike(search_term),
-                User.last_name.ilike(search_term),
-                User.email.ilike(search_term)
-            )
-        )
-    
-    # Apply role filter
-    if role:
-        query = query.filter(User.role == role)
-    
-    # Apply status filter
-    if status:
-        query = query.filter(User.status == status)
-    
-    # Exclude current user from results
-    query = query.filter(User.id != current_user_id)
-    
-    # Order by creation date (newest first)
-    query = query.order_by(User.created_at.desc())
-    
-    # Paginate results
-    result = paginate(query, page, per_page)
-    
-    # Format response
-    users_data = []
-    for user in result['items']:
-        users_data.append({
-            'id': user.id,
-            'firstName': user.first_name,
-            'lastName': user.last_name,
-            'email': user.email,
-            'role': user.role,
-            'status': user.status,
-            'profile': {
-                'picture': user.profile_picture,
-                'timezone': user.timezone,
-                'bio': user.bio
+# Send email to admin (contact)
+@users_bp.route('/contact', methods=['POST'])
+def submit_contact_form():
+#     {
+#     name: string;
+#     email: string;
+#     message: string;
+# }
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    message = data.get('message')
+
+    if not name or not email or not message:
+        return error_response('Name, email, and message are required', 400)
+    email_service.send_email(
+        recipient=os.getenv('SUPPORT_EMAIL'),
+        subject=f"New Contact Form Submission from {name}",
+        body=contact_form_email_template(
+            data={
+                "user": {
+                    "name": name,
+                    "email": email
+                },
+                "metadata": {
+                    "message": message
+                }
             },
-            'created_at': user.created_at.isoformat() if user.created_at else None
-        })
-    
-    return success_response({
-        'users': users_data,
-        'pagination': {
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'pages': result['pages']
-        }
-    })
+            see_email_template=False
+        )
+    )
+    return success_response(message='Contact form submitted successfully')

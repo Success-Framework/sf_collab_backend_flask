@@ -1,0 +1,7 @@
+POST http://localhost:5001/api/chat/conversations
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY3Mjc0ODQxLCJqdGkiOiI5MDAwZTdiOC1jMWIxLTQzOTYtYTJmOC1jMGZkYmE2ZTkzOWIiLCJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiMTE5IiwibmJmIjoxNzY3Mjc0ODQxLCJjc3JmIjoiZWVjN2Q0ZjYtNjdjZC00YmUyLTg4NmYtZmM0ZDI0MDU0N2E3IiwiZXhwIjoxNzY3Mjk2NDQxfQ.Wd4dam45pUHhwjfeb7pGige2hAYfGOpH4IM7J74aGkc
+
+{
+  
+}

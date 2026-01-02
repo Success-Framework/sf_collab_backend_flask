@@ -30,7 +30,9 @@ def success_response(data=None, message="Success", status=200):
     return jsonify(response), status
 
 
-def error_response(message="Error occurred", status=400):
+def error_response(message="Error occurred", status=400, data=None):
     """Helper function for error responses"""
-    return jsonify({'success': False, 'error': message}), status
-
+    response = {'success': False, 'error': message}
+    if data is not None:
+        response['data'] = data
+    return jsonify(response), status

@@ -398,7 +398,9 @@ class User(db.Model):
     def is_active(self):
         """Check if user is active"""
         return self.status == UserStatus.active
-    
+    def is_admin(self):
+        """Check if user has admin role"""
+        return self.role == UserRoles.admin
     def deactivate(self):
         """Deactivate user account"""
         self.status = UserStatus.inactive
