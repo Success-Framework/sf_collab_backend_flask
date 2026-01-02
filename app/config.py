@@ -216,3 +216,4 @@ def get_config(config_name=None):
         config_name = os.getenv('FLASK_ENV', 'development')
     
     return config.get(config_name, DevelopmentConfig)
+

@@ -1,3 +1,6 @@
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY3MjgyMDgyLCJqdGkiOiIwMjBmNWEwZi1kMjUwLTRjNDctOWExMC0xZjU4MzRiYjdhY2QiLCJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiMTIzIiwibmJmIjoxNzY3MjgyMDgyLCJjc3JmIjoiOGUzYTNhMjEtNWQzMy00YjYzLThkMDMtZGUxZDJhMjVlNTgxIiwiZXhwIjoxNzY3MzAzNjgyfQ.HVaz1LdMI3ax2FuIVbx-B4qyp-cTZZP9LU2lr9jcUO0
+
+###
 GET http://localhost:5001
 
 ###
@@ -9,3 +12,7 @@ Content-Type: application/json
   "email": "example@example.com",
   "name": "John Doe"
 }
+
+###
+GET http://localhost:5001/api/auth/me
+Authorization: Bearer {{token}}

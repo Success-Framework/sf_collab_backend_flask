@@ -4,7 +4,8 @@ from flask_jwt_extended import (
     create_access_token, 
     create_refresh_token,
     jwt_required, 
-    get_jwt_identity
+    get_jwt_identity,
+    get_jwt
 )
 from app.config import Config
 from app.models.user import User
@@ -16,11 +17,12 @@ from app.models.waitlist import Waitlist
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
-
-
+from app.services.email_service import EmailService
+from app.utils.helper import success_response, error_response
 bp = Blueprint('auth', __name__)
-
-
+from app.utils.email_templates.email_templates import templates
+email_service = EmailService()
+thank_email_template = templates.get("welcome_email")
 def init_oauth(app):
     """Initialize OAuth with Flask app"""
     oauth.init_app(app)
@@ -539,7 +541,18 @@ def register():
             user_id=user.id,
             details=f"User account successfully created at {utc_now_str()}."
         )
-        
+        brand_name = os.getenv("BRAND_NAME", "SFCollab")
+
+        email_service.send_email(user.email, f"Welcome to {brand_name}!",
+                                                thank_email_template(
+                                                  data={
+                                                    "user": {
+                                                      "name": f"{user.first_name} {user.last_name}",
+                                                      "email": user.email
+                                                    }
+                                                  },
+                                                  see_email_template=False
+                                                ))
         return jsonify({
             'message': 'User registered successfully',
             'access_token': access_token,
@@ -678,7 +691,7 @@ def get_current_user():
     try:
         user_id_str = get_jwt_identity()
         user_id = int(user_id_str)
-        
+        print(f'LLegamos aqui con user_id: {user_id}')
         user = User.query.get(user_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -809,9 +822,19 @@ def google_callback():
         # GRANT DEFAULT PERMISSIONS FOR NEW USERS
         if is_new_user:
             try:
-                
+                brand_name = os.getenv("BRAND_NAME", "SFCollab")
                 permissions_count = grant_default_permissions(user.id)
                 print(f"Granted {permissions_count} default permissions to OAuth user {user.id}")
+                email_service.send_email(user.email, f"Welcome to {brand_name}!",
+                        thank_email_template(
+                                data={
+                                    "user": {
+                                        "name": f"{user.first_name} {user.last_name}",
+                                        "email": user.email
+                                }
+                            },
+                            see_email_template=False
+                        ))
             except Exception as perm_error:
                 print(f"Error granting default permissions to OAuth user: {str(perm_error)}")
             
@@ -972,8 +995,19 @@ def github_callback():
         
         
         if is_new_user:
-            try:
+            try:                
+                brand_name = os.getenv("BRAND_NAME", "SFCollab")
                 permissions_count = grant_default_permissions(user.id)
+                email_service.send_email(user.email, f"Welcome to {brand_name}!",
+                        thank_email_template(
+                                data={
+                                    "user": {
+                                        "name": f"{user.first_name} {user.last_name}",
+                                        "email": user.email
+                                }
+                            },
+                            see_email_template=False
+                        ))
                 print(f"Granted {permissions_count} default permissions to OAuth user {user.id}")
             except Exception as perm_error:
                 print(f"Error granting permissions: {str(perm_error)}")
@@ -1032,25 +1066,59 @@ def _oauth_error_response(provider, error_message):
         </html>
     """
 
-
-# ========================== VERIFY EMAIL (PLACEHOLDER) ==========================
-@bp.route('/verify-email', methods=['POST'])
-def verify_email():
-    """Verify user email (implement with email service)"""
+@bp.route('/send-verification-code', methods=['POST'])
+@jwt_required()
+def send_verification_code():
+    import random
+    from flask_jwt_extended import create_access_token
+    from datetime import timedelta
+    """Send email verification code (implement with email service)"""
     try:
-        data = request.get_json()
-        token = data.get('access_token')
+        user_id = get_jwt_identity()
+        user = User.query.get(int(user_id))
         
-        # TODO: Implement email verification logic
-        # 1. Verify token
-        # 2. Update user.is_email_verified = True
+        if not user.email:
+            return jsonify({'error': 'Email is required'}), 400
         
+        user = User.query.filter_by(email=user.email.lower()).first()
+
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        code = random.randint(100000, 999999)
+        verification_token = create_access_token(
+            identity=str(user.id),
+            expires_delta=timedelta(minutes=10),
+            additional_claims={'code': code}
+        )
+
+        
+        email_service.send_email_verification_code(user, code)
+        print(f"Sent verification code {code} to {user.email}")
         return jsonify({
-            'message': 'Email verification endpoint - to be implemented'
-        }), 501
-        
+            'message': 'Verification code sent to email',
+            'verification_token': verification_token
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ========================== VERIFY EMAIL (PLACEHOLDER) ==========================
+@bp.route('/verify-code', methods=['POST'])
+@jwt_required()
+def verify_code():
+    claims = get_jwt()
+    data = request.get_json()
+    parsed_token = claims.get("code")
+    submitted_code = data.get("code")
+
+    if str(parsed_token) != str(submitted_code):
+        return error_response(data={
+            "verified": False
+        }, message="Invalid code", status=400)
+
+    return success_response({
+        "verified": True
+    }, "Code verified")
+
 
 
 # ========================== REQUEST PASSWORD RESET (PLACEHOLDER) ==========================

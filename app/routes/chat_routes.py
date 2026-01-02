@@ -75,6 +75,87 @@ def get_conversations():
     except Exception as e:
         logging.error(f'Error in get_conversations: {str(e)}')
         return error_response(f'Failed to load conversations: {str(e)}', 500)
+@chat_bp.route('/conversations/<int:conversation_id>', methods=['GET'])
+@jwt_required()
+def get_conversation(conversation_id):
+    """Get a single conversation by ID"""
+    try:
+        current_user_id = get_jwt_identity()
+
+        user = User.query.get(current_user_id)
+        conversation = ChatConversation.query.get(conversation_id)
+
+        if not user or not conversation:
+            return error_response('User or conversation not found', 404)
+
+        if not conversation.is_user_participant(current_user_id):
+            return error_response('Access denied', 403)
+
+        return success_response({
+            'conversation': conversation.to_dict(for_user=user)
+        })
+
+    except Exception as e:
+        logging.error(f'Error getting conversation {conversation_id}: {str(e)}')
+        return error_response(f'Failed to load conversation: {str(e)}', 500)
+@chat_bp.route('/conversations/with-user/<int:other_user_id>', methods=['GET'])
+@jwt_required()
+def get_or_create_direct_conversation(other_user_id):
+    """
+    Get or create a direct (1-to-1) conversation with another user
+    """
+    try:
+        current_user_id = get_jwt_identity()
+
+        if current_user_id == other_user_id:
+            return error_response("You cannot create a conversation with yourself", 400)
+
+        current_user = User.query.get(current_user_id)
+        other_user = User.query.get(other_user_id)
+
+        if not current_user or not other_user:
+            return error_response("User not found", 404)
+
+        # 🔍 Find existing direct conversation
+        conversation = (
+            ChatConversation.query
+            .join(conversation_participants)
+            .filter(ChatConversation.conversation_type == 'direct')
+            .filter(conversation_participants.c.user_id.in_([current_user_id, other_user_id]))
+            .group_by(ChatConversation.id)
+            .having(db.func.count(ChatConversation.id) == 2)
+            .first()
+        )
+
+        if conversation:
+            return success_response({
+                'conversation': conversation.to_dict(for_user=current_user),
+                'created': False
+            })
+
+        # 🆕 Create new direct conversation
+        conversation = ChatConversation(
+            conversation_type='direct',
+            created_by_id=current_user_id
+        )
+
+        db.session.add(conversation)
+        db.session.flush()
+
+        conversation.add_participant(current_user, 'member')
+        conversation.add_participant(other_user, 'member')
+
+        db.session.commit()
+
+        return success_response({
+            'conversation': conversation.to_dict(for_user=current_user),
+            'created': True
+        }, 'Conversation created')
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f'Failed to get/create conversation: {str(e)}')
+        return error_response(f'Failed to get or create conversation: {str(e)}', 500)
 
 #! MARK CONVERSATION AS READ
 @chat_bp.route('/conversations/<int:conversation_id>/mark-read', methods=['POST'])
@@ -240,6 +321,10 @@ def send_message(conversation_id):
         
         db.session.commit()
         
+        # Broadcast message to all participants in real-time
+        from app.services.realtime_service import RealtimeService
+        RealtimeService.emit_new_message(message.id)
+        
         
         response_data = message.to_dict(for_user=user)
         
@@ -253,6 +338,81 @@ def send_message(conversation_id):
     except Exception as e:
         db.session.rollback()
         logging.error(f'Failed to send message: {str(e)}')
+        return error_response(f'Failed to send message: {str(e)}', 500)
+@chat_bp.route('/direct', methods=['POST'])
+@jwt_required()
+def send_direct_message():
+    """
+    Send a message to a user.
+    If a direct conversation does not exist, create it automatically.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        recipient_id = data.get('recipient_user_id')
+        content = data.get('content')
+
+        if not recipient_id or not content:
+            return error_response("recipient_user_id and content are required", 400)
+
+        if recipient_id == current_user_id:
+            return error_response("You cannot message yourself", 400)
+
+        sender = User.query.get(current_user_id)
+        recipient = User.query.get(recipient_id)
+
+        if not sender or not recipient:
+            return error_response("User not found", 404)
+
+        # 🔍 Find existing direct conversation
+        conversation = (
+            ChatConversation.query
+            .join(conversation_participants)
+            .filter(ChatConversation.conversation_type == 'direct')
+            .filter(conversation_participants.c.user_id.in_([current_user_id, recipient_id]))
+            .group_by(ChatConversation.id)
+            .having(db.func.count(ChatConversation.id) == 2)
+            .first()
+        )
+
+        # 🆕 Create conversation if not found
+        if not conversation:
+            conversation = ChatConversation(
+                conversation_type='direct',
+                created_by_id=current_user_id
+            )
+
+            db.session.add(conversation)
+            db.session.flush()
+
+            conversation.add_participant(sender, 'member')
+            conversation.add_participant(recipient, 'member')
+
+        # ✉️ Create message
+        message = ChatMessage(
+            conversation_id=conversation.id,
+            sender_id=current_user_id,
+            original_content=content,
+            message_type='text',
+            sender_timezone=get_user_timezone(sender)
+        )
+
+        db.session.add(message)
+        conversation.updated_at = datetime.utcnow()
+        conversation.increment_unread_count(current_user_id)
+
+        db.session.commit()
+
+        return success_response({
+            'conversation': conversation.to_dict(for_user=sender),
+            'message': message.to_dict(for_user=sender),
+            'conversation_created': conversation.created_at == conversation.updated_at
+        }, 'Message sent', 201)
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f'Failed to send direct message: {str(e)}')
         return error_response(f'Failed to send message: {str(e)}', 500)
 
 #! GET CONVERSATION FILES
@@ -360,6 +520,10 @@ def edit_message(conversation_id, message_id):
         
         message.edit_message(new_content, metadata_data)
         
+        # Broadcast message edit to all participants
+        from app.services.realtime_service import RealtimeService
+        RealtimeService.emit_message_edited(message.id)
+        
         
         user = User.query.get(current_user_id)
         response_data = message.to_dict(for_user=user)
@@ -405,6 +569,10 @@ def delete_message(conversation_id, message_id):
         db.session.delete(message)
         db.session.commit()
         
+        # Broadcast message deletion to all participants
+        from app.services.realtime_service import RealtimeService
+        RealtimeService.emit_message_deleted(message_id, conversation_id)
+        
         
         return success_response({
             'message_id': message_id
@@ -447,7 +615,7 @@ def create_conversation():
     """Create new conversation with WebSocket emission and avatar upload"""
     try:
         current_user_id = get_jwt_identity()
-        
+        print(current_user_id)
         # Check if avatar file is present
         has_avatar = 'avatar' in request.files
         
@@ -525,6 +693,36 @@ def create_conversation():
         import traceback
         traceback.print_exc()
         return error_response(f'Failed to create conversation: {str(e)}', 500)
+
+#! START DIRECT CONVERSATION
+@chat_bp.route('/conversations/start-direct/<int:user_id>', methods=['POST'])
+@jwt_required()
+def start_direct_conversation(user_id):
+    """Start or find existing direct conversation with another user"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        if current_user_id == user_id:
+            return error_response('Cannot start conversation with yourself', 400)
+        
+        current_user = User.query.get(current_user_id)
+        other_user = User.query.get(user_id)
+        
+        if not current_user or not other_user:
+            return error_response('User not found', 404)
+        
+        # Find or create direct conversation
+        conversation = ChatConversation.find_or_create_direct_conversation(current_user, other_user)
+        
+        return success_response({
+            'conversation': conversation.to_dict(for_user=current_user)
+        }, 'Direct conversation started successfully')
+    
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.error(f'Failed to start direct conversation: {str(e)}')
+        return error_response(f'Failed to start conversation: {str(e)}', 500)
 
 #! UPDATE CONVERSATION
 @chat_bp.route('/conversations/<int:conversation_id>', methods=['PUT'])
