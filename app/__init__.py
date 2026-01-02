@@ -11,7 +11,7 @@ import warnings
 import hmac
 import hashlib
 from app.blueprints import blueprints
-
+from app.socket_events import socketio
 
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
@@ -33,6 +33,7 @@ def create_app(config_name=None):
     """Create and configure Flask application"""
 
     app = Flask(__name__, instance_relative_config=True)
+    
     
     # JWT Configuration
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
@@ -100,6 +101,7 @@ def create_app(config_name=None):
     migrate.init_app(app, db)
     jwt.init_app(app)
     
+   
     # Set SESSION_SQLALCHEMY to use the same db instance
     
     with app.app_context():
