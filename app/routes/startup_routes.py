@@ -4,6 +4,8 @@ from app.models.startup import Startup
 from app.models.startup_document import StartupDocument
 from app.models.startUpMember import StartupMember
 from app.models.user import User
+from app.models.joinRequest import JoinRequest
+from app.models.Enums import JoinRequestStatus
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 import os 
@@ -13,6 +15,14 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import uuid
 import shutil
+from app.utils.startup_permissions import (
+    get_current_user_startup_role,
+    can_view_full_details,
+    can_manage_documents,
+    can_manage_members,
+    can_edit_startup_core_info
+)
+
 
 startups_bp = Blueprint('startups', __name__)
 
@@ -91,15 +101,32 @@ def get_startups():
 @startups_bp.route('/<int:startup_id>', methods=['GET'])
 @jwt_required()
 def get_startup(startup_id):
-    """Get single startup by ID"""
-    startup = Startup.query.get(startup_id)
-    if not startup:
-        return error_response('Startup not found', 404)
-    
-    # Increment views
+    startup = Startup.query.get_or_404(startup_id)
     startup.increment_views()
-    
-    return success_response({'startup': startup.to_dict()})
+
+    role = get_current_user_startup_role(startup_id)
+
+    if role == 'none':
+        # Very limited view for normal logged-in users
+        data = {
+            'id': startup.id,
+            'name': startup.name,
+            'industry': startup.industry,
+            'stage': startup._enum_to_value(startup.stage),
+            'description': (startup.description or '')[:350] + '...',
+            'logo_url': startup.logo_url,
+            'banner_url': startup.banner_url,
+            'member_count': startup.member_count,
+            'views': startup.views,
+            'createdAt': startup.created_at.isoformat(),
+            'access_level': 'public_limited'
+        }
+    else:
+        # Full view for anyone related to the startup
+        data = startup.to_dict()
+        data['access_level'] = role
+
+    return success_response({'startup': data})
 
 #! REGISTER NEW STARTUP
 @startups_bp.route('/register', methods=['POST'])
@@ -278,8 +305,8 @@ def update_startup(startup_id):
         return error_response('Startup not found', 404)
     
     # Check if user is authorized to update this startup
-    if not has_startup_management_access(current_user_id, startup_id):
-        return error_response('Unauthorized to update this startup', 403)
+    if not can_edit_startup_core_info(startup_id):
+        return error_response("Only the startup owner can update core information", 403)
     
     data = request.get_json()
     
@@ -360,8 +387,8 @@ def get_startup_members(startup_id):
         return error_response('Startup not found', 404)
     
     # Check if user has access to this startup
-    if not has_startup_access(current_user_id, startup_id):
-        return error_response('Unauthorized to access this startup', 403)
+    if not can_view_full_details(startup_id):
+        return error_response("You need to be a member to see the team", 403)
     
     members = startup.get_active_members()
     return success_response({
@@ -380,8 +407,8 @@ def add_startup_member(startup_id):
         return error_response('Startup not found', 404)
     
     # Check if user is authorized to add members
-    if not has_startup_management_access(current_user_id, startup_id):
-        return error_response('Unauthorized to add members to this startup', 403)
+    if not can_manage_members(startup_id):
+        return error_response("Only owner or founder can add members", 403)
     
     data = request.get_json()
     required_fields = ['user_id', 'first_name', 'last_name']
@@ -489,8 +516,10 @@ def get_startup_documents(startup_id):
     startup = Startup.query.get_or_404(startup_id)
     
     # Check if user has access to this startup
-    if not has_startup_access(current_user_id, startup_id):
-        return error_response('Unauthorized to access this startup documents', 403)
+    if not can_view_full_details(startup_id):
+        return error_response("You need to be a member of this startup to view documents", 403)
+    # if not has_startup_access(current_user_id, startup_id):
+    #     return error_response('Unauthorized to access this startup documents', 403)
     
     documents = [doc.to_dict() for doc in startup.get_documents()]
     return success_response({'documents': documents})
@@ -550,7 +579,8 @@ def upload_document(startup_id):
     current_user_id = get_jwt_identity()
     
     startup = Startup.query.get_or_404(startup_id)
-    
+    if not can_manage_documents(startup_id):
+        return error_response("Only owner or founder can upload documents", 403)
     # Check if user is authorized to upload documents
     if not has_startup_management_access(current_user_id, startup_id):
         return error_response('Unauthorized to upload documents to this startup', 403)
@@ -607,8 +637,8 @@ def delete_document(startup_id, document_id):
     document = StartupDocument.query.filter_by(id=document_id, startup_id=startup_id).first_or_404()
     
     # Check if user is authorized to delete documents
-    if not has_startup_management_access(current_user_id, startup_id):
-        return error_response('Unauthorized to delete documents from this startup', 403)
+    if not can_manage_documents(startup_id):
+        return error_response("Only owner or founder can delete documents", 403)
     
     try:
         # Delete file from file system
@@ -691,6 +721,141 @@ def get_stages():
     stages = [stage.value for stage in StartupStage]
     
     return success_response({'stages': stages})
+
+
+@startups_bp.route('/<int:startup_id>/join-requests', methods=['GET'])
+@jwt_required()
+def get_join_requests(startup_id):
+    """
+    Get all join requests for a startup (pending + processed)
+    Only owner or founder members can see this
+    """
+    if not can_manage_members(startup_id):
+        return error_response(
+            "Only the startup owner or founders can view join requests", 
+            403
+        )
+
+    startup = Startup.query.get_or_404(startup_id)
+
+    # Optional: filter by status
+    status_filter = request.args.get('status', 'pending')  # default: pending
+    valid_statuses = ['pending', 'approved', 'rejected', 'cancelled', 'all']
+    if status_filter not in valid_statuses:
+        status_filter = 'pending'
+
+    query = startup.join_requests
+    if status_filter != 'all':
+        query = query.filter_by(status=JoinRequestStatus(status_filter))
+
+    requests = query.order_by(JoinRequest.created_at.desc()).all()
+
+    return success_response({
+        'requests': [req.to_dict() for req in requests],
+        'count': len(requests),
+        'filter': status_filter,
+        'current_user_role': get_current_user_startup_role(startup_id)
+    })
+
+@startups_bp.route('/<int:startup_id>/join-requests/<int:request_id>/accept', methods=['POST'])
+@jwt_required()
+def accept_join_request(startup_id, request_id):
+    """
+    Accept a pending join request and automatically add the user as a member
+    """
+    if not can_manage_members(startup_id):
+        return error_response(
+            "Only the startup owner or founders can accept join requests", 
+            403
+        )
+
+    join_request = JoinRequest.query.filter_by(
+        id=request_id,
+        startup_id=startup_id,
+        status=JoinRequestStatus.pending
+    ).first()
+
+    if not join_request:
+        return error_response("Join request not found or already processed", 404)
+
+    try:
+        # The approve method already handles adding the member
+        new_member = join_request.approve()
+
+        return success_response({
+            'message': "Join request accepted. User added as team member.",
+            'new_member': {
+                'userId': new_member.user_id,
+                'role': new_member.role,
+                'joinedAt': new_member.joined_at.isoformat() if hasattr(new_member, 'joined_at') else None
+            }
+        }, status=200)
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to accept request: {str(e)}", 500)
+
+@startups_bp.route('/<int:startup_id>/join-requests/<int:request_id>/reject', methods=['POST'])
+@jwt_required()
+def reject_join_request(startup_id, request_id):
+    """
+    Reject a pending join request
+    """
+    if not can_manage_members(startup_id):
+        return error_response(
+            "Only the startup owner or founders can reject join requests", 
+            403
+        )
+
+    join_request = JoinRequest.query.filter_by(
+        id=request_id,
+        startup_id=startup_id,
+        status=JoinRequestStatus.pending
+    ).first()
+
+    if not join_request:
+        return error_response("Join request not found or already processed", 404)
+
+    try:
+        join_request.reject()
+        return success_response({
+            "message": "Join request rejected successfully",
+            "request_id": request_id
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to reject request: {str(e)}", 500)
+
+
+# Optional: Allow user to cancel their own request
+@startups_bp.route('/join-requests/<int:request_id>/cancel', methods=['POST'])
+@jwt_required()
+def cancel_my_join_request(request_id):
+    """
+    Let the requesting user cancel their own pending join request
+    """
+    current_user_id = get_jwt_identity()
+    
+    join_request = JoinRequest.query.filter_by(
+        id=request_id,
+        user_id=current_user_id,
+        status=JoinRequestStatus.pending
+    ).first()
+
+    if not join_request:
+        return error_response("Request not found, not yours, or already processed", 404)
+
+    try:
+        join_request.cancel()
+        return success_response({
+            "message": "Your join request has been cancelled",
+            "request_id": request_id
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to cancel request: {str(e)}", 500)
 
 # Helper functions for authorization
 def has_startup_access(user_id, startup_id):
