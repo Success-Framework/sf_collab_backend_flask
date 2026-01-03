@@ -238,6 +238,58 @@ def qwen_generate():
         logging.error(f'Generation error: {str(e)}')
         return standard_response(False, None, str(e), 500)
         
+### Chat 
+@qwen_bp.route('/chat', methods=['POST'])
+def qwen_chat():
+    """
+    Chat-style endpoint compatible with frontend QwenChat.jsx
+    """
+    try:
+        data = request.get_json()
+
+        if not data or 'messages' not in data:
+            return standard_response(False, None, 'Missing messages in request', 400)
+
+        messages = data.get('messages', [])
+        temperature = data.get('temperature', 0.7)
+        max_tokens = data.get('max_tokens', 2048)
+        model = data.get('model', AVAILABLE_MODELS[0])
+
+        if not GROQ_API_KEY:
+            return standard_response(False, None, 'Groq API key not configured', 500)
+
+        # ---- Convert messages[] → prompt ----
+        prompt_lines = []
+        for msg in messages:
+            role = msg.get('role', 'user')
+            content = msg.get('content', '')
+            if content:
+                prompt_lines.append(f"{role.capitalize()}: {content}")
+
+        final_prompt = "\n".join(prompt_lines) + "\nAssistant:"
+
+        # ---- Call Groq ----
+        completion = groq_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a helpful AI assistant."},
+                {"role": "user", "content": final_prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+
+        response_text = completion.choices[0].message.content
+
+        return standard_response(True, {
+            "response": response_text,
+            "model": model
+        })
+
+    except Exception as e:
+        logging.exception("Qwen chat error")
+        return standard_response(False, None, str(e), 500)
+
         
 # Helper methods to add to your class
 def _json_to_markdown(self, data, level=1):
