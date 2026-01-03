@@ -2,6 +2,8 @@
 
 ###
 GET http://localhost:5001
+###
+GET http://localhost:5001/api/users/roles
 
 ###
 GET http://localhost:5001/api/waitlist/count
