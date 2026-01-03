@@ -139,6 +139,16 @@ class ChatConversation(db.Model):
             db.session.add(general_chat)
             db.session.flush()  # Get ID before adding participant
             general_chat.add_participant(user, role='member')
+            # You might want to send a welcome message here as well
+            welcome_message = ChatMessage(
+                conversation_id=general_chat.id,
+                sender_id=user.id,
+                original_content="Welcome to the General Chat!",
+                message_type='text',
+                metadata_data={},
+                sender_timezone=user.get_timezone()
+            )
+            db.session.add(welcome_message)
             db.session.commit()
         
     def is_user_participant(self, user_id):

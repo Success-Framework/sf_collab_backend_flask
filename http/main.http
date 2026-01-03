@@ -16,3 +16,65 @@ Content-Type: application/json
 ###
 GET http://localhost:5001/api/auth/me
 Authorization: Bearer {{token}}
+
+
+###
+POST https://api.openai.com/v1/responses
+Authorization: Bearer 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
+Content-Type: application/json
+
+{
+  "model": "gpt-4.1-mini",
+  "input": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "You are a helpful AI assistant."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Create a business plan for a tech startup."
+        }
+      ]
+    }
+  ],
+  "temperature": 0.7
+}
+
+###
+POST https://api.openai.com/v1/chat/completions
+Authorization: Bearer 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
+Content-Type: application/json
+
+{
+  "model": "gpt-4.1-mini",
+  "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": "You are a helpful AI assistant."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Create a business plan for a tech startup."
+        }
+      ]
+    }
+  ],
+  "temperature": 0.7,
+  "max_tokens": 2048
+}

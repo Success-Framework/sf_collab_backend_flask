@@ -548,14 +548,14 @@ def register():
 
         email_service.send_email(user.email, f"Welcome to {brand_name}!",
                                                 thank_email_template(
-                                                  data={
+                                                data={
                                                     "user": {
-                                                      "name": f"{user.first_name} {user.last_name}",
-                                                      "email": user.email
+                                                    "name": f"{user.first_name} {user.last_name}",
+                                                    "email": user.email
                                                     }
-                                                  },
-                                                  see_email_template=False
-                                                ))
+                                                },
+                                                see_email_template=False
+                                            ))
         return jsonify({
             'message': 'User registered successfully',
             'access_token': access_token,
