@@ -9,6 +9,7 @@ from flask_jwt_extended import (
     jwt_required, 
     get_jwt_identity
 )
+from app.models.Enums import UserRoles
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from app.services.email_service import EmailService
@@ -423,7 +424,13 @@ def verify_user_email(user_id):
         return success_response({'user': user.to_dict()}, 'Email verified successfully')
     except Exception as e:
         return error_response(f'Failed to verify email: {str(e)}', 500)
+#! GET ALL USER ROLES
+@users_bp.route('/roles', methods=['GET'])
+def get_user_roles():
+    """Get all available user roles"""
 
+    roles = [role.value for role in UserRoles if role.value != 'admin']
+    return success_response({'roles': roles})
 #! UPDATE USER STATUS
 @users_bp.route('/<int:user_id>/status', methods=['PUT'])
 @jwt_required()
@@ -453,32 +460,52 @@ def update_user_status(user_id):
 # Send email to admin (contact)
 @users_bp.route('/contact', methods=['POST'])
 def submit_contact_form():
-#     {
-#     name: string;
-#     email: string;
-#     message: string;
-# }
-    data = request.get_json()
-    name = data.get('name')
-    email = data.get('email')
-    message = data.get('message')
-
+    name = request.form.get('name')
+    email = request.form.get('email')
+    message = request.form.get('message')
+    print(name, email, message)
     if not name or not email or not message:
         return error_response('Name, email, and message are required', 400)
-    email_service.send_email(
-        recipient=os.getenv('SUPPORT_EMAIL'),
-        subject=f"New Contact Form Submission from {name}",
-        body=contact_form_email_template(
-            data={
-                "user": {
-                    "name": name,
-                    "email": email
+    
+    try:
+        # Handle file attachments
+        uploaded_files = []
+        if 'files' in request.files:
+            files_list = request.files.getlist('files')
+            for file in files_list:
+                if file and file.filename:
+                    if not allowed_file(file.filename):
+                        return error_response('Invalid file type', 400)
+                    
+                    if not validate_file_size(file):
+                        return error_response('File size exceeds maximum allowed', 400)
+                    
+                    file_info = save_uploaded_file(file, 0, 'file')
+                    uploaded_files.append({
+                        'name': file_info['name'],
+                        'path': file_info['path'],
+                        'size': file_info['size']
+                    })
+        
+        email_service.send_email(
+            recipient=os.getenv('SUPPORT_EMAIL'),
+            subject=f"New Contact Form Submission from {name}",
+            body=contact_form_email_template(
+                data={
+                    "user": {
+                        "name": name,
+                        "email": email
+                    },
+                    "metadata": {
+                        "message": message,
+                       
+                    }
                 },
-                "metadata": {
-                    "message": message
-                }
-            },
-            see_email_template=False
+                see_email_template=False
+            ),
+            attachments=uploaded_files
         )
-    )
-    return success_response(message='Contact form submitted successfully')
+        return success_response(message='Contact form submitted successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to submit contact form: {str(e)}', 500)

@@ -34,6 +34,41 @@ class Waitlist(db.Model):
     POINTS_PER_ACTIVITY = 1
     POINTS_PER_STARTUP = 30
     ACTIVITY_INTERVAL = timedelta(minutes=30)
+    DISCOUNT_RANKS = {
+        (1, 500): 25,
+        (501, 1000): 20,
+        (1001, 1500): 15,
+        (1501, 2000): 10,
+        (2001, 2500): 5,
+    }
+
+    BADGES = {
+        1: "🔑 Keyholder",
+        100: "🥇 Gold",
+        300: "🥈 Silver",
+        1000: "🥉 Bronze (MVP)",
+    }
+
+    # -------------------------
+    # Discount calculation
+    # -------------------------
+    def get_discount(self):
+        rank = self.get_position()
+        for (lower, upper), discount in self.DISCOUNT_RANKS.items():
+            if lower <= rank <= upper:
+                return discount
+        return 0
+
+    # -------------------------
+    # Badge assignment
+    # -------------------------
+    @property
+    def badge(self):
+        rank = self.get_position()
+        for threshold, badge in self.BADGES.items():
+            if rank <= threshold:
+                return badge
+        return None
     # -------------------------
     # Constants (business rules)
     # -------------------------
@@ -42,9 +77,6 @@ class Waitlist(db.Model):
 
     JAN_10_DEADLINE = datetime(2026, 1, 10, 23, 59, 59)
     FEB_7_DEADLINE = datetime(2026, 2, 7, 23, 59, 59)
-
-    
-
 
     def register_activity(self):
         now = datetime.utcnow()

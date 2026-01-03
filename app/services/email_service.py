@@ -6,6 +6,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 import os
+from email.mime.base import MIMEBase
+from email import encoders
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGO_PATH = os.path.join(BASE_DIR, "static", "logo.png")
@@ -46,7 +48,7 @@ class EmailService:
             server.starttls()
         server.login(self.username, self.password)
         return server
-  def send_email(self, recipient, subject, body):
+  def send_email(self, recipient, subject, body, attachments=None):
     server = self._connect()
     try:
       from_addr = self.default_sender
@@ -65,6 +67,25 @@ class EmailService:
           img.add_header("Content-ID", "<logo@sf>")
           img.add_header("Content-Disposition", "inline", filename="logo.png")
           msg.attach(img)
+
+      # Attach additional files
+      if attachments is not None:
+          for attachment in attachments:
+            print(attachment)
+            path = attachment["path"]
+            filename = attachment["name"]
+
+            with open(path, "rb") as f:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(f.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    "attachment",
+                    filename=filename
+                )
+                msg.attach(part)
+
 
       server.sendmail(from_addr, to_addr, msg.as_string())
       print("Email sent:", recipient)

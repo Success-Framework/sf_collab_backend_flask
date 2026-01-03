@@ -57,9 +57,13 @@ DATA: {data}
 # ===== SOCKET.IO SETUP =====
 socketio.init_app(
     app,
-    cors_allowed_origins=app.config.get("CORS_ORIGINS", Config.CORS_ORIGINS),
-    async_mode="gevent"
+    cors_allowed_origins=app.config['CORS_ORIGINS'],
+    allow_credentials=True,
+    async_mode="gevent",
+    logger=True,
+    engineio_logger=True
 )
+
 
 
 # ===== START SERVER =====

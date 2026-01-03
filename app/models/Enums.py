@@ -17,6 +17,10 @@ class UserRoles(enum.Enum):
     member = "member"
     technical_lead = "technical_lead"
     engineering_manager = "engineering_manager"
+    influencer = "influencer"
+    content_creator = "content_creator"
+    community_manager = "community_manager"
+    hr_specialist = "hr_specialist"
 
     # Software Engineering
     backend_engineer = "backend_engineer"
