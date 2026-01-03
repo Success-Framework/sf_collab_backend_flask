@@ -216,13 +216,14 @@ def handle_send_message(data):
             'message': message_data,
             'conversation_id': conversation_id
         }, room=room)
-        
-        # Send notification to offline participants
+
+        # 2️⃣ Emit to each participant's user room (GLOBAL updates)
         for participant in conversation.participants:
-            if participant.id != user_id and participant.id not in connected_users:
-                # Could trigger push notification here
-                pass
-        
+            emit('conversation_message', {
+                'conversation_id': conversation_id,
+                'message': message_data
+            }, room=f"user_{participant.id}")
+                
         logging.info(f"Message sent by user {user_id} in conversation {conversation_id}")
         
     except Exception as e:
