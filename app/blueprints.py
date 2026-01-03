@@ -65,7 +65,7 @@ blueprints = [
 { "blueprint": idea_routes.ideas_bp, "url_prefix": '/api/ideas'},
 { "blueprint": knowledge_routes.knowledge_bp, "url_prefix": '/api/knowledge'},
 { "blueprint": startup_routes.startups_bp, "url_prefix": '/api/startups'},
-{ "blueprint": api_routes.api_bp, "url_prefix": '/api/ai'},
+# { "blueprint": api_routes.api_bp, "url_prefix": '/api/ai'},
 { "blueprint": project_goal_routes.project_goals_bp, "url_prefix": '/api/project-goals'},
 { "blueprint": startup_bookmark_routes.bookmarks_bp, "url_prefix": '/api/startup-bookmarks'},
 { "blueprint": startup_member_routes.startup_members_bp, "url_prefix": '/api/startup-members'},
@@ -102,7 +102,7 @@ blueprints = [
 { "blueprint": waitlist_routes.waitlist_bp, "url_prefix": '/api/waitlist'},
 { "blueprint": pdf_signing_routes.pdf_bp, "url_prefix": '/api/pdf'},
 # { "blueprint": background_remover.background_bp, "url_prefix": '/api/background-remover'},
-{ "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/qwen'},
+{ "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' }

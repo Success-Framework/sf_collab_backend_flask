@@ -21,10 +21,7 @@ class EmailService:
     self.username = os.getenv('MAIL_USERNAME')
     self.password = os.getenv('MAIL_PASSWORD')
     self.default_sender = os.getenv('MAIL_DEFAULT_SENDER')    
-    self.server = smtplib.SMTP(self.smtp_server, self.port)
-    if self.use_tls:
-      self.server.starttls()
-    self.server.login(self.username, self.password)
+
   def send_email_verification_code(self, user, code):
     brand_name = os.getenv("BRAND_NAME", "SFCollab")
     subject = f"{brand_name}: Your Verification Code"
@@ -42,26 +39,37 @@ class EmailService:
     )
     self.send_email(user.email, subject, body)
     print(f"Sent verification code email to {user.email}")
+
+  def _connect(self):
+        server = smtplib.SMTP(self.smtp_server, self.port)
+        if self.use_tls:
+            server.starttls()
+        server.login(self.username, self.password)
+        return server
   def send_email(self, recipient, subject, body):
-    from_addr = self.default_sender
-    to_addr = recipient
-    msg = MIMEMultipart("related")
-    msg["From"] = from_addr
-    msg["To"] = to_addr
-    msg["Subject"] = subject
+    server = self._connect()
+    try:
+      from_addr = self.default_sender
+      to_addr = recipient
+      msg = MIMEMultipart("related")
+      msg["From"] = from_addr
+      msg["To"] = to_addr
+      msg["Subject"] = subject
 
-    # HTML part
-    msg.attach(MIMEText(body, "html"))
+      # HTML part
+      msg.attach(MIMEText(body, "html"))
 
-    # Attach image
-    with open(LOGO_PATH, "rb") as f:
-        img = MIMEImage(f.read())
-        img.add_header("Content-ID", "<logo@sf>")
-        img.add_header("Content-Disposition", "inline", filename="logo.png")
-        msg.attach(img)
+      # Attach image
+      with open(LOGO_PATH, "rb") as f:
+          img = MIMEImage(f.read())
+          img.add_header("Content-ID", "<logo@sf>")
+          img.add_header("Content-Disposition", "inline", filename="logo.png")
+          msg.attach(img)
 
-    self.server.sendmail(from_addr, to_addr, msg.as_string())
-    print("Email sent:", recipient)
+      server.sendmail(from_addr, to_addr, msg.as_string())
+      print("Email sent:", recipient)
+    finally:
+      server.quit()
 # from app.services.email_service import EmailService
 # from app.utils.email_templates.email_templates import templates
 # email_service = EmailService()

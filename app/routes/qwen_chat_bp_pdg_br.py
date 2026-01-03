@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 from pathlib import Path
 import logging
 from datetime import datetime
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -17,6 +18,7 @@ qwen_bp = Blueprint('qwen', __name__)
 
 # Configuration
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 QWN_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'qwen_generated')  # Changed name
 
@@ -107,9 +109,11 @@ def qwen_generate():
         if model not in AVAILABLE_MODELS:
             return standard_response(False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400)
         
-        if not GROQ_API_KEY:
+        if not GROQ_API_KEY and model == 'qwen/qwen3-32b':
             return standard_response(False, None, 'Groq API key not configured', 500)
         
+        if not OPENAI_API_KEY and model == 'openai/gpt-oss-20b':
+            return standard_response(False, None, 'OpenAI API key not configured', 500)
         # Simplified system prompts
         system_prompts = {
             'chat': '''You are a helpful and professional AI assistant. Provide accurate, detailed, and well-structured responses in Markdown format.''',
@@ -181,21 +185,61 @@ def qwen_generate():
             
         else:
             enhanced_prompt = prompt
+        response_text = ""
+        if model == 'qwen/qwen3-32b' and content_type in ['business_plan', 'pitch_deck']:
+            max_tokens = min(max_tokens, 4096)
+
+            # Call Groq API - REMOVE response_format for now to avoid JSON validation issues
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": enhanced_prompt}
+                ],
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens
+                # Remove response_format to avoid JSON validation errors
+                # response_format={"type": "json_object"} if content_type in ['business_plan', 'pitch_deck'] else None
+            )
+            response_text = chat_completion.choices[0].message.content
         
-        # Call Groq API - REMOVE response_format for now to avoid JSON validation issues
-        chat_completion = groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": enhanced_prompt}
-            ],
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens
-            # Remove response_format to avoid JSON validation errors
-            # response_format={"type": "json_object"} if content_type in ['business_plan', 'pitch_deck'] else None
-        )
+        elif model == 'openai/gpt-oss-20b':
+            # Call OpenAI API directly
+            headers = {
+                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Content-Type': 'application/json'
+            }
+
+            payload = {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": [
+                            {"type": "text", "text": system_prompt}
+                        ]
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": enhanced_prompt}
+                        ]
+                    }
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+            
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            data = response.json()
+            response_text = data["choices"][0]["message"]["content"]
+
+            chat_completion = response.json()
         
-        response_text = chat_completion.choices[0].message.content
         
         # Generate downloadable content
         download_formats = ['txt', 'md']
