@@ -58,3 +58,4 @@ venv/
 
 # --- Config / misc ---
 # vite.config.*s.*
+docker/uploads/

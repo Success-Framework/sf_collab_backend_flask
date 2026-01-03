@@ -53,13 +53,12 @@ def get_startups():
     industry = request.args.get('industry', type=str)
     stage = request.args.get('stage', type=str)
     search = request.args.get('search', type=str)
-    
     # New funding range parameters
     min_funding = request.args.get('min_funding', type=float)
     max_funding = request.args.get('max_funding', type=float)
     
     query = Startup.query
-    
+     # Apply filters
     if industry:
         query = query.filter(Startup.industry.ilike(f'%{industry}%'))
     if stage:

@@ -11,9 +11,11 @@ from flask_jwt_extended import (
 )
 from werkzeug.utils import secure_filename
 from datetime import datetime
-
+from app.services.email_service import EmailService
+from app.utils.email_templates.email_templates import templates
 import os 
-
+email_service = EmailService()
+contact_form_email_template = templates.get("contact_form_email")
 users_bp = Blueprint('users', __name__)
 
 
@@ -238,9 +240,7 @@ def get_users():
     status = request.args.get('status', type=str)
     role = request.args.get('role', type=str)
     search = request.args.get('search', type=str)
-    
     query = User.query
-    
     # Apply filters
     if status:
         query = query.filter(User.status == UserStatus(status))
@@ -282,7 +282,10 @@ def get_user(user_id):
 def create_user():
     """Create new user"""
     data = request.get_json()
-    
+    user_id = get_jwt_identity()
+    if not user_id:
+        return error_response('Unauthorized', 401)
+
     # Check required fields
     required_fields = ['first_name', 'last_name', 'email', 'password']
     if not all(field in data for field in required_fields):
@@ -291,7 +294,6 @@ def create_user():
     # Check if email already exists
     if User.query.filter_by(email=data['email']).first():
         return error_response('Email already exists', 409)
-    
     try:
         user = User(
             first_name=data['first_name'],
@@ -355,7 +357,10 @@ def update_user(user_id):
 @jwt_required()
 def delete_user(user_id):
     """Delete user"""
+    token_user_id = get_jwt_identity()
     user = User.query.get(user_id)
+    if int(token_user_id) != int(user_id):
+        return error_response('Unauthorized to delete this user', 403)
     if not user:
         return error_response('User not found', 404)
     
@@ -443,3 +448,37 @@ def update_user_status(user_id):
         return success_response({'user': user.to_dict()}, f'User status updated to {status}')
     except Exception as e:
         return error_response(f'Failed to update status: {str(e)}', 500)
+    
+
+# Send email to admin (contact)
+@users_bp.route('/contact', methods=['POST'])
+def submit_contact_form():
+#     {
+#     name: string;
+#     email: string;
+#     message: string;
+# }
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    message = data.get('message')
+
+    if not name or not email or not message:
+        return error_response('Name, email, and message are required', 400)
+    email_service.send_email(
+        recipient=os.getenv('SUPPORT_EMAIL'),
+        subject=f"New Contact Form Submission from {name}",
+        body=contact_form_email_template(
+            data={
+                "user": {
+                    "name": name,
+                    "email": email
+                },
+                "metadata": {
+                    "message": message
+                }
+            },
+            see_email_template=False
+        )
+    )
+    return success_response(message='Contact form submitted successfully')
