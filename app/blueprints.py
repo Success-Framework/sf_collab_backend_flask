@@ -51,6 +51,7 @@ from .routes import (
     waitlist_routes,
     feedback_routes,
     scraper_routes,
+    chat_routes,
     
     #! removed background_remover_route,
     #! removed anime_converter_route
