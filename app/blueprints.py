@@ -1,6 +1,7 @@
 from .routes import (
     auth_routes,
     user_routes,
+    profile_routes,
     idea_routes,
     knowledge_routes,
     main_routes,
@@ -65,6 +66,7 @@ blueprints = [
 { "blueprint": main_routes.main_bp, "url_prefix": '/'},
 { "blueprint": auth_routes.bp, "url_prefix": '/api/auth'},
 { "blueprint": user_routes.users_bp, "url_prefix": '/api/users'},
+{ "blueprint": profile_routes.profile_bp, "url_prefix": ''},
 { "blueprint": idea_routes.ideas_bp, "url_prefix": '/api/ideas'},
 { "blueprint": knowledge_routes.knowledge_bp, "url_prefix": '/api/knowledge'},
 { "blueprint": startup_routes.startups_bp, "url_prefix": '/api/startups'},

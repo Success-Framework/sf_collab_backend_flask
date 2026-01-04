@@ -67,7 +67,9 @@ socketio.init_app(
     async_mode="gevent",
     allow_credentials=True,
     logger=True,
-    engineio_logger=True
+    engineio_logger=True,
+    ping_timeout=60,
+    ping_interval=25
 )
 
 
