@@ -52,6 +52,7 @@ from .routes import (
     feedback_routes,
     scraper_routes,
     chat_routes,
+    user_roles_routes
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -108,5 +109,6 @@ blueprints = [
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
-{"blueprint": scraper_routes.scraper_bp, "url_prefix": "/api"}
+{"blueprint": scraper_routes.scraper_bp, "url_prefix": "/api"},
+{ "blueprint": user_roles_routes.user_roles_bp, "url_prefix": '/api/user-roles'},
 ]

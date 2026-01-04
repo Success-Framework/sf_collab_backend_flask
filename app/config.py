@@ -65,7 +65,7 @@ class Config:
         'https://sfclb.netlify.app/',
         "https://sfmanagers-frontend.vercel.app",
         "https://sfmanagers-frontend.vercel.app/",
-                "https://sfcollab.com",
+        "https://sfcollab.com",
         "https://www.sfcollab.com"
     ]
     CORS_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
