@@ -3,7 +3,9 @@ from datetime import timedelta
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# Priority: .env.local (for local dev) > .env.development (for docker-compose) > .env (fallback)
+dotenv_file = '.env.local' if os.path.exists('.env.local') else ('.env.development' if os.path.exists('.env.development') else '.env')
+load_dotenv(dotenv_file)
 
 class Config:
     """Base configuration class"""
@@ -75,6 +77,20 @@ class Config:
         'X-Requested-With',
         'Accept',
         'Origin'
+    ]
+    
+    # Socket.IO CORS Configuration (for WebSocket connections)
+    SOCKETIO_CORS_ALLOWED_ORIGINS = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'https://sfclb.netlify.app',
+        'https://sfclb.netlify.app/',
+        'https://sfmanagers-frontend.vercel.app',
+        'https://sfmanagers-frontend.vercel.app/',
+        'https://sfcollab.com',
+        'https://www.sfcollab.com'
     ]
     
     # Pagination
