@@ -24,7 +24,13 @@ app = create_app()
 
 env = os.environ.get("FLASK_ENV", "development")
 if env == "production":
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_proto=1,
+        x_host=1,
+        x_for=1
+    )
+
 
 # ================= REQUEST LOGGING =================
 @app.before_request
@@ -57,9 +63,9 @@ DATA: {data}
 # ===== SOCKET.IO SETUP =====
 socketio.init_app(
     app,
-    cors_allowed_origins=app.config.get('SOCKETIO_CORS_ALLOWED_ORIGINS', app.config['CORS_ORIGINS']),
-    allow_credentials=True,
+    cors_allowed_origins=Config.CORS_ORIGINS,
     async_mode="gevent",
+    allow_credentials=True,
     logger=True,
     engineio_logger=True,
     ping_timeout=60,

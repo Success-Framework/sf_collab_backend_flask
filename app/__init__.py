@@ -76,17 +76,9 @@ def create_app(config_name=None):
     app.config.from_pyfile('config.py', silent=True)
     
     # Configure CORS
-    CORS(app, 
-        resources={
-            r"/*": {
-                "origins": app.config.get('CORS_ORIGINS', Config.CORS_ORIGINS),
-                "methods": Config.CORS_METHODS,
-                "allow_headers": Config.CORS_ALLOW_HEADERS,
-                "supports_credentials": True,
-                "expose_headers": ["Content-Type", "Authorization"],
-                "max_age": 3600
-            }
-        },
+    CORS(
+        app,
+        origins=Config.CORS_ORIGINS,
         supports_credentials=True
     )
     
