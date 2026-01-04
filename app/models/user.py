@@ -35,6 +35,19 @@ class User(db.Model):
     profile_city = db.Column(db.String(100), nullable=True)
     profile_timezone = db.Column(db.String(50), nullable=True)
     
+    # Multi-Role Profile Fields (from ProfileSetup & MultiRoleProfileForm)
+    roles = db.Column(JSON, default=[])  # Array: ["founder", "builder", "investor", "influencer"]
+    
+    # Role-specific profile data stored as JSON
+    founder_profile = db.Column(JSON, default={})  # Founder-specific data
+    builder_profile = db.Column(JSON, default={})  # Builder-specific data
+    influencer_profile = db.Column(JSON, default={})  # Influencer-specific data
+    investor_profile = db.Column(JSON, default={})  # Investor-specific data
+    
+    # Profile completion tracking
+    profile_setup_completed = db.Column(db.Boolean, default=False)  # Basic profile setup (ProfileSetup)
+    role_profile_completed = db.Column(db.Boolean, default=False)  # Multi-role profile (MultiRoleProfileForm)
+    
     # Preferences
     pref_email_notifications = db.Column(db.Boolean, default=True)
     pref_push_notifications = db.Column(db.Boolean, default=True)
@@ -566,7 +579,17 @@ class User(db.Model):
             'updatedAt': self.updated_at.isoformat(),
             'fullName': self.get_full_name(),
             'timezone': self.get_timezone(),
-            'permissions': [perm.to_dict() for perm in self.permissions]
+            'permissions': [perm.to_dict() for perm in self.permissions],
+            # Multi-role profile data
+            'roles': self.roles or [],
+            'founderProfile': self.founder_profile or {},
+            'builderProfile': self.builder_profile or {},
+            'influencerProfile': self.influencer_profile or {},
+            'investorProfile': self.investor_profile or {},
+            'profileCompletion': {
+                'basicProfileSetup': self.profile_setup_completed,
+                'roleProfileCompleted': self.role_profile_completed
+            }
         }
         
         if include_password:
