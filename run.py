@@ -7,10 +7,6 @@ import time
 import json
 from flask import request, g
 from werkzeug.middleware.proxy_fix import ProxyFix
-# very top of create_app or run.py
-from dotenv import load_dotenv
-load_dotenv()
-
 
 from app import create_app
 from app.config import Config
