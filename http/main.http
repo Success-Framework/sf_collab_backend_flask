@@ -1,4 +1,4 @@
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY3NTEwNzE4LCJqdGkiOiI1ODkzNjNjYy1kYzExLTQ2NjktOGFiNi1jMjk5NWIyOTUzZDYiLCJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiMTE5IiwibmJmIjoxNzY3NTEwNzE4LCJjc3JmIjoiODQ1ZmFmZjctYzY4ZC00MTE2LTg1MjYtMTdmYTUzNjdmM2UxIiwiZXhwIjoxNzY3NTMyMzE4fQ.sriV35vKrM_iOhgkQ5UhA-HDz5tcTujU48dOkcR5kS8
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY3NjM5MTg4LCJqdGkiOiI2ZjllZjMyMi0yNmZkLTQ1YWItYTMzYy00MGVjY2YwYzcyZDIiLCJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiMTE5IiwibmJmIjoxNzY3NjM5MTg4LCJjc3JmIjoiYTczZTNhZGMtNmQ4Yi00MzkwLWI4NTQtY2M1NmIxZjgwZWZkIiwiZXhwIjoxNzY3NjYwNzg4fQ.MzAla2gBuu09RDPB8pFKY9XG19JV6MXjJnKVA4-8rFU
 
 ###
 GET http://localhost:5001
@@ -87,6 +87,5 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "role": "builder",
-  "user_id": 119
+  "role": "admin"
 }

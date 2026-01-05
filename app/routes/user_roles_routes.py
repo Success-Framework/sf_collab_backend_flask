@@ -32,7 +32,7 @@ def get_user_role(role_id):
 def create_user_role():
   try:
     data = request.json
-    user_id = data['user_id']
+    user_id = get_jwt_identity() or data.get('user_id')
     role = data['role']
     user = User.query.get(user_id)
     if not user.is_admin():

@@ -1496,10 +1496,42 @@ LOCK TABLES `application_jobs` WRITE;
 /*!40000 ALTER TABLE `application_jobs` ENABLE KEYS */;
 UNLOCK TABLES;
 
+DROP TABLE IF EXISTS `contribution_ideas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `contribution_ideas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `description` text NOT NULL,
+  `impact` varchar(50) NOT NULL,
+  `area` varchar(100) NOT NULL,
+  `status` varchar(50) NOT NULL,
+  `user_id` int NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `contribution_ideas_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 --
 -- Table structure for table `users`
 --
 
+DROP TABLE IF EXISTS `contribution_polls`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `contribution_polls` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `description` text NOT NULL,
+  `options` json NOT NULL,
+  `points` int NOT NULL,
+  `votes` json DEFAULT NULL,
+  `users_voted` json DEFAULT NULL,
+  `ends_in_days` int NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `users`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

@@ -4,6 +4,7 @@ from app.models.waitlist import Waitlist
 from app.utils.helper import success_response, error_response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.user import User
+from app.models.userRole import UserRole
 # from app.services.sms_service import SMSService
 waitlist_bp = Blueprint("waitlist", __name__)
 
@@ -137,6 +138,7 @@ def add_points():
             'small_contribution': Waitlist.POINTS_PER_SMALL_CONTRIBUTION,
             'medium_contribution': Waitlist.POINTS_PER_CONTRIBUTION,
             'large_contribution': Waitlist.POINTS_PER_LARGE_CONTRIBUTION,
+            'custom': data.get("points", 0)
         }.get(category)
         user.add_points(int(points), category)
     except ValueError as e:
@@ -155,7 +157,9 @@ def give_points():
     data = request.get_json() or {}
     admin_id = get_jwt_identity()
     admin_user = User.query.get(admin_id)
-    
+    user_roles = UserRole.query.filter_by(user_id=user_id).all()
+    if not any(role.is_admin for role in user_roles):
+      return error_response('Unauthorized to view ideas', status=403)
     if not admin_user or not admin_user.is_admin():
         return error_response("Admin access required", 403)
     
@@ -180,6 +184,7 @@ def give_points():
             'small_contribution': Waitlist.POINTS_PER_SMALL_CONTRIBUTION,
             'medium_contribution': Waitlist.POINTS_PER_CONTRIBUTION,
             'large_contribution': Waitlist.POINTS_PER_LARGE_CONTRIBUTION,
+            'custom': data.get("points", 0)
         }.get(category)
         user.add_points(int(points), category)
     except ValueError as e:
