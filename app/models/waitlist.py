@@ -211,7 +211,8 @@ class Waitlist(db.Model):
             self.activity_points += points
         elif category == "new_startup":
             self.activity_points += points
-        
+        elif category == "custom":
+            self.contribution_points += points
         else:
             raise ValueError("Invalid point category")
 
