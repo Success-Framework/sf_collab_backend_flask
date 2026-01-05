@@ -28,9 +28,9 @@ class Waitlist(db.Model):
     activity_points = db.Column(db.Integer, nullable=False, default=0)
     last_activity_at = db.Column(db.DateTime)
     POINTS_PER_REFERRAL = 5
-    POINTS_PER_SMALL_CONTRIBUTION = 5
-    POINTS_PER_CONTRIBUTION = 10
-    POINTS_PER_LARGE_CONTRIBUTION = 20
+    POINTS_PER_SMALL_CONTRIBUTION = 10
+    POINTS_PER_CONTRIBUTION = 25
+    POINTS_PER_LARGE_CONTRIBUTION = 50
     POINTS_PER_ACTIVITY = 1
     POINTS_PER_STARTUP = 30
     ACTIVITY_INTERVAL = timedelta(minutes=30)
@@ -202,6 +202,9 @@ class Waitlist(db.Model):
     def add_points(self, points: int, category: str):
         if category == "referral":
             self.referral_points += points
+            # (need to change information + logic; for each 5 successful referrals, they should get a bonus of 25 points)
+            if self.referral_points % 5 == 0:
+                self.contribution_points += 25  # bonus points for every 5 referrals
         elif category in ["contribution", "small_contribution", "medium_contribution", "large_contribution"]:
             self.contribution_points += points
         elif category == "activity":

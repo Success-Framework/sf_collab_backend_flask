@@ -3,7 +3,7 @@ from app.models.userRole import UserRole
 from app.extensions import db
 from app.utils.helper import success_response, error_response
 from flask_jwt_extended import jwt_required, get_jwt_identity
-
+from app.models.user import User
 user_roles_bp = Blueprint('user_roles', __name__)
 
 #! GET ALL USER ROLES
@@ -32,7 +32,12 @@ def get_user_role(role_id):
 def create_user_role():
   try:
     data = request.json
-    new_role = UserRole(user_id=data['user_id'], role=data['role'])
+    user_id = data['user_id']
+    role = data['role']
+    user = User.query.get(user_id)
+    if not user.is_admin():
+      return error_response("Only admins can assign roles", 403)
+    new_role = UserRole(user_id=user_id, role=role)
     db.session.add(new_role)
     db.session.commit()
     return success_response({'id': new_role.id, 'user_id': new_role.user_id, 'role': new_role.role}, "User role created successfully", 201)

@@ -53,7 +53,8 @@ from .routes import (
     feedback_routes,
     scraper_routes,
     chat_routes,
-    user_roles_routes
+    user_roles_routes,
+    application_routes
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -113,4 +114,5 @@ blueprints = [
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
 {"blueprint": scraper_routes.scraper_bp, "url_prefix": "/api"},
 { "blueprint": user_roles_routes.user_roles_bp, "url_prefix": '/api/user-roles'},
+{ "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' }
 ]

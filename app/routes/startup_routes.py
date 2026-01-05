@@ -8,6 +8,7 @@ from app.models.joinRequest import JoinRequest
 from app.models.Enums import JoinRequestStatus
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
+from app.models.userRole import UserRole
 import os 
 from io import BytesIO
 import json
@@ -137,6 +138,9 @@ def register_startup():
     
     try:
         # Check if request has form data
+        print("FORM:", request.form)
+        print("FILES:", request.files)
+
         if not request.form:
             return error_response('Form data required', 400)
         
@@ -271,10 +275,16 @@ def register_startup():
                         document_type=data.get('document_type', 'general')
                     )
         
+        # Add user to userRoles as founder
+        new_user_role = UserRole(
+            user_id=current_user_id,
+            role='founder'
+        )
+        db.session.add(new_user_role)
         db.session.commit()
         
         # Add creator as first member
-        startup_member = startup.add_member(
+        startup.add_member(
             current_user_id,
             current_user.first_name,
             current_user.last_name,
@@ -282,7 +292,10 @@ def register_startup():
         )
         
         
-        return success_response({'startup': startup.to_dict()}, 'Startup created successfully', 201)
+        return success_response({
+            'startup': startup.to_dict(),
+            'role': 'founder'
+            }, 'Startup created successfully', 201)
         
     except Exception as e:
         db.session.rollback()
