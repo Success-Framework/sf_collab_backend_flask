@@ -33,7 +33,8 @@ def create_app(config_name=None):
     """Create and configure Flask application"""
 
     app = Flask(__name__, instance_relative_config=True)
-    
+    Config.init_stripe()
+
     
     # JWT Configuration
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
@@ -57,6 +58,7 @@ def create_app(config_name=None):
     # Fix for OAuth CSRF state issues - use None (not Lax/Strict) for OAuth redirects
     app.config['SESSION_COOKIE_SAMESITE'] = None  # Changed from 'Lax' to None for OAuth
     app.config['SESSION_COOKIE_SECURE'] = True if os.getenv('FLASK_ENV') == 'production' else False
+    
     # Don't set SESSION_COOKIE_DOMAIN - let it default to the request domain
     # if os.getenv('FLASK_ENV') == 'production':
     #     app.config['SESSION_COOKIE_DOMAIN'] = '.sfcollab.com'

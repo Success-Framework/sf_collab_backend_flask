@@ -586,7 +586,8 @@ def login():
         
         if not user:
             return jsonify({'error': 'Invalid credentials'}), 401
-        
+        if user.status == 'banned':
+            return jsonify({'error': 'Account is banned. Please contact support.'}), 403
         # Check password
         if not check_password_hash(user.password, data['password']):
             return jsonify({'error': 'Invalid credentials'}), 401

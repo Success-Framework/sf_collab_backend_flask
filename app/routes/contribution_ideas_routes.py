@@ -77,8 +77,10 @@ def get_ideas():
     area = request.args.get('area')
     impact = request.args.get('impact')
     user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
     user_roles = UserRole.query.filter_by(user_id=user_id).all()
-    if not any(role.is_admin for role in user_roles):
+    print(user, user_roles)
+    if not any(role.is_admin for role in user_roles) and not user.is_admin():
       return error_response('Unauthorized to view ideas', status=403)
     # Build query
     query = ContributionIdea.query

@@ -4,6 +4,7 @@ import enum
 class UserStatus(enum.Enum):
     active = "active"
     deleted = "deleted"
+    banned = "banned"
     
 class UserRoles(enum.Enum):
     founder = "founder"

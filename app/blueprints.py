@@ -56,7 +56,8 @@ from .routes import (
     user_roles_routes,
     application_routes,
     contribution_ideas_routes,
-    contribution_polls_routes
+    contribution_polls_routes,
+    payment_routes
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -118,5 +119,6 @@ blueprints = [
 { "blueprint": user_roles_routes.user_roles_bp, "url_prefix": '/api/user-roles'},
 { "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' },
 { "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
-{ "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'}
+{ "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
+{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' }
 ]
