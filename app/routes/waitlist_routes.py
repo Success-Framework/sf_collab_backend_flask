@@ -157,9 +157,7 @@ def give_points():
     data = request.get_json() or {}
     admin_id = get_jwt_identity()
     admin_user = User.query.get(admin_id)
-    user_roles = UserRole.query.filter_by(user_id=user_id).all()
-    if not any(role.is_admin for role in user_roles):
-      return error_response('Unauthorized to view ideas', status=403)
+    
     if not admin_user or not admin_user.is_admin():
         return error_response("Admin access required", 403)
     

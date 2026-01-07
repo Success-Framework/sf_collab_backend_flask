@@ -7,15 +7,12 @@ import time
 import json
 from flask import request, g
 from werkzeug.middleware.proxy_fix import ProxyFix
-# very top of create_app or run.py
-from dotenv import load_dotenv
-load_dotenv()
-
 
 from app import create_app
 from app.config import Config
 from app.socket_events import socketio
-
+import stripe
+from app.subscription_plans import insert_default_plans
 warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -25,6 +22,8 @@ print(f"PORT: {os.environ.get('PORT', 'NOT SET')}")
 print("=" * 60)
 
 app = create_app()
+
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
 env = os.environ.get("FLASK_ENV", "development")
 if env == "production":
@@ -90,3 +89,5 @@ if __name__ == "__main__":
         debug=debug,
         use_reloader=False
     )
+    with app.app_context():
+        insert_default_plans()

@@ -20,6 +20,7 @@ class User(db.Model):
     xp_points = db.Column(db.Integer, default=0)
     streak_days = db.Column(db.Integer, default=0)
     last_activity_date = db.Column(db.Date)
+    plan_id = db.Column(db.String, nullable=True) # Subscription plan
     
     # Computed/cached stats
     total_revenue = db.Column(db.Float, default=0.0)
@@ -36,17 +37,17 @@ class User(db.Model):
     profile_timezone = db.Column(db.String(50), nullable=True)
     
     # Multi-Role Profile Fields (from ProfileSetup & MultiRoleProfileForm)
-    roles = db.Column(JSON, default=[])  # Array: ["founder", "builder", "investor", "influencer"]
+    # roles = db.Column(JSON, default=[])  # Array: ["founder", "builder", "investor", "influencer"]
     
     # Role-specific profile data stored as JSON
-    founder_profile = db.Column(JSON, default={})  # Founder-specific data
-    builder_profile = db.Column(JSON, default={})  # Builder-specific data
-    influencer_profile = db.Column(JSON, default={})  # Influencer-specific data
-    investor_profile = db.Column(JSON, default={})  # Investor-specific data
+    # founder_profile = db.Column(JSON, default={})  # Founder-specific data
+    # builder_profile = db.Column(JSON, default={})  # Builder-specific data
+    # influencer_profile = db.Column(JSON, default={})  # Influencer-specific data
+    # investor_profile = db.Column(JSON, default={})  # Investor-specific data
     
-    # Profile completion tracking
-    profile_setup_completed = db.Column(db.Boolean, default=False)  # Basic profile setup (ProfileSetup)
-    role_profile_completed = db.Column(db.Boolean, default=False)  # Multi-role profile (MultiRoleProfileForm)
+    # # Profile completion tracking
+    # profile_setup_completed = db.Column(db.Boolean, default=False)  # Basic profile setup (ProfileSetup)
+    # role_profile_completed = db.Column(db.Boolean, default=False)  # Multi-role profile (MultiRoleProfileForm)
     
     # Preferences
     pref_email_notifications = db.Column(db.Boolean, default=True)
@@ -302,7 +303,13 @@ class User(db.Model):
         back_populates="permission_owner",
         cascade="all, delete-orphan"
     )
-    
+    user_roles = db.relationship(
+        "UserRole",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="joined"
+    )
+
     # ========== HELPER FUNCTIONS ==========
     
     def update_last_activity(self):
@@ -580,16 +587,18 @@ class User(db.Model):
             'fullName': self.get_full_name(),
             'timezone': self.get_timezone(),
             'permissions': [perm.to_dict() for perm in self.permissions],
+            'roles': [ur.role for ur in self.user_roles],
+
             # Multi-role profile data
-            'roles': self.roles or [],
-            'founderProfile': self.founder_profile or {},
-            'builderProfile': self.builder_profile or {},
-            'influencerProfile': self.influencer_profile or {},
-            'investorProfile': self.investor_profile or {},
-            'profileCompletion': {
-                'basicProfileSetup': self.profile_setup_completed,
-                'roleProfileCompleted': self.role_profile_completed
-            }
+            # 'roles': self.roles or [],
+            # 'founderProfile': self.founder_profile or {},
+            # 'builderProfile': self.builder_profile or {},
+            # 'influencerProfile': self.influencer_profile or {},
+            # 'investorProfile': self.investor_profile or {},
+            # 'profileCompletion': {
+            #     'basicProfileSetup': self.profile_setup_completed,
+            #     'roleProfileCompleted': self.role_profile_completed
+            # }
         }
         
         if include_password:

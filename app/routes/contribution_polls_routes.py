@@ -6,6 +6,7 @@ from app.utils.helper import success_response, error_response
 from app.models.user import User
 from app.models.userRole import UserRole
 from datetime import datetime, timedelta
+from app.models.Enums import UserRoles
 poll_bp = Blueprint('contribution_polls', __name__)
 
 # ========================== CREATE POLL ==========================
@@ -16,8 +17,8 @@ def create_poll():
   data = request.get_json()
   user_id = int(get_jwt_identity())
   user = User.query.get(user_id)
-  user_roles = UserRole.query.filter_by(user_id=user_id).all()
-  if not user or user.role != 'admin' and not any(role.is_admin for role in user_roles):
+  print(user, user.role)
+  if not user or not user.is_admin():
     return error_response('Unauthorized', status=403)
   
   
