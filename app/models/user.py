@@ -56,7 +56,7 @@ class User(db.Model):
     pref_language = db.Column(db.String(10), default='en')
     pref_timezone = db.Column(db.String(50), default='UTC')
     pref_theme = db.Column(Enum(Theme), default=Theme.light)
-    
+    pref_builder_preferences = db.Column(db.String(50), default='')  # Builder-specific preferences
     # Notification Settings
     notif_new_comments = db.Column(db.Boolean, default=True)
     notif_new_likes = db.Column(db.Boolean, default=True)
@@ -360,6 +360,7 @@ class User(db.Model):
         db.session.commit()
     
     def update_preferences(self, preferences_data: dict):
+        print(preferences_data, "UPDATING PREFERENCES")
         """Update user preferences"""
         if 'emailNotifications' in preferences_data:
             self.pref_email_notifications = preferences_data['emailNotifications']
@@ -373,9 +374,9 @@ class User(db.Model):
             self.pref_timezone = preferences_data['timezone']
         if 'theme' in preferences_data:
             self.pref_theme = Theme(preferences_data['theme'])
-        
+        if 'builderPreferences' in preferences_data:
+            self.pref_builder_preferences = preferences_data['builderPreferences']
         db.session.commit()
-    
     def update_notification_settings(self, notification_data: dict):
         """Update notification settings"""
         if 'newComments' in notification_data:
@@ -565,7 +566,8 @@ class User(db.Model):
                 'privacy': self._enum_to_value(self.pref_privacy),
                 'language': self.pref_language,
                 'timezone': self.pref_timezone,
-                'theme': self._enum_to_value(self.pref_theme)
+                'theme': self._enum_to_value(self.pref_theme),
+                'builderPreferences': self.pref_builder_preferences
             },
             'notificationSettings': {
                 'newComments': self.notif_new_comments,

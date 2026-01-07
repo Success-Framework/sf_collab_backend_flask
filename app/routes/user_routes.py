@@ -157,6 +157,7 @@ def handle_file_uploads(user_id, user, files):
 #! HANDLE USER DATA UPDATE
 def handle_user_data_update(user_id, user, data):
     """Handle user data updates from JSON"""
+    print(data, "DATA TO UPDATE")
     from app.routes.auth_routes import get_user_response_data
     
     # Update basic fields
@@ -199,8 +200,6 @@ def handle_user_data_update(user_id, user, data):
         elif data['status'] == 'banned':
             user.status = UserStatus.banned
     # Update preferences
-    if 'preferences' in data:
-        user.update_preferences(data['preferences'])
     
     # Update notification settings
     if 'notificationSettings' in data:
@@ -212,18 +211,23 @@ def handle_user_data_update(user_id, user, data):
     if 'roles' in data:
         # Only allow admin users to change roles
         current_user = User.query.get(get_jwt_identity())
-        if current_user.role == UserRoles.admin:
+        if current_user.is_admin() or current_user.id == user.id:
+
             # Delete all existing roles first
             UserRole.query.filter_by(user_id=user.id).delete()
             # Add new roles
+            print(data['roles'])
             for role in data['roles']:
                 userRole = UserRole(
                     user_id=user.id,
                     role=role
                 )
                 db.session.add(userRole)
+    if 'preferences' in data:
+        user.update_preferences(data['preferences'])
+
     db.session.commit()
-        
+    db.session.refresh(user)
     return success_response({'user': get_user_response_data(user)}, 'User updated successfully')
 
 #! UPDATE USER PASSWORD
@@ -355,7 +359,7 @@ def update_user(user_id):
     
     # Authorization check - users can only update their own profile unless they're admin
     current_user = User.query.get(current_user_id)
-    isAdmin = current_user.role == 'admin' or current_user
+    isAdmin = current_user.is_admin() if current_user else False
     if int(user_id) != int(current_user_id) and not isAdmin:
         return error_response('Unauthorized to update this user', 403)
     

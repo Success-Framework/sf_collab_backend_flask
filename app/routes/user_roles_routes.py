@@ -16,6 +16,16 @@ def get_all_user_roles():
   except Exception as e:
     return error_response(f"Error fetching roles: {str(e)}", 500)
 
+#! GET AVAILABLE ROLES
+@user_roles_bp.route('/available', methods=['GET'])
+@jwt_required()
+def get_available_roles():
+  try:
+    available_roles = ['admin', 'user', 'moderator']
+    return success_response(available_roles)
+  except Exception as e:
+    return error_response(f"Error fetching available roles: {str(e)}", 500)
+
 #! GET SINGLE USER ROLE BY ID
 @user_roles_bp.route('/<int:role_id>', methods=['GET'])
 @jwt_required()

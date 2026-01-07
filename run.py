@@ -11,7 +11,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from app import create_app
 from app.config import Config
 from app.socket_events import socketio
-import stripe
+
 from app.subscription_plans import insert_default_plans
 warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -20,12 +20,11 @@ print("=" * 60)
 print("=== RUN.PY STARTING ===")
 print(f"PORT: {os.environ.get('PORT', 'NOT SET')}")
 print("=" * 60)
-
-app = create_app()
-
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
-
 env = os.environ.get("FLASK_ENV", "development")
+app = create_app(env)
+
+
+
 if env == "production":
     app.wsgi_app = ProxyFix(
         app.wsgi_app,
