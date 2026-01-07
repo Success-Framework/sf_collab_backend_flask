@@ -27,10 +27,9 @@ class Config:
     # ------------------------
     # Flask
     # ------------------------
-    DEBUG = False
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    DEBUG = True
     TESTING = False
-
-    SECRET_KEY = os.getenv("SECRET_KEY")
 
     # ------------------------
     # Database
@@ -47,7 +46,7 @@ class Config:
     # ------------------------
     # OAuth
     # ------------------------
-    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5001")
+    BACKEND_URL = os.getenv("APP_DOMAIN", "http://localhost:5001")
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -68,11 +67,11 @@ class Config:
     # ------------------------
     # File uploads
     # ------------------------
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads", "chat_files")
     AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads", "chat_avatars")
 
-    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS = {
         "png",
@@ -90,7 +89,7 @@ class Config:
     # ------------------------
     # JWT
     # ------------------------
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     JWT_ALGORITHM = "HS256"
@@ -104,7 +103,13 @@ class Config:
         "https://sfclb.netlify.app",
         "https://sfmanagers-frontend.vercel.app",
         "https://sfcollab.com",
+        "https://sfcollab.com/",
+        "https://www.sfcollab.com/",
         "https://www.sfcollab.com",
+        "https://api.sfcollab.com",
+        "https://www.api.sfcollab.com",
+        "d329ej3iwi83w9.cloudfront.net",
+        "https://d329ej3iwi83w9.cloudfront.net",
     ]
 
     CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -126,24 +131,44 @@ class Config:
     SESSION_COOKIE_SAMESITE = "None"
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
 
-    # ------------------------
     # Security
-    # ------------------------
-    WTF_CSRF_ENABLED = False  # API only
-
-    # ------------------------
-    # Rate limiting
-    # ------------------------
+    WTF_CSRF_ENABLED = False  # Disabled for API
+    WTF_CSRF_TIME_LIMIT = None
+    
+    # Email (if needed in future)
+    MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+    MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
+    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True') == 'True'
+    MAIL_USERNAME = os.getenv('MAIL_USERNAME')
+    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
+    MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', 'noreply@example.com')
+    
+    # Redis (if needed for caching/celery)
+    REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    
+    # Celery (if needed for background tasks)
+    CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', REDIS_URL)
+    CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', REDIS_URL)
+    
+    # Rate Limiting
     RATELIMIT_ENABLED = True
-    RATELIMIT_DEFAULT = "200 per day;50 per hour"
-    REDIS_URL = os.getenv("REDIS_URL")
-
-    # ------------------------
-    # Stripe
-    # ------------------------
+    RATELIMIT_STORAGE_URL = REDIS_URL
+    RATELIMIT_DEFAULT = "200 per day, 50 per hour"
+    
+    # Logging
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_FILE = os.getenv('LOG_FILE', 'app.log')
+    LOG_MAX_BYTES = 10485760  # 10MB
+    LOG_BACKUP_COUNT = 10
+    
+    # API
+    API_TITLE = 'Startup Platform API'
+    API_VERSION = 'v1'
+    API_PREFIX = '/api'
+    
+    # Timezone
+    TIMEZONE = 'UTC'
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-    STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-
     @staticmethod
     def init_stripe():
         if not Config.STRIPE_SECRET_KEY:
@@ -156,11 +181,13 @@ class Config:
 # ======================================================
 class DevelopmentConfig(Config):
     DEBUG = True
-
+    SQLALCHEMY_ECHO = False  # Set to True for SQL debugging
+    
+    TESTING = False
+    
+    # Disable some security features for easier development
     SESSION_COOKIE_SECURE = False
-    SESSION_COOKIE_SAMESITE = "Lax"
-
-    RATELIMIT_ENABLED = False
+    WTF_CSRF_ENABLED = False
 
 
 # ======================================================
@@ -180,19 +207,32 @@ class TestingConfig(Config):
 # ======================================================
 class ProductionConfig(Config):
     DEBUG = False
+    TESTING = False
+    
+    # Ensure these are set in production
+    SECRET_KEY = os.getenv('SECRET_KEY')
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+    
+    # Strict CORS in production - must be set via environment
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', '').split(',') if os.getenv('CORS_ORIGINS') else []
+    
+    # Enhanced security
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = "None"
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_NAME = "sfcollab_session"
 
-    if not os.getenv("SECRET_KEY"):
-        raise RuntimeError("SECRET_KEY must be set in production")
-
-    if not os.getenv("JWT_SECRET_KEY"):
-        raise RuntimeError("JWT_SECRET_KEY must be set in production")
-
+    # Production database with connection pooling
     SQLALCHEMY_POOL_SIZE = 20
     SQLALCHEMY_MAX_OVERFLOW = 40
+    SQLALCHEMY_POOL_PRE_PING = True
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
     }
+
+    # Logging
+    LOG_LEVEL = 'WARNING'
 
 
 # ======================================================
