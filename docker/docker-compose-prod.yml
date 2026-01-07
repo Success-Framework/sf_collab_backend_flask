@@ -14,12 +14,6 @@ services:
       PORT: 5000
     volumes:
       - ./uploads:/app/uploads
-    command: >
-      gunicorn "app:create_app()"
-      -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker
-      -b 0.0.0.0:5000
-      --workers 2
-      --timeout 120
     depends_on:
       db:
         condition: service_healthy
