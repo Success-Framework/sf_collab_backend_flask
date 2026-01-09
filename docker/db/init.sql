@@ -1729,6 +1729,8 @@ CREATE TABLE `transactions` (
   `user_id` int,
   `plan_id` varchar(255),
   `stripe_payment_intent_id` varchar(255) UNIQUE,
+  `stripe_checkout_session_id` varchar(255) UNIQUE,
+  `type` varchar(50) DEFAULT 'subscription',
   `amount` int,
   `currency` varchar(50),
   `status` varchar(50),
