@@ -88,7 +88,7 @@ def checkout():
                 },
             ],
             mode="payment",
-            ui_mode="custom",
+            ui_mode="hosted",
             metadata={
                 "user_id": user_id,
                 "plan_id": tier_id
@@ -96,10 +96,13 @@ def checkout():
             },
             
             # The URL of your payment completion page
-            return_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}",
+            success_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{current_app.config['FRONTEND_URL']}/checkout/${tier_id}",
         )
         return jsonify({
-            'checkoutSessionClientSecret': session['client_secret']
+            'checkoutSessionClientSecret': session['client_secret'],
+            'url': session['url'],
+            'success': True
         })
     except Exception as e:
         return jsonify(error=str(e)), 403
@@ -118,26 +121,47 @@ def record_transaction():
         plan_id = data.get("plan_id")
         amount = data.get("amount")
         currency = data.get("currency")
+        type = data.get("type", "subscription")
 
-        stripe_payment_intent_id = data.get("stripe_payment_intent_id")
-        if not all([user_id, plan_id, amount, currency, stripe_payment_intent_id]):
-            return jsonify({"error": "Missing required fields"}), 400
-        existing_tx = Transaction.query.filter_by(stripe_payment_intent_id=stripe_payment_intent_id).first()
-        if existing_tx:
-            return jsonify({"error": "Transaction already recorded"}), 400
-        transaction = Transaction(
-            user_id=user_id,
-            plan_id=plan_id,
-            amount=amount,
-            currency=currency,
-            stripe_payment_intent_id=stripe_payment_intent_id,
-            status="completed"
-        )
+        if type not in ["subscription", "donation"]:
+            return jsonify({"error": "Invalid transaction type"}), 400
+        if type == "subscription":
+            stripe_payment_intent_id = data.get("stripe_payment_intent_id")
+            if not all([user_id, plan_id, amount, currency, stripe_payment_intent_id]):
+                return jsonify({"error": "Missing required fields"}), 400
+            existing_tx = Transaction.query.filter_by(stripe_payment_intent_id=stripe_payment_intent_id).first()
+            if existing_tx:
+                return jsonify({"error": "Transaction already recorded"}), 400
+            transaction = Transaction(
+                user_id=user_id,
+                plan_id=plan_id,
+                amount=amount,
+                currency=currency,
+                stripe_payment_intent_id=stripe_payment_intent_id,
+                status="completed"
+            )
+
         # Update user's plan here if needed
-        user = User.query.get(user_id)
-        if user:
-            user.plan_id = plan_id
-        db.session.add(transaction)
+            user = User.query.get(user_id)
+            if user:
+                user.plan_id = plan_id
+            db.session.add(transaction)
+        elif type == "donation":
+            stripe_checkout_session_id = data.get("stripe_checkout_session_id")
+            if not all([user_id, amount, currency, stripe_checkout_session_id]):
+                return jsonify({"error": "Missing required fields for donation"}), 400
+            existing_tx = Transaction.query.filter_by(stripe_checkout_session_id=stripe_checkout_session_id).first()
+            if existing_tx:
+                return jsonify({"error": "Donation transaction already recorded"}), 400
+            transaction = Transaction(
+                user_id=user_id,
+                amount=amount,
+                currency=currency,
+                stripe_checkout_session_id=stripe_checkout_session_id,
+                status="completed",
+                type="donation"
+            )
+            db.session.add(transaction)
         db.session.commit()
         return jsonify({
             "success": True,
@@ -158,23 +182,81 @@ def stripe_webhook():
     except Exception:
         return "", 400
 
-    # PaymentIntent succeeded
-    if event["type"] == "payment_intent.succeeded":
-        intent = event["data"]["object"]
-        user_id = intent["metadata"].get("user_id")
-        plan_id = intent["metadata"].get("plan_id")
+    # ✅ Stripe Checkout completed
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
 
-        # Save transaction
-        from app.models.transaction import Transaction
+        user_id = session["metadata"].get("user_id")
+        tx_type = session["metadata"].get("type", "subscription")
+
+        # Idempotency check
+        existing = Transaction.query.filter_by(
+            stripe_checkout_session_id=session["id"]
+        ).first()
+        if existing:
+            return "", 200
+
         tx = Transaction(
             user_id=user_id,
-            plan_id=plan_id,
-            stripe_payment_intent_id=intent["id"],
-            amount=intent["amount"],
-            currency=intent["currency"],
-            status=intent["status"]
+            plan_id=session["metadata"].get("plan_id"),
+            amount=session["amount_total"],
+            currency=session["currency"],
+            stripe_checkout_session_id=session["id"],
+            status="completed",
+            type=tx_type,
         )
+
         db.session.add(tx)
+
+        # Update plan if subscription
+        if tx_type == "subscription":
+            user = User.query.get(user_id)
+            if user:
+                user.plan_id = session["metadata"].get("plan_id")
+
         db.session.commit()
 
     return "", 200
+
+@payment_bp.route("/create-donation-session", methods=["POST", "OPTIONS"])
+@jwt_required()
+def create_donation_session():
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+    data = request.get_json()
+    amount = data.get("amount")
+    user_id = get_jwt_identity()
+    email = data.get("email")
+    name = data.get("name")
+    message = data.get("message")
+    if not all([amount, user_id, email]):
+        return jsonify({"error": "Missing required fields"}), 400
+    # Create a payment intent or session here
+    session = stripe.checkout.Session.create(
+            line_items=[
+                {
+                    "price_data": {
+                    "currency": 'usd',
+                    "product_data": {"name": 'Donation'},
+                    "unit_amount": amount,
+                },
+                "quantity": 1,
+                },
+            ],
+            mode="payment",
+            ui_mode="hosted",
+            metadata={
+                "user_id": user_id,
+                "message": message,
+                "name": name,
+                "type": "donation"
+            },
+            # The URL of your payment completion page
+            success_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}?donation=true",
+            cancel_url=f"{current_app.config['FRONTEND_URL']}/donate",
+        )
+    return jsonify({
+        'checkoutSessionClientSecret': session['client_secret'],
+        'url': session['url'],
+        'success': True
+    })

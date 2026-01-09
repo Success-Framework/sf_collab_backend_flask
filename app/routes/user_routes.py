@@ -537,3 +537,4 @@ def submit_contact_form():
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to submit contact form: {str(e)}', 500)
+
