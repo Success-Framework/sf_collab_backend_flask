@@ -2,16 +2,17 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from app.extensions import db
 
-# filepath: /Users/ivandavidgomezsilva/Documents/Ivan/Trabajos/SFORGER/SForger_data/SFRepos/sf_collab_backend_flask/app/models/userRole.py
 
 class UserRole(db.Model):
   __tablename__ = 'user_roles'
   
   id = db.Column(db.Integer, primary_key=True)
-  user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+  user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
   role = db.Column(db.String(50), nullable=False)
+
   created_at = db.Column(db.DateTime, default=datetime.utcnow)
-  
+  user = db.relationship("User", back_populates="user_roles")
+
   __table_args__ = (
     db.UniqueConstraint('user_id', 'role', name='unique_user_role'),
   )

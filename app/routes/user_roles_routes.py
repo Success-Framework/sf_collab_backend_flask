@@ -16,6 +16,16 @@ def get_all_user_roles():
   except Exception as e:
     return error_response(f"Error fetching roles: {str(e)}", 500)
 
+#! GET AVAILABLE ROLES
+@user_roles_bp.route('/available', methods=['GET'])
+@jwt_required()
+def get_available_roles():
+  try:
+    available_roles = ['admin', 'user', 'moderator']
+    return success_response(available_roles)
+  except Exception as e:
+    return error_response(f"Error fetching available roles: {str(e)}", 500)
+
 #! GET SINGLE USER ROLE BY ID
 @user_roles_bp.route('/<int:role_id>', methods=['GET'])
 @jwt_required()
@@ -32,15 +42,21 @@ def get_user_role(role_id):
 def create_user_role():
   try:
     data = request.json
-    user_id = data['user_id']
-    role = data['role']
+    user_id = get_jwt_identity() or data.get('user_id')
+    roles = data['roles']
+    # Delete all existing roles for the user first
+    UserRole.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
     user = User.query.get(user_id)
     if not user.is_admin():
       return error_response("Only admins can assign roles", 403)
-    new_role = UserRole(user_id=user_id, role=role)
-    db.session.add(new_role)
+    new_roles = []
+    for role in roles:
+      new_role = UserRole(user_id=user_id, role=role)
+      new_roles.append(new_role)
+      db.session.add(new_role)
     db.session.commit()
-    return success_response({'id': new_role.id, 'user_id': new_role.user_id, 'role': new_role.role}, "User role created successfully", 201)
+    return success_response([{'id': new_role.id, 'user_id': new_role.user_id, 'role': new_role.role} for new_role in new_roles], "User role created successfully", 201)
   except KeyError:
     return error_response("Missing required fields", 400)
   except Exception as e:

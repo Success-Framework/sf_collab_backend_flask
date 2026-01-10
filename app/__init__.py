@@ -34,6 +34,27 @@ def create_app(config_name=None):
 
     app = Flask(__name__, instance_relative_config=True)
     
+    CORS(
+        app,
+        resources={r"/*": {"origins": list(Config.CORS_ORIGINS)}},
+        supports_credentials=True,
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+            "Access-Control-Allow-Origin"
+        ],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    )
+    # @app.after_request
+    # def after_request(response):
+    #     origin = request.headers.get('Origin')
+    #     if origin in app.config['CORS_ORIGINS']:
+    #         response.headers.add('Access-Control-Allow-Origin', origin)
+    #         response.headers.add('Access-Control-Allow-Credentials', 'true')
+    #         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
+    #         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
+    #     return response
     
     # JWT Configuration
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
@@ -57,6 +78,7 @@ def create_app(config_name=None):
     # Fix for OAuth CSRF state issues - use None (not Lax/Strict) for OAuth redirects
     app.config['SESSION_COOKIE_SAMESITE'] = None  # Changed from 'Lax' to None for OAuth
     app.config['SESSION_COOKIE_SECURE'] = True if os.getenv('FLASK_ENV') == 'production' else False
+    
     # Don't set SESSION_COOKIE_DOMAIN - let it default to the request domain
     # if os.getenv('FLASK_ENV') == 'production':
     #     app.config['SESSION_COOKIE_DOMAIN'] = '.sfcollab.com'
@@ -74,20 +96,7 @@ def create_app(config_name=None):
     config_class = get_config(config_name)
     app.config.from_object(config_class)
     app.config.from_pyfile('config.py', silent=True)
-    
-    # Configure CORS
-    CORS(
-        app,
-        resources={r"/api/*": {"origins": Config.CORS_ORIGINS}},
-        supports_credentials=True,
-        allow_headers=[
-            "Content-Type",
-            "Authorization",
-            "X-Requested-With"
-        ],
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    )
-    
+
     
     # Allowed origins for CORS (extended list)
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
@@ -102,21 +111,15 @@ def create_app(config_name=None):
     app.config['SMTP_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_password')
     app.config['SMTP_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'your_default_sender')
     
-    @app.after_request
-    def after_request(response):
-        origin = request.headers.get('Origin')
-        if origin in app.config['CORS_ORIGINS']:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-        return response
+    # AI services}  
+    app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
+    app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
 
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    
+    Config.init_stripe()
    
     # Set SESSION_SQLALCHEMY to use the same db instance
     

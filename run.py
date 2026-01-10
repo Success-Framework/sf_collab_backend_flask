@@ -12,6 +12,7 @@ from app import create_app
 from app.config import Config
 from app.socket_events import socketio
 
+from app.subscription_plans import insert_default_plans
 warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -19,10 +20,11 @@ print("=" * 60)
 print("=== RUN.PY STARTING ===")
 print(f"PORT: {os.environ.get('PORT', 'NOT SET')}")
 print("=" * 60)
-
-app = create_app()
-
 env = os.environ.get("FLASK_ENV", "development")
+app = create_app(env)
+
+
+
 if env == "production":
     app.wsgi_app = ProxyFix(
         app.wsgi_app,
@@ -86,3 +88,5 @@ if __name__ == "__main__":
         debug=debug,
         use_reloader=False
     )
+    with app.app_context():
+        insert_default_plans()

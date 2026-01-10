@@ -1,4 +1,5 @@
 from .routes import (
+    ai_routes,
     auth_routes,
     user_routes,
     profile_routes,
@@ -39,7 +40,6 @@ from .routes import (
     # gemini_route,
     pdf_signing_routes,
     # background_remover,
-    qwen_chat_bp_pdg_br,
     image_editor_routes,
     business_plan_routes,
     cf_img_proccessing_routes,
@@ -55,7 +55,10 @@ from .routes import (
     scraper_routes,
     chat_routes,
     user_roles_routes,
-    application_routes
+    application_routes,
+    contribution_ideas_routes,
+    contribution_polls_routes,
+    payment_routes
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -111,10 +114,14 @@ blueprints = [
 # { "blueprint": background_remover.background_bp, "url_prefix": '/api/background-remover'},
 { "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},\
 { "blueprint": business_plan_routes.plans_bp, "url_prefix": "/api/plans" },
+{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
 {"blueprint": scraper_routes.scraper_bp, "url_prefix": "/api"},
 { "blueprint": user_roles_routes.user_roles_bp, "url_prefix": '/api/user-roles'},
-{ "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' }
+{ "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' },
+{ "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
+{ "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
+{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' }
 ]

@@ -4,6 +4,7 @@ from app.models.waitlist import Waitlist
 from app.utils.helper import success_response, error_response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.user import User
+from app.models.userRole import UserRole
 # from app.services.sms_service import SMSService
 waitlist_bp = Blueprint("waitlist", __name__)
 
@@ -137,6 +138,7 @@ def add_points():
             'small_contribution': Waitlist.POINTS_PER_SMALL_CONTRIBUTION,
             'medium_contribution': Waitlist.POINTS_PER_CONTRIBUTION,
             'large_contribution': Waitlist.POINTS_PER_LARGE_CONTRIBUTION,
+            'custom': data.get("points", 0)
         }.get(category)
         user.add_points(int(points), category)
     except ValueError as e:
@@ -180,6 +182,7 @@ def give_points():
             'small_contribution': Waitlist.POINTS_PER_SMALL_CONTRIBUTION,
             'medium_contribution': Waitlist.POINTS_PER_CONTRIBUTION,
             'large_contribution': Waitlist.POINTS_PER_LARGE_CONTRIBUTION,
+            'custom': data.get("points", 0)
         }.get(category)
         user.add_points(int(points), category)
     except ValueError as e:

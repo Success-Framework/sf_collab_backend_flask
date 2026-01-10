@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, send_from_directory
 from app.models.user import User
+from app.models.userRole import UserRole
 from app.models.Enums import UserStatus, Privacy, Theme, EmailDigest
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
@@ -156,6 +157,7 @@ def handle_file_uploads(user_id, user, files):
 #! HANDLE USER DATA UPDATE
 def handle_user_data_update(user_id, user, data):
     """Handle user data updates from JSON"""
+    print(data, "DATA TO UPDATE")
     from app.routes.auth_routes import get_user_response_data
     
     # Update basic fields
@@ -190,10 +192,14 @@ def handle_user_data_update(user_id, user, data):
     # Update profile
     if 'profile' in data:
         user.update_profile(data['profile'])
-    
+    if 'status' in data:
+        if data['status'] == 'active':
+            user.activate()
+        elif data['status'] == 'inactive':
+            user.deactivate()
+        elif data['status'] == 'banned':
+            user.status = UserStatus.banned
     # Update preferences
-    if 'preferences' in data:
-        user.update_preferences(data['preferences'])
     
     # Update notification settings
     if 'notificationSettings' in data:
@@ -202,9 +208,26 @@ def handle_user_data_update(user_id, user, data):
     # Update password if provided
     if 'password' in data and 'currentPassword' in data:
         update_user_password(user, data['currentPassword'], data['password'])
-    
+    if 'roles' in data:
+        # Only allow admin users to change roles
+        current_user = User.query.get(get_jwt_identity())
+        if current_user.is_admin() or current_user.id == user.id:
+
+            # Delete all existing roles first
+            UserRole.query.filter_by(user_id=user.id).delete()
+            # Add new roles
+            print(data['roles'])
+            for role in data['roles']:
+                userRole = UserRole(
+                    user_id=user.id,
+                    role=role
+                )
+                db.session.add(userRole)
+    if 'preferences' in data:
+        user.update_preferences(data['preferences'])
+
     db.session.commit()
-        
+    db.session.refresh(user)
     return success_response({'user': get_user_response_data(user)}, 'User updated successfully')
 
 #! UPDATE USER PASSWORD
@@ -335,7 +358,9 @@ def update_user(user_id):
         return error_response('User not found', 404)
     
     # Authorization check - users can only update their own profile unless they're admin
-    if int(user_id) != int(current_user_id) :
+    current_user = User.query.get(current_user_id)
+    isAdmin = current_user.is_admin() if current_user else False
+    if int(user_id) != int(current_user_id) and not isAdmin:
         return error_response('Unauthorized to update this user', 403)
     
     try:
@@ -344,7 +369,10 @@ def update_user(user_id):
             return handle_file_uploads(user_id, user, request.files)
         
         # Handle JSON data updates
-        data = request.get_json() if request.is_json else {}
+        if not request.get_json(silent=True):
+            data = request.form.to_dict()
+        else:
+            data = request.get_json()  
         return handle_user_data_update(user_id, user, data)
         
     except ValueError as e:
@@ -509,3 +537,4 @@ def submit_contact_form():
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to submit contact form: {str(e)}', 500)
+
