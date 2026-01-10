@@ -1,69 +1,131 @@
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import inch
-from datetime import datetime
+from groq import Groq
 import os
+import re
 
-def generate_plan_section(plan, sections, financials, projections, output_path):
-    doc = SimpleDocTemplate(
-        output_path,
-        pagesize=A4,
-        rightMargin=50,
-        leftMargin=50,
-        topMargin=50,
-        bottomMargin=50
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+SECTION_PROMPTS = {
+    "executive_summary": """
+Write an investor-ready executive summary.
+
+Business Idea:
+{idea}
+
+Industry: {industry}
+Stage: {stage}
+Target Market: {market}
+""",
+
+    "problem_solution": """
+Describe the problem and solution.
+
+Problem:
+{problem}
+
+Solution:
+{solution}
+""",
+
+    "market_overview": """
+Write a market overview.
+
+Industry: {industry}
+Target Market: {market}
+""",
+
+    "business_model": """
+Explain the business model.
+
+Revenue Model:
+{revenue_model}
+""",
+
+    "operations": """
+Describe operations.
+
+Team:
+{team}
+
+Operations:
+{operations}
+""",
+
+    "marketing": """
+Write a marketing strategy.
+
+Channels:
+{channels}
+""",
+
+    "financial_narrative": """
+Write a 3-year financial narrative.
+
+Revenue assumptions:
+{revenue}
+
+Costs:
+{costs}
+"""
+}
+
+
+
+
+def strip_thinking(text: str) -> str:
+    """
+    Removes <think>...</think> blocks from LLM output
+    """
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+def normalize_inputs(inputs: dict) -> dict:
+    return {
+        "idea": inputs.get("idea", ""),
+        "industry": inputs.get("industry", ""),
+        "stage": inputs.get("stage", ""),
+        "market": inputs.get("market", ""),
+        "problem": inputs.get("problem", ""),
+        "solution": inputs.get("solution", ""),
+        "revenue_model": inputs.get("revenue_model", "Subscription-based SaaS"),
+        "pricing": inputs.get("pricing", "Tiered monthly pricing"),
+        "revenue": inputs.get("revenue", "Recurring SaaS subscriptions with monthly growth"),
+        "team": inputs.get("team", "Founding team with SaaS and AI experience"),
+        "operations": inputs.get("operations", "Lean remote-first operations"),
+        "channels": inputs.get("channels", "Content marketing, partnerships"),
+        "costs": inputs.get("costs", "Cloud infrastructure, development, marketing")
+    }
+
+
+def generate_section(section_type, inputs, existing_content=None, action="generate"):
+    prompt_template = SECTION_PROMPTS.get(section_type)
+
+    if not prompt_template:
+        raise ValueError("Invalid section type")
+    inputs = normalize_inputs(inputs)
+    base_prompt = prompt_template.format(**inputs)
+
+    if action == "rewrite" and existing_content:
+        base_prompt = f"""
+Rewrite the following content professionally:
+
+{existing_content}
+"""
+
+    elif action == "expand" and existing_content:
+        base_prompt = f"""
+Expand the following content with more detail:
+
+{existing_content}
+"""
+
+    response = client.chat.completions.create(
+        model="qwen/qwen3-32b",
+        messages=[
+            {"role": "system", "content": "You are a professional startup business consultant."},
+            {"role": "user", "content": base_prompt}
+        ],
+        temperature=0.6,
+        max_tokens=1200
     )
 
-    styles = getSampleStyleSheet()
-    story = []
-
-    # Cover Page
-    story.append(Paragraph(plan.title, styles['Title']))
-    story.append(Spacer(1, 0.3 * inch))
-    story.append(Paragraph(f"<b>Industry:</b> {plan.industry}", styles['Normal']))
-    story.append(Paragraph(f"<b>Stage:</b> {plan.stage}", styles['Normal']))
-    story.append(Paragraph(
-        f"<b>Generated on:</b> {datetime.utcnow().strftime('%Y-%m-%d')}",
-        styles['Normal']
-    ))
-    story.append(Spacer(1, 1 * inch))
-
-    # Table of Contents
-    story.append(Paragraph("Table of Contents", styles['Heading1']))
-    toc_items = [
-        "Executive Summary",
-        "Problem & Solution",
-        "Market Overview",
-        "Business Model",
-        "Operations Plan",
-        "Marketing Strategy",
-        "Financial Overview"
-    ]
-    for item in toc_items:
-        story.append(Paragraph(item, styles['Normal']))
-    story.append(Spacer(1, 0.5 * inch))
-
-    # Sections
-    for section in sections:
-        story.append(Paragraph(section.type.replace("_", " ").title(), styles['Heading1']))
-        story.append(Spacer(1, 0.2 * inch))
-        story.append(Paragraph(section.content, styles['Normal']))
-        story.append(Spacer(1, 0.4 * inch))
-
-    # Financial Table
-    if projections:
-        story.append(Paragraph("Financial Summary", styles['Heading1']))
-
-        table_data = [["Year", "Revenue", "Expenses", "Profit/Loss"]]
-        for p in projections:
-            table_data.append([
-                p["year"],
-                f"${p['revenue']}",
-                f"${p['expenses']}",
-                f"${p['profit']}"
-            ])
-
-        story.append(Table(table_data, hAlign='LEFT'))
-
-    doc.build(story)
+    raw_output = response.choices[0].message.content
+    clean_output = strip_thinking(raw_output)
+    return clean_output
