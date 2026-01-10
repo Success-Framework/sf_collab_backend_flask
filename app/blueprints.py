@@ -1,4 +1,5 @@
 from .routes import (
+    ai_routes,
     auth_routes,
     user_routes,
     profile_routes,
@@ -39,7 +40,6 @@ from .routes import (
     # gemini_route,
     pdf_signing_routes,
     # background_remover,
-    qwen_chat_bp_pdg_br,
     image_editor_routes,
     cf_img_proccessing_routes,
     
@@ -111,7 +111,7 @@ blueprints = [
 { "blueprint": waitlist_routes.waitlist_bp, "url_prefix": '/api/waitlist'},
 { "blueprint": pdf_signing_routes.pdf_bp, "url_prefix": '/api/pdf'},
 # { "blueprint": background_remover.background_bp, "url_prefix": '/api/background-remover'},
-{ "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},
+{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },

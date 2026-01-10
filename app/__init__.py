@@ -111,7 +111,9 @@ def create_app(config_name=None):
     app.config['SMTP_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_password')
     app.config['SMTP_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'your_default_sender')
     
-
+    # AI services}  
+    app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
+    app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
 
     # Initialize extensions
     db.init_app(app)

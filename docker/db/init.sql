@@ -46,6 +46,7 @@ CREATE TABLE `users` (
   `plan_id` VARCHAR(255) DEFAULT NULL,
   `xp_points` int DEFAULT NULL,
   `streak_days` int DEFAULT NULL,
+  `credits` int DEFAULT 0,
   `last_activity_date` date DEFAULT NULL,
   `total_revenue` float DEFAULT NULL,
   `satisfaction_percentage` float DEFAULT NULL,

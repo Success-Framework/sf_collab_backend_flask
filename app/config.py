@@ -103,12 +103,9 @@ class Config:
         "https://sfclb.netlify.app",
         "https://sfmanagers-frontend.vercel.app",
         "https://sfcollab.com",
-        "https://sfcollab.com/",
-        "https://www.sfcollab.com/",
         "https://www.sfcollab.com",
         "https://api.sfcollab.com",
         "https://www.api.sfcollab.com",
-        "d329ej3iwi83w9.cloudfront.net",
         "https://d329ej3iwi83w9.cloudfront.net",
     ]
 

@@ -361,17 +361,20 @@ def register():
         brand_name = os.getenv("BRAND_NAME", "SFCollab")
         # Add user to general chat
         ChatConversation.add_to_general_chat(user)
-
-        email_service.send_email(user.email, f"Welcome to {brand_name}!",
-                                                thank_email_template(
-                                                data={
-                                                    "user": {
-                                                    "name": f"{user.first_name} {user.last_name}",
-                                                    "email": user.email
-                                                    }
-                                                },
-                                                see_email_template=False
-                                            ))
+        try:
+            email_service.send_email(user.email, f"Welcome to {brand_name}!",
+                                                    thank_email_template(
+                                                    data={
+                                                        "user": {
+                                                        "name": f"{user.first_name} {user.last_name}",
+                                                        "email": user.email
+                                                        }
+                                                    },
+                                                    see_email_template=False
+                                                ))
+        except Exception as email_error:
+            print(f"Error sending welcome email: {str(email_error)}")
+            pass
         return jsonify({
             'message': 'User registered successfully',
             'access_token': access_token,
