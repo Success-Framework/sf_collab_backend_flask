@@ -1,6 +1,13 @@
 import os
 import uuid
 import json
+import re
+from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from openai import OpenAI
+import base64
+from app.models.user import User
+from app.extensions import db
 from flask import Blueprint, request, jsonify, send_file
 from dotenv import load_dotenv
 from groq import Groq
@@ -9,24 +16,28 @@ from pathlib import Path
 import logging
 from datetime import datetime
 import requests
-
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.models.user import User
 # Load environment variables
 load_dotenv()
 
 # Create blueprint
-qwen_bp = Blueprint('qwen', __name__)
+ai_bp = Blueprint('qwen', __name__)
 
 # Configuration
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+def get_groq_client():
+    key = current_app.config.get("GROQ_API_KEY")
+    return Groq(api_key=key) if key else None
+
+def get_openai_client():
+    key = current_app.config.get("OPENAI_API_KEY")
+    return OpenAI(api_key=key) if key else None
+
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 QWN_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'qwen_generated')  # Changed name
 
 # Create upload folder
 Path(QWN_UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
-
-# Initialize Groq client
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 # Available models
 AVAILABLE_MODELS = [
@@ -47,12 +58,16 @@ def standard_response(success=True, data=None, error=None, code=200):
 # ============================================================
 
 #! HEALTH CHECK
-@qwen_bp.route('/health', methods=['GET'])
+@ai_bp.route('/health', methods=['GET'])
 def qwen_health():
     """Health check endpoint"""
+    OPENAI_API_KEY = current_app.config.get("OPENAI_API_KEY")
+    GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
     try:
         status = {
-            'status': 'ready' if GROQ_API_KEY else 'no_api_key',
+            'status': 'ready' if GROQ_API_KEY or OPENAI_API_KEY else 'no_api_key',
+            'openai_api_key': bool(OPENAI_API_KEY),
+            'groq_api_key': bool(GROQ_API_KEY),
             'version': '1.0.0',
             'models_available': len(AVAILABLE_MODELS),
             'timestamp': datetime.now().isoformat()
@@ -63,7 +78,7 @@ def qwen_health():
         return standard_response(False, None, str(e), 500)
 
 #! GET AVAILABLE MODELS
-@qwen_bp.route('/models', methods=['GET'])
+@ai_bp.route('/models', methods=['GET'])
 def get_models():
     """Get available models"""
     try:
@@ -90,15 +105,20 @@ def get_models():
 
 #! GENERATE CONTENT
 #! GENERATE CONTENT
-@qwen_bp.route('/generate', methods=['POST'])
+@ai_bp.route('/generate', methods=['POST', 'OPTIONS'])
 def qwen_generate():
     """Generate content (chat, business plan, pitch deck) with structured JSON output"""
     try:
+        if request.method == 'OPTIONS':
+            return standard_response(True, {}, code=200)
         data = request.get_json()
-        
+
         if not data or 'prompt' not in data:
             return standard_response(False, None, 'Missing prompt in request', 400)
-        
+        OPENAI_API_KEY = current_app.config.get("OPENAI_API_KEY")
+        GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
+        groq_client = get_groq_client()
+
         prompt = data.get('prompt')
         model = data.get('model', AVAILABLE_MODELS[0])
         content_type = data.get('content_type', 'chat')  # chat, business_plan, pitch_deck
@@ -283,17 +303,21 @@ def qwen_generate():
         return standard_response(False, None, str(e), 500)
         
 ### Chat 
-@qwen_bp.route('/chat', methods=['POST'])
+@ai_bp.route('/chat', methods=['POST', 'OPTIONS'])
 def qwen_chat():
     """
     Chat-style endpoint compatible with frontend QwenChat.jsx
     """
     try:
+        if request.method == 'OPTIONS':
+            return standard_response(True, {}, code=200)
         data = request.get_json()
 
         if not data or 'messages' not in data:
             return standard_response(False, None, 'Missing messages in request', 400)
 
+        GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
+        groq_client = get_groq_client()
         messages = data.get('messages', [])
         temperature = data.get('temperature', 0.7)
         max_tokens = data.get('max_tokens', 2048)
@@ -381,7 +405,7 @@ def _json_to_text(self, data, indent=0):
     
     
 #! DOWNLOAD GENERATED CONTENT
-@qwen_bp.route('/download/<filename>', methods=['GET'])
+@ai_bp.route('/download/<filename>', methods=['GET'])
 def download_content(filename):
     """Download generated content"""
     try:
@@ -400,3 +424,191 @@ def download_content(filename):
     except Exception as e:
         logging.error(f'Download error: {str(e)}')
         return standard_response(False, None, str(e), 500)
+    
+@ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
+@jwt_required()
+def generate_logo():
+    if request.method == 'OPTIONS':
+        return standard_response(True, {}, code=200)
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json()
+
+    brand_name = data.get("brandName")
+    industry = data.get("industry", "technology")
+    style = data.get("style", "minimal")
+    colors = data.get("colors", [])
+    logo_type = "icon + wordmark"
+    additional_notes = data.get("additionalNotes", "")
+    subtitle = data.get("subtitle", "")
+    symbol = data.get("symbol", "abstract")
+    IMAGE_COUNT = data.get("imagesAmount", 2)
+    if not brand_name:
+        return jsonify({"error": "brandName is required"}), 400
+
+    COST_PER_IMAGE = 50
+    IMAGE_COUNT = 2
+    total_cost = COST_PER_IMAGE * IMAGE_COUNT
+
+    # if user.credits < total_cost:
+    #     return jsonify({"error": "Not enough credits"}), 402
+
+
+    prompt = f"""
+        Minimal flat vector logo for a startup named "{brand_name}".
+        Industry: {industry}.
+        Subtitle: {subtitle}.
+        Style: {style}.
+        Logo type: {logo_type}.
+        Symbol idea: {symbol}.
+        Color palette: {", ".join(colors) if colors else "black and white"}.
+        Additional notes: {additional_notes}.
+        White or transparent background.
+        Flat design.
+        No gradients.
+        No mockups.
+        SVG style.
+        Centered composition.
+    """
+
+    client = get_openai_client()
+
+    try:
+        response = client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="1024x1024",
+            n=IMAGE_COUNT,
+            background="transparent"
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    images = []
+
+    for img in response.data:
+        image_id = str(uuid.uuid4())
+        images.append({
+            "id": image_id,
+            "base64": img.b64_json
+        })
+
+    # user.credits -= total_cost
+    # db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "cost": total_cost,
+        "images": images
+    }), 200
+
+# @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
+# @jwt_required()
+# def generate_logo():
+#     if request.method == "OPTIONS":
+#         return standard_response(True, {}, code=200)
+
+#     user_id = get_jwt_identity()
+#     user = User.query.get(user_id)
+
+#     if not user:
+#         return jsonify({"error": "Unauthorized"}), 401
+
+#     data = request.get_json()
+
+#     brand_name = data.get("brandName")
+#     industry = data.get("industry", "technology")
+#     style = data.get("style", "minimal")
+#     colors = data.get("colors", [])
+#     additional_notes = data.get("additionalNotes", "")
+#     subtitle = data.get("subtitle", "")
+#     symbol = data.get("symbol", "abstract")
+
+#     if not brand_name:
+#         return jsonify({"error": "brandName is required"}), 400
+
+#     LOGO_COUNT = 4
+#     COST_PER_LOGO = 10
+#     total_cost = LOGO_COUNT * COST_PER_LOGO
+
+#     # if user.credits < total_cost:
+#     #     return jsonify({"error": "Not enough credits"}), 402
+
+#     palette = ", ".join(colors) if colors else "black and white"
+
+#     prompt = f"""
+# You are a professional logo designer.
+
+# Generate {LOGO_COUNT} DIFFERENT LOGO SYMBOLS as PURE SVG.
+
+# CRITICAL RULES:
+# - DO NOT include any text
+# - DO NOT include brand name
+# - DO NOT include subtitle
+# - DO NOT use <text> tags
+# - SYMBOL / ICON ONLY
+# - Flat
+# - Vector
+# - Minimal
+# - Transparent background
+# - Centered
+# - Clean geometry
+# - Use only <path>, <rect>, <circle>, <polygon>
+
+# Brand context (for inspiration only):
+# Name: {brand_name}
+# Industry: {industry}
+# Style: {style}
+# Symbol idea: {symbol}
+# Colors: {palette}
+
+# Wrap each SVG between:
+# <!-- LOGO START -->
+# <!-- LOGO END -->
+# """
+
+
+#     client = get_openai_client()
+
+#     try:
+#         response = client.responses.create(
+#             model="gpt-4.1-mini",
+#             input=prompt
+#         )
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+#     text_output = response.output_text or ""
+
+#     # Extract SVG blocks
+#     svg_blocks = re.findall(
+#         r"<!-- LOGO START -->(.*?)<!-- LOGO END -->",
+#         text_output,
+#         re.DOTALL
+#     )
+
+#     images = []
+
+#     for svg in svg_blocks[:LOGO_COUNT]:
+#         images.append({
+#             "id": str(uuid.uuid4()),
+#             "svg": svg.strip()
+#         })
+
+#     if not images:
+#         return jsonify({"error": "No SVGs generated"}), 500
+
+#     # user.credits -= total_cost
+#     # db.session.commit()
+
+#     return jsonify({
+#         "success": True,
+#         "type": "svg",
+#         "count": len(images),
+#         "cost": total_cost,
+#         "images": images
+#     }), 200

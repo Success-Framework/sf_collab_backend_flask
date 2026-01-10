@@ -1,6 +1,7 @@
 import stripe
 from flask import Blueprint, request, jsonify, current_app, abort
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_cors import cross_origin
 from app.models.transaction import Transaction
 from app.extensions import db
 from app.models.plan import Plan
@@ -12,16 +13,20 @@ payment_bp = Blueprint("payments", __name__, url_prefix="/payments")
 
 
 @payment_bp.route("/plans", methods=["GET"])
+@cross_origin()
 def get_plans():
     plans = PLANS
-
-
+    print("Fetching plans")
+    type = request.args.get("type")
+    if type:
+        plans = list(filter(lambda p: p.get('category') == type, PLANS))
     return jsonify([{
             "id": plan['id'],
             "title": plan['title'],
-            "price": plan['price'] / 100,
+            "currency": plan.get('currency', 'usd'),
+            "description": plan.get('description', ''),
             "interval": plan.get('interval'),
-            "features": plan['features']
+            "roles": plan.get('roles', []),
         } for plan in plans])
     # return jsonify([
     #     {

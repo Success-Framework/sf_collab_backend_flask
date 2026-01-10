@@ -21,7 +21,7 @@ class User(db.Model):
     streak_days = db.Column(db.Integer, default=0)
     last_activity_date = db.Column(db.Date)
     plan_id = db.Column(db.String, nullable=True) # Subscription plan
-    
+    credits = db.Column(db.Integer, default=0)  # For tracking user credits
     # Computed/cached stats
     total_revenue = db.Column(db.Float, default=0.0)
     satisfaction_percentage = db.Column(db.Float, default=100.0)
