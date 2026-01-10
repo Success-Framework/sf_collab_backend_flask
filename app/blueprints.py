@@ -41,6 +41,7 @@ from .routes import (
     pdf_signing_routes,
     # background_remover,
     image_editor_routes,
+    business_plan_routes,
     cf_img_proccessing_routes,
     
     permission_routes,
@@ -112,6 +113,8 @@ blueprints = [
 { "blueprint": pdf_signing_routes.pdf_bp, "url_prefix": '/api/pdf'},
 # { "blueprint": background_remover.background_bp, "url_prefix": '/api/background-remover'},
 { "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},
+{ "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},\
+{ "blueprint": business_plan_routes.plans_bp, "url_prefix": "/api/plans" },
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
