@@ -45,7 +45,7 @@ def export_business_plan_docx(plan, sections, financials, projections=None):
     doc.add_page_break()
 
     # ---------------- SECTIONS ----------------
-    section_map = {s.type: s for s in sections}
+    section_map = {s.section_type: s for s in sections}
 
     for section_type in SECTION_ORDER:
         section = section_map.get(section_type)

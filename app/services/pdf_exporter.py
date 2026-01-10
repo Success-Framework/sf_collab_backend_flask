@@ -39,10 +39,10 @@ def export_business_plan_pdf(plan, sections, financials):
     story.append(PageBreak())
 
     # ---------------- SECTIONS ----------------
-    ordered_sections = sorted(sections, key=lambda s: s.type)
+    ordered_sections = sorted(sections, key=lambda s: s.section_type)
 
     for section in ordered_sections:
-        title = section.type.replace("_", " ").title()
+        title = section.section_type.replace("_", " ").title()
         story.append(Paragraph(title, styles['Heading1']))
         story.append(Spacer(1, 0.2 * inch))
         story.append(Paragraph(section.content.replace("\n", "<br/>"), styles['Normal']))
