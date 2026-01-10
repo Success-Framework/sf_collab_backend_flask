@@ -33,6 +33,42 @@ def get_openai_client():
     key = current_app.config.get("OPENAI_API_KEY")
     return OpenAI(api_key=key) if key else None
 
+
+def extract_text_from_response(response, *, expect_json=False, strict=False):
+    texts = []
+
+    for item in getattr(response, "output", []):
+        # item is ResponseOutputMessage
+        for content in getattr(item, "content", []):
+            # content is ResponseOutputText / tool calls / etc
+            if getattr(content, "type", None) == "output_text":
+                text = getattr(content, "text", "").strip()
+                if text:
+                    texts.append(text)
+
+    if not texts:
+        return [] if expect_json else ""
+
+    combined = "\n".join(texts).strip()
+
+    if not expect_json:
+        return combined
+
+    # --- JSON sanitation ---
+    cleaned = re.sub(r"^```(?:json)?|```$", "", combined, flags=re.IGNORECASE).strip()
+
+    match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
+    if not match:
+        if strict:
+            raise ValueError("No JSON found in model response")
+        return cleaned
+
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError as e:
+        if strict:
+            raise ValueError(f"Invalid JSON from model: {e}")
+        return match.group(1)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 QWN_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'qwen_generated')  # Changed name
 
@@ -424,7 +460,9 @@ def download_content(filename):
     except Exception as e:
         logging.error(f'Download error: {str(e)}')
         return standard_response(False, None, str(e), 500)
-    
+
+
+
 @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
 @jwt_required()
 def generate_logo():
@@ -446,36 +484,120 @@ def generate_logo():
     additional_notes = data.get("additionalNotes", "")
     subtitle = data.get("subtitle", "")
     symbol = data.get("symbol", "abstract")
-    IMAGE_COUNT = data.get("imagesAmount", 2)
     if not brand_name:
         return jsonify({"error": "brandName is required"}), 400
 
     COST_PER_IMAGE = 50
-    IMAGE_COUNT = 2
+    IMAGE_COUNT = data.get("imagesAmount", 2)
+
     total_cost = COST_PER_IMAGE * IMAGE_COUNT
 
     # if user.credits < total_cost:
     #     return jsonify({"error": "Not enough credits"}), 402
+    
+    client = get_openai_client()
+    slogan_prompt = f"""
+        You are a professional brand designer.
+
+        Return ONLY valid JSON.
+        Do not include markdown.
+        Do not include explanations.
+        Do not include comments.
+
+        Schema:
+        [
+        {{
+            "font_family": "string",
+            "font_weight": number,
+            "letter_spacing": number,
+            "text_case": "uppercase | title | sentence",
+            "alignment": "center | left",
+            "placement": "below | right | stacked",
+            "mood": "string"
+        }}
+        ]
+
+        Brand name: {brand_name}
+        Slogan: "{subtitle}"
+        Industry: {industry}
+        Style: {style}
+        Additional notes: {additional_notes}
+
+        Generate exactly 4 variants.
+        """
+    slogan_responses = []
+    try:
+        slogan_response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=slogan_prompt
+        )
+        print(slogan_response)
+        slogan_responses = extract_text_from_response(slogan_response, expect_json=True, strict=True)
+
+        if not slogan_responses:
+            raise ValueError("Empty slogan response")
+    except Exception as e:
+        return jsonify({"error": f"Slogan generation failed: {str(e)}"}), 500
 
 
     prompt = f"""
-        Minimal flat vector logo for a startup named "{brand_name}".
-        Industry: {industry}.
-        Subtitle: {subtitle}.
-        Style: {style}.
-        Logo type: {logo_type}.
-        Symbol idea: {symbol}.
-        Color palette: {", ".join(colors) if colors else "black and white"}.
-        Additional notes: {additional_notes}.
-        White or transparent background.
-        Flat design.
-        No gradients.
-        No mockups.
-        SVG style.
-        Centered composition.
-    """
+        You are a world-class brand identity designer creating a professional startup logo.
 
-    client = get_openai_client()
+        TASK:
+        Create a PREMIUM vector logo SYMBOL (ICON ONLY).
+        NO text. NO letters. NO slogan.
+
+        BRAND CONTEXT:
+        - Brand name: "{brand_name}" (for concept inspiration only — DO NOT RENDER TEXT)
+        - Industry: {industry}
+        - Style direction: {style}
+        - Symbol concept: {symbol}
+        - Color palette: {", ".join(colors) if colors else "black and white"}
+        - Additional notes: {additional_notes}
+
+        DESIGN REQUIREMENTS:
+        - Icon must be abstract, distinctive, and scalable
+        - Must work at very small sizes (favicon-ready)
+        - Strong silhouette, simple geometry
+        - Balanced proportions
+        - Professional, modern, startup-ready
+
+        STRICT RULES:
+        - NO text
+        - NO letters
+        - NO numbers
+        - NO gradients
+        - NO shadows
+        - NO 3D
+        - NO mockups
+        - NO backgrounds or scenes
+        - NO UI frames
+
+        STYLE:
+        - Flat vector design
+        - Clean geometric shapes
+        - Consistent stroke or solid fills
+        - SVG-style iconography
+        - High contrast
+        - Minimal visual noise
+
+        COMPOSITION:
+        - Centered
+        - Isolated symbol
+        - Transparent or pure white background
+        - Plenty of padding around the icon
+
+        OUTPUT QUALITY:
+        - Crisp edges
+        - Logo system quality (not illustration)
+        - Looks suitable for branding, app icon, and print
+
+        Think like a senior brand designer, not an illustrator.
+        """
+
+
+
+    
 
     try:
         response = client.images.generate(
@@ -503,7 +625,8 @@ def generate_logo():
     return jsonify({
         "success": True,
         "cost": total_cost,
-        "images": images
+        "images": images,
+        "slogan_designs": slogan_responses
     }), 200
 
 # @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
