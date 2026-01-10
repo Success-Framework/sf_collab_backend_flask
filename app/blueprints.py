@@ -115,6 +115,9 @@ blueprints = [
 { "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},
 { "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},\
 { "blueprint": business_plan_routes.plans_bp, "url_prefix": "/api/plans" },
+{ "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},\
+{ "blueprint": business_plan_routes.plans_bp, "url_prefix": "/api/plans" },
+{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
