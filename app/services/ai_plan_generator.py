@@ -2,7 +2,6 @@ from groq import Groq
 import os
 import re
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 SECTION_PROMPTS = {
     "executive_summary": """
@@ -114,7 +113,9 @@ Rewrite the following content professionally:
 Expand the following content with more detail:
 
 {existing_content}
-"""
+""" 
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
 
     response = client.chat.completions.create(
         model="qwen/qwen3-32b",

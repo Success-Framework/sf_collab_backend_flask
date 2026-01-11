@@ -234,7 +234,7 @@ PLANS = [
                   {
                       "title": "Builder Early",
                       "id": "builder-early",
-                      "price": 9900,
+                      "price": 990,
                       "badge_id": "builder-early-badge",
                       "features": [
                           "Higher matching & discovery priority: surfaced earlier to founders",
@@ -276,7 +276,7 @@ PLANS = [
                   {
                       "title": "Builder Power Supporter",
                       "id": "builder-power-supporter",
-                      "price": 99900,
+                      "price": 9990,
                       "badge_id": "builder-power-supporter-badge",
                       "features": [
                           "Top priority across matching, access, and features",
