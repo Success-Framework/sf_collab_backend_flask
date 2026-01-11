@@ -280,22 +280,20 @@ class User(db.Model):
         cascade='all, delete-orphan',
         foreign_keys='GoalMilestone.user_id')
     
-    sent_requests = db.relationship(
+    sent_friend_requests = db.relationship(
         "FriendRequest",
-        lazy='dynamic', 
         foreign_keys="FriendRequest.sender_id",
         back_populates="sender",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
 
-    # Friend requests received by this user
-    received_requests = db.relationship(
+    received_friend_requests = db.relationship(
         "FriendRequest",
-        lazy='dynamic', 
         foreign_keys="FriendRequest.receiver_id",
         back_populates="receiver",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
+
     
     permissions = db.relationship(
         "UserPermission",

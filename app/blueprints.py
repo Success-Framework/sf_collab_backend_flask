@@ -58,7 +58,8 @@ from .routes import (
     application_routes,
     contribution_ideas_routes,
     contribution_polls_routes,
-    payment_routes
+    payment_routes, 
+    
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -66,6 +67,9 @@ from .routes import (
     #! removed business_plan_route,
     #! removed qwen_chat_route
 )
+
+from .routes.connection_routes import connections_bp
+
 
 blueprints = [ 
 { "blueprint": main_routes.main_bp, "url_prefix": '/'},
@@ -123,5 +127,6 @@ blueprints = [
 { "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' },
 { "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
 { "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
-{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' }
+{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' },
+{"blueprint": connections_bp, "url_prefix": "/api/connections"},
 ]
