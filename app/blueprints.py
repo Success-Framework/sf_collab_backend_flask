@@ -1,4 +1,5 @@
 from .routes import (
+    builder_routes,
     ai_routes,
     auth_routes,
     user_routes,
@@ -123,5 +124,6 @@ blueprints = [
 { "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' },
 { "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
 { "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
+{ "blueprint": builder_routes.builder_bp, "url_prefix": '/api/builder'},
 { "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' }
 ]
