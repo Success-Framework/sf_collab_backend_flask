@@ -492,8 +492,8 @@ def generate_logo():
 
     total_cost = COST_PER_IMAGE * IMAGE_COUNT
 
-    # if user.credits < total_cost:
-    #     return jsonify({"error": "Not enough credits"}), 402
+    if user.credits < total_cost:
+        return jsonify({"error": "Not enough credits"}), 402
     
     client = get_openai_client()
     slogan_prompt = f"""
@@ -619,8 +619,8 @@ def generate_logo():
             "base64": img.b64_json
         })
 
-    # user.credits -= total_cost
-    # db.session.commit()
+    user.credits -= total_cost
+    db.session.commit()
 
     return jsonify({
         "success": True,
