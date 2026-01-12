@@ -4,13 +4,13 @@ class Transaction(db.Model):
     __tablename__ = "transactions"
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
-    plan_id = db.Column(db.String, nullable=True)
-    stripe_payment_intent_id = db.Column(db.String, nullable=True, unique=True)
-    stripe_checkout_session_id = db.Column(db.String, nullable=True, unique=True)
-    type = db.Column(db.String, default="subscription")
+    plan_id = db.Column(db.String(255), nullable=True)
+    stripe_payment_intent_id = db.Column(db.String(255), nullable=True, unique=True)
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True, unique=True)
+    type = db.Column(db.String(255), default="subscription")
     amount = db.Column(db.Integer)
-    currency = db.Column(db.String)
-    status = db.Column(db.String)
+    currency = db.Column(db.String(255))
+    status = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=db.func.now())
 
     def to_dict(self):

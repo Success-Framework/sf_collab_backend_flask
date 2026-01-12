@@ -33,3 +33,4 @@ from .ResourceLike import ResourceLike
 from .ResourceDownload import ResourceDownload
 from .refreshToken import RefreshToken
 from .waitlist import Waitlist
+from .builder import BuilderProfile, BuilderSkill, BuilderPortfolio, BuilderApplication, SavedStartup, ApplicationStatus
