@@ -492,8 +492,8 @@ def generate_logo():
 
     total_cost = COST_PER_IMAGE * IMAGE_COUNT
 
-    # if user.credits < total_cost:
-    #     return jsonify({"error": "Not enough credits"}), 402
+    if user.credits < total_cost:
+        return jsonify({"error": "Not enough credits"}), 402
     
     client = get_openai_client()
     slogan_prompt = f"""
