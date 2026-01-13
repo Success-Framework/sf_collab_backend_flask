@@ -16,8 +16,10 @@ from pathlib import Path
 import logging
 from datetime import datetime
 import requests
-from flask_jwt_extended import jwt_required, get_jwt_identity
+# from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.user import User
+from app.services.ai_assistant.ingest import ingest_document
+from app.services.ai_assistant.rag import ask_assistant
 # Load environment variables
 load_dotenv()
 
@@ -628,6 +630,52 @@ def generate_logo():
         "images": images,
         "slogan_designs": slogan_responses
     }), 200
+
+@ai_bp.route("/assistant/documents", methods=["POST"])
+@jwt_required()
+def upload_document():
+    if "file" not in request.files:
+        return {"error": "No file provided"}, 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return {"error": "Empty filename"}, 400
+
+    if not file.filename.lower().endswith((".pdf", ".doc", ".docx")):
+        return {"error": "Unsupported file type"}, 400
+
+    upload_dir = current_app.config["UPLOAD_FOLDER"]
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_path = os.path.join(upload_dir, file.filename)
+    file.save(file_path)
+
+    result = ingest_document(file_path)
+
+    return jsonify({
+        "success": True,
+        "message": "Document indexed successfully",
+        "data": result
+    })
+
+@ai_bp.route("/assistant/query", methods=["POST"])
+@jwt_required()
+def assistant_query():
+    data = request.get_json()
+
+    if not data or "question" not in data:
+        return standard_response(False, None, "Missing question", 400)
+
+    question = data.get("question", "").strip()
+    if not question:
+        return standard_response(False, None, "Empty question", 400)
+
+    answer = ask_assistant(question)
+
+    return standard_response(True, {
+        "answer": answer
+    })
+
 
 # @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
 # @jwt_required()
