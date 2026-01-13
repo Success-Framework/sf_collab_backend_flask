@@ -1740,3 +1740,156 @@ CREATE TABLE `transactions` (
   CONSTRAINT `fk_transactions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_profiles`
+
+DROP TABLE IF EXISTS `builder_profiles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_profiles` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `title` varchar(255) DEFAULT NULL,
+  `bio` text,
+  `hourly_rate` float DEFAULT NULL,
+  `rating` float DEFAULT 0.0,
+  `review_count` int DEFAULT 0,
+  `completed_projects` int DEFAULT 0,
+  `total_earnings` float DEFAULT 0.0,
+  `total_equity_earned` float DEFAULT 0.0,
+  `on_time_delivery_rate` float DEFAULT 100.0,
+  `preferred_work_type` json DEFAULT NULL,
+  `industries_interested` json DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_builder_profiles_user_id` (`user_id`),
+  KEY `idx_builder_profiles_user_id` (`user_id`),
+  CONSTRAINT `fk_builder_profiles_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_skills`
+
+DROP TABLE IF EXISTS `builder_skills`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_skills` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `level` varchar(50) DEFAULT NULL,
+  `years_of_experience` int DEFAULT NULL,
+  `is_verified` tinyint(1) DEFAULT 0,
+  `verified_by_user_id` int DEFAULT NULL,
+  `verification_date` datetime DEFAULT NULL,
+  `endorsement_count` int DEFAULT 0,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_builder_skills_profile_id` (`profile_id`),
+  KEY `idx_builder_skills_verified_by` (`verified_by_user_id`),
+  CONSTRAINT `fk_builder_skills_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_builder_skills_verified_by` FOREIGN KEY (`verified_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_portfolio`
+
+DROP TABLE IF EXISTS `builder_portfolio`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_portfolio` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `description` text,
+  `url` varchar(500) DEFAULT NULL,
+  `image_url` varchar(500) DEFAULT NULL,
+  `project_type` varchar(100) DEFAULT NULL,
+  `skills_used` json DEFAULT NULL,
+  `likes` int DEFAULT 0,
+  `views` int DEFAULT 0,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_builder_portfolio_profile_id` (`profile_id`),
+  CONSTRAINT `fk_builder_portfolio_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_applications`
+
+DROP TABLE IF EXISTS `builder_applications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_applications` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `status` enum('pending','under_review','accepted','rejected','withdrawn') DEFAULT 'pending',
+  `role_applied_for` varchar(255) DEFAULT NULL,
+  `cover_letter` text,
+  `expected_commitment` varchar(100) DEFAULT NULL,
+  `proposed_rate` float DEFAULT NULL,
+  `last_message` text,
+  `last_message_date` datetime DEFAULT NULL,
+  `applied_date` datetime DEFAULT CURRENT_TIMESTAMP,
+  `review_date` datetime DEFAULT NULL,
+  `withdrawn_date` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_builder_applications_profile_id` (`profile_id`),
+  KEY `idx_builder_applications_startup_id` (`startup_id`),
+  KEY `idx_builder_applications_status` (`status`),
+  KEY `idx_builder_applications_applied_date` (`applied_date`),
+  CONSTRAINT `fk_builder_applications_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_builder_applications_startup_id` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `saved_startups`
+
+DROP TABLE IF EXISTS `saved_startups`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `saved_startups` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `notes` text,
+  `is_interested` tinyint(1) DEFAULT 1,
+  `saved_date` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_builder_startup_save` (`profile_id`,`startup_id`),
+  KEY `idx_saved_startups_profile_id` (`profile_id`),
+  KEY `idx_saved_startups_startup_id` (`startup_id`),
+  KEY `idx_saved_startups_saved_date` (`saved_date`),
+  CONSTRAINT `fk_saved_startups_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_saved_startups_startup_id` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `builder_profiles` WRITE;
+/*!40000 ALTER TABLE `builder_profiles` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_profiles` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `builder_skills` WRITE;
+/*!40000 ALTER TABLE `builder_skills` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_skills` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `builder_portfolio` WRITE;
+/*!40000 ALTER TABLE `builder_portfolio` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_portfolio` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `builder_applications` WRITE;
+/*!40000 ALTER TABLE `builder_applications` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_applications` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `saved_startups` WRITE;
+/*!40000 ALTER TABLE `saved_startups` DISABLE KEYS */;
+/*!40000 ALTER TABLE `saved_startups` ENABLE KEYS */;
+UNLOCK TABLES;

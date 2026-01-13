@@ -59,6 +59,7 @@ from .routes import (
     application_routes,
     contribution_ideas_routes,
     contribution_polls_routes,
+    connection_routes,
     payment_routes, 
     
     
@@ -69,7 +70,6 @@ from .routes import (
     #! removed qwen_chat_route
 )
 
-from .routes.connection_routes import connections_bp
 
 
 blueprints = [ 
@@ -129,6 +129,6 @@ blueprints = [
 { "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
 { "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
 { "blueprint": builder_routes.builder_bp, "url_prefix": '/api/builder'},
-{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' }
-{"blueprint": connections_bp, "url_prefix": "/api/connections"},
+{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' },
+{"blueprint": connection_routes.connections_bp, "url_prefix": "/api/connections"}
 ]

@@ -165,11 +165,14 @@ def qwen_generate():
         if model not in AVAILABLE_MODELS:
             return standard_response(False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400)
         
-        if not GROQ_API_KEY and model == 'qwen/qwen3-32b':
-            return standard_response(False, None, 'Groq API key not configured', 500)
-        
-        if not OPENAI_API_KEY and model == 'openai/gpt-oss-20b':
-            return standard_response(False, None, 'OpenAI API key not configured', 500)
+        client = None
+        if model == 'qwen/qwen3-32b':
+            client = get_groq_client()
+        elif model == 'openai/gpt-oss-20b':
+            client = get_openai_client()
+
+        if not client:
+            return standard_response(False, None, 'API key not configured for selected model', 500)
         # Simplified system prompts
         system_prompts = {
             'chat': '''You are a helpful and professional AI assistant. Provide accurate, detailed, and well-structured responses in Markdown format.''',
@@ -286,13 +289,14 @@ def qwen_generate():
                 "max_tokens": max_tokens
             }
             
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=payload
+            response = client.responses.create(
+                model="gpt-4.1-mini",
+                input=enhanced_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
             )
-            data = response.json()
-            response_text = data["choices"][0]["message"]["content"]
+            test_responses = extract_text_from_response(response, expect_json=True, strict=True)
+
 
             chat_completion = response.json()
         
@@ -531,7 +535,6 @@ def generate_logo():
             model="gpt-4.1-mini",
             input=slogan_prompt
         )
-        print(slogan_response)
         slogan_responses = extract_text_from_response(slogan_response, expect_json=True, strict=True)
 
         if not slogan_responses:
