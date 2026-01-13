@@ -394,8 +394,8 @@ def register():
 def login():
     """Login user"""
     try:
+
         data = request.get_json()
-        print(data)
         # Validate required fields
         if not data.get('email') or not data.get('password'):
             return jsonify({'error': 'Email and password are required'}), 400
