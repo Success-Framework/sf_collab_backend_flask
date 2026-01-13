@@ -12,7 +12,9 @@ import hmac
 import hashlib
 from app.blueprints import blueprints
 from app.socket_events import socketio
-
+import time
+from flask import request, g
+import json
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
@@ -34,18 +36,8 @@ def create_app(config_name=None):
 
     app = Flask(__name__, instance_relative_config=True)
     
-    CORS(
-        app,
-        resources={r"/*": {"origins": list(Config.CORS_ORIGINS)}},
-        supports_credentials=True,
-        allow_headers=[
-            "Content-Type",
-            "Authorization",
-            "X-Requested-With",
-            "Access-Control-Allow-Origin"
-        ],
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    )
+    
+
     # @app.after_request
     # def after_request(response):
     #     origin = request.headers.get('Origin')
@@ -115,6 +107,82 @@ def create_app(config_name=None):
     app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
     app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
 
+
+    # Initialize CORS
+    print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
+    CORS(
+        app,
+        resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', [])}},
+        supports_credentials=True,
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With"
+        ],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    )
+    # Request logging
+    @app.before_request
+    def start_request_timer():
+        g.start_time = time.time()
+
+    @app.after_request
+    def log_response(response):
+        # Skip noise
+        if request.path in ("/favicon.ico", "/health"):
+            return response
+        if request.method == "OPTIONS" and not response.headers.get("Access-Control-Allow-Origin"):
+            print("⚠️  CORS WARNING: Missing Access-Control-Allow-Origin header")
+
+
+        duration = round(time.time() - g.start_time, 4)
+
+        # Request info
+        method = request.method
+        path = request.path
+        status = response.status_code
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+        origin = request.headers.get("Origin")
+        user_agent = request.headers.get("User-Agent")
+
+        # Auth presence (do NOT log tokens)
+        has_auth = "Authorization" in request.headers
+        has_cookie = bool(request.headers.get("Cookie"))
+
+        # Request payload size (safe)
+        content_length = request.content_length or 0
+
+        # Response preview (safe)
+        response_preview = ""
+        if response.is_json:
+            try:
+                data = response.get_json()
+                response_preview = json.dumps(data)[:300]
+            except Exception:
+                response_preview = "<invalid json>"
+        else:
+            response_preview = "<non-json response>"
+
+        print(f"""
+    ================= API REQUEST =================
+    {method} {path}
+    Status: {status}
+    Duration: {duration}s
+
+    Client IP: {ip}
+    Origin: {origin}
+    User-Agent: {user_agent}
+
+    Auth Header Present: {has_auth}
+    Cookie Present: {has_cookie}
+    Request Size: {content_length} bytes
+
+    Response Preview:
+    {response_preview}
+    =============================================
+    """)
+
+        return response
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
