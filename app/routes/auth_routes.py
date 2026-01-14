@@ -404,7 +404,7 @@ def login():
         user = User.query.filter_by(email=data['email'].lower()).first()
         
         if not user:
-            return jsonify({'error': 'Invalid credentials'}), 401
+            return jsonify({'error': 'Invalid credentials', 'message': 'User not found'}), 401
         if user.status == 'banned':
             return jsonify({'error': 'Account is banned. Please contact support.'}), 403
         # Check password

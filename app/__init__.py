@@ -35,8 +35,9 @@ def create_app(config_name=None):
     """Create and configure Flask application"""
 
     app = Flask(__name__, instance_relative_config=True)
-    
-    
+    config_class = get_config(config_name)
+    app.config.from_object(config_class)
+    app.config.from_pyfile('config.py', silent=True)
 
     # @app.after_request
     # def after_request(response):
@@ -59,11 +60,9 @@ def create_app(config_name=None):
     app.config['SESSION_SQLALCHEMY'] = db
     app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
     # Note: SESSION_SQLALCHEMY will be set after db.init_app()
-    print("Using SQLAlchemy (database) session storage for OAuth")
     
     app.config['SESSION_PERMANENT'] = True  # Changed to True to persist session
     app.config['SESSION_USE_SIGNER'] = True
-    app.config['SESSION_COOKIE_NAME'] = 'session'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -84,10 +83,7 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     
-    # Load configuration
-    config_class = get_config(config_name)
-    app.config.from_object(config_class)
-    app.config.from_pyfile('config.py', silent=True)
+
 
     
     # Allowed origins for CORS (extended list)
