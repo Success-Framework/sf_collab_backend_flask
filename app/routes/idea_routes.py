@@ -4,10 +4,11 @@ from app.models.ideaComment import IdeaComment
 from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
-
+from flask_jwt_extended import jwt_required, get_jwt_identity
 ideas_bp = Blueprint('ideas', __name__)
 
 @ideas_bp.route('', methods=['GET'])
+@jwt_required()
 def get_ideas():
     """Get all ideas with filtering"""
     page = request.args.get('page', 1, type=int)
