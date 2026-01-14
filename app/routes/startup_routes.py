@@ -58,18 +58,24 @@ def generate_unique_filename(original_filename):
 @startups_bp.route('', methods=['GET'])
 @jwt_required()
 def get_startups():
-    """Get all startups with filtering"""
+    """Get all startups with filtering, or user's startups if requested"""
+    current_user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     industry = request.args.get('industry', type=str)
     stage = request.args.get('stage', type=str)
     search = request.args.get('search', type=str)
-    # New funding range parameters
+    my_startups = request.args.get('my_startups', type=bool)
     min_funding = request.args.get('min_funding', type=float)
     max_funding = request.args.get('max_funding', type=float)
     
     query = Startup.query
-     # Apply filters
+    
+    # Get user's startups if requested
+    if my_startups:
+        query = query.filter(Startup.creator_id == current_user_id)
+    
+    # Apply filters
     if industry:
         query = query.filter(Startup.industry.ilike(f'%{industry}%'))
     if stage:
@@ -79,12 +85,10 @@ def get_startups():
             (Startup.name.ilike(f'%{search}%')) |
             (Startup.description.ilike(f'%{search}%'))
         )
-    
     if min_funding is not None:
         query = query.filter(Startup.funding_amount >= min_funding)
     if max_funding is not None:
         query = query.filter(Startup.funding_amount <= max_funding)
-    
     
     result = paginate(query, page, per_page)
     
@@ -276,12 +280,14 @@ def register_startup():
                     )
         
         # Add user to userRoles as founder
-        new_user_role = UserRole(
+        existing_role = UserRole.query.filter_by(
             user_id=current_user_id,
-            role='founder'
-        )
-        db.session.add(new_user_role)
-        db.session.commit()
+            role="founder"
+        ).first()
+
+        if not existing_role:
+            db.session.add(UserRole(user_id=current_user_id, role="founder"))
+            db.session.commit()
         
         # Add creator as first member
         startup.add_member(

@@ -56,7 +56,7 @@ class AchievementService:
             return min((ideas_count / achievement.requirement_value) * 100, 100)
         
         elif action_type == 'comments_made':
-            from models.ideaComment import IdeaComment
+            from app.models.ideaComment import IdeaComment
             comments_count = IdeaComment.query.filter_by(author_id=user_id).count()
             return min((comments_count / achievement.requirement_value) * 100, 100)
         

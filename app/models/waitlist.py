@@ -189,7 +189,7 @@ class Waitlist(db.Model):
         db.session.flush()  # assigns ID without committing
 
         position = user.get_position()
-        user.activity_points += max(0, int((Waitlist.MAX_V1 - position) / 50)) # max 2500 / 50 = 50 points
+        # user.activity_points += max(0, int((Waitlist.MAX_V1 - position) / 50)) # max 2500 / 50 = 50 points
 
         db.session.commit()
         return True, "Successfully joined waitlist", {
