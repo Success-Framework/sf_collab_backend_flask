@@ -31,6 +31,8 @@ def ask_assistant(question: str) -> str:
 
     # 2. Vector search
     collection = get_collection()
+    print("Total vectors:", collection.count())
+
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=TOP_K,
@@ -39,7 +41,8 @@ def ask_assistant(question: str) -> str:
 
     documents = results.get("documents", [[]])[0]
     distances = results.get("distances", [[]])[0]
-
+    print("RAG documents:", documents)
+    print("RAG distances:", distances)
     if not documents or not distances:
         return FALLBACK2
 

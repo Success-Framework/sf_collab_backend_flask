@@ -639,7 +639,7 @@ def generate_logo():
 def upload_document():
     if "file" not in request.files:
         return {"error": "No file provided"}, 400
-
+    
     file = request.files["file"]
     if file.filename == "":
         return {"error": "Empty filename"}, 400
@@ -674,7 +674,7 @@ def assistant_query():
         return standard_response(False, None, "Empty question", 400)
 
     answer = ask_assistant(question)
-
+    print("Assistant answer:", answer)
     return standard_response(True, {
         "answer": answer
     })

@@ -13,10 +13,10 @@ UPLOAD_BASE = os.path.abspath(
 def ingest_document(file_path: str):
     filename = os.path.basename(file_path)
     collection = get_collection()
+    print("COUNT:", collection.count())
 
     # 🔥 Remove existing chunks of same file
     collection.delete(where={"filename": filename})
-
     text = extract_text(file_path)
     chunks = chunk_text(text)
 
