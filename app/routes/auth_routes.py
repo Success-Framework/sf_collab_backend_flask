@@ -920,7 +920,6 @@ def send_verification_code():
 
         
         email_service.send_email_verification_code(user, code)
-        print(f"Sent verification code {code} to {user.email}")
         return jsonify({
             'message': 'Verification code sent to email',
             'verification_token': verification_token
@@ -932,6 +931,7 @@ def send_verification_code():
 @bp.route('/verify-code', methods=['POST'])
 @jwt_required()
 def verify_code():
+    user_id = get_jwt_identity()
     claims = get_jwt()
     data = request.get_json()
     parsed_token = claims.get("code")
@@ -941,7 +941,9 @@ def verify_code():
         return error_response(data={
             "verified": False
         }, message="Invalid code", status=400)
-
+    user = User.query.get(int(user_id))
+    user.is_email_verified = True
+    db.session.commit()
     return success_response({
         "verified": True
     }, "Code verified")
