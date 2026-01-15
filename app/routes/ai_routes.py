@@ -639,7 +639,10 @@ def generate_logo():
 def upload_document():
     if "file" not in request.files:
         return {"error": "No file provided"}, 400
-    
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user.is_admin():
+        return {"error": "Unauthorized"}, 403
     file = request.files["file"]
     if file.filename == "":
         return {"error": "Empty filename"}, 400
