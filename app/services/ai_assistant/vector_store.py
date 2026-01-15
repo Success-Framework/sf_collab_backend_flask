@@ -7,16 +7,23 @@ VECTOR_DB_DIR = os.path.join(BASE_DIR, 'vector_store')
 
 os.makedirs(VECTOR_DB_DIR, exist_ok=True)
 
-client = chromadb.Client(
-    Settings(
-        persist_directory=VECTOR_DB_DIR,
-        anonymized_telemetry=False
-    )
-)
-
-collection = client.get_or_create_collection(
-    name="website_docs"
-)
+_client = None
+_collection = None
 
 def get_collection():
-    return collection
+    global _client, _collection
+
+    if _client is None:
+        _client = chromadb.Client(
+            Settings(
+                persist_directory=VECTOR_DB_DIR,
+                anonymized_telemetry=False
+            )
+        )
+
+    if _collection is None:
+        _collection = _client.get_or_create_collection(
+            name="website_docs"
+        )
+
+    return _collection

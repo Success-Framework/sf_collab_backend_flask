@@ -1,6 +1,6 @@
 from .routes import (
     builder_routes,
-    ai_routes,
+    ai_routes,  # Commented - requires chromadb/pytorch
     auth_routes,
     user_routes,
     profile_routes,
@@ -119,7 +119,7 @@ blueprints = [
 # { "blueprint": background_remover.background_bp, "url_prefix": '/api/background-remover'},
 # { "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},
 { "blueprint": business_plan_routes.plans_bp, "url_prefix": "/api/plans" },
-{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},
+{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},  # Commented - requires chromadb/pytorch
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
