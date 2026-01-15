@@ -34,7 +34,7 @@ instance/
 # .env.*
 *.db
 *.sqlite3
-
+docker/db/init-dev-dump.sql
 model_cache/
 
 # --- IDE / Editors ---

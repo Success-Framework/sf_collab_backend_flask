@@ -5,6 +5,8 @@ from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.models.waitlist import Waitlist
+import datetime
 ideas_bp = Blueprint('ideas', __name__)
 
 @ideas_bp.route('', methods=['GET'])
@@ -84,6 +86,11 @@ def create_idea():
         )
         
         db.session.add(idea)
+        waitlist_user = Waitlist.query.filter_by(user_id=data['creator_id']).first()
+        if waitlist_user:
+            today = datetime.utcnow().date()
+            if waitlist_user.last_activity_at is None or waitlist_user.last_activity_at.date() < today:
+                waitlist_user.add_points(Waitlist.POINTS_PER_IDEA, 'custom')
         db.session.commit()
         
         # Check achievements for idea creation

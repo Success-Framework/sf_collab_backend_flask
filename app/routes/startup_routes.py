@@ -409,7 +409,8 @@ def get_startup_members(startup_id):
     if not can_view_full_details(startup_id):
         return error_response("You need to be a member to see the team", 403)
     
-    members = startup.get_active_members()
+    members = StartupMember.query.filter_by(startup_id=startup_id).all()
+    
     return success_response({
         'members': [member.to_dict() for member in members]
     })
