@@ -634,6 +634,15 @@ def generate_logo():
 @ai_bp.route("/assistant/documents", methods=["POST"])
 @jwt_required()
 def upload_document():
+    
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
+    if not user or user.role not in ["ADMIN"]:
+        return {
+            "success": False,
+            "error": "You are not authorized to upload documents"
+        }, 403
     if "file" not in request.files:
         return {"error": "No file provided"}, 400
 
