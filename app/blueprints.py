@@ -1,4 +1,6 @@
 from .routes import (
+    builder_routes,
+    ai_routes,  # Commented - requires chromadb/pytorch
     auth_routes,
     user_routes,
     profile_routes,
@@ -39,8 +41,8 @@ from .routes import (
     # gemini_route,
     pdf_signing_routes,
     # background_remover,
-    qwen_chat_bp_pdg_br,
     image_editor_routes,
+    business_plan_routes,
     cf_img_proccessing_routes,
     
     permission_routes,
@@ -53,6 +55,13 @@ from .routes import (
     feedback_routes,
     scraper_routes,
     chat_routes,
+    user_roles_routes,
+    application_routes,
+    contribution_ideas_routes,
+    contribution_polls_routes,
+    connection_routes,
+    payment_routes, 
+    
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -60,6 +69,8 @@ from .routes import (
     #! removed business_plan_route,
     #! removed qwen_chat_route
 )
+
+
 
 blueprints = [ 
 { "blueprint": main_routes.main_bp, "url_prefix": '/'},
@@ -106,9 +117,18 @@ blueprints = [
 { "blueprint": waitlist_routes.waitlist_bp, "url_prefix": '/api/waitlist'},
 { "blueprint": pdf_signing_routes.pdf_bp, "url_prefix": '/api/pdf'},
 # { "blueprint": background_remover.background_bp, "url_prefix": '/api/background-remover'},
-{ "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},
+# { "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},
+{ "blueprint": business_plan_routes.plans_bp, "url_prefix": "/api/plans" },
+{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},  # Commented - requires chromadb/pytorch
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
-{"blueprint": scraper_routes.scraper_bp, "url_prefix": "/api"}
+{"blueprint": scraper_routes.scraper_bp, "url_prefix": "/api"},
+{ "blueprint": user_roles_routes.user_roles_bp, "url_prefix": '/api/user-roles'},
+{ "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' },
+{ "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
+{ "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
+{ "blueprint": builder_routes.builder_bp, "url_prefix": '/api/builder'},
+{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' },
+{"blueprint": connection_routes.connections_bp, "url_prefix": "/api/connections"}
 ]

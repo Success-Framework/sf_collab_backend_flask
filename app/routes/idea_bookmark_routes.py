@@ -66,7 +66,7 @@ def create_idea_bookmark():
     
     try:
         # Get idea details
-        from models.idea import Idea
+        from app.models.idea import Idea
         idea = Idea.query.get(data['idea_id'])
         if not idea:
             return error_response('Idea not found', 404)

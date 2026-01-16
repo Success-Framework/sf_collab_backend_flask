@@ -1,4 +1,4 @@
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY3MjgyMDgyLCJqdGkiOiIwMjBmNWEwZi1kMjUwLTRjNDctOWExMC0xZjU4MzRiYjdhY2QiLCJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiMTIzIiwibmJmIjoxNzY3MjgyMDgyLCJjc3JmIjoiOGUzYTNhMjEtNWQzMy00YjYzLThkMDMtZGUxZDJhMjVlNTgxIiwiZXhwIjoxNzY3MzAzNjgyfQ.HVaz1LdMI3ax2FuIVbx-B4qyp-cTZZP9LU2lr9jcUO0
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6dHJ1ZSwiaWF0IjoxNzY3NjM5MTg4LCJqdGkiOiI2ZjllZjMyMi0yNmZkLTQ1YWItYTMzYy00MGVjY2YwYzcyZDIiLCJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiMTE5IiwibmJmIjoxNzY3NjM5MTg4LCJjc3JmIjoiYTczZTNhZGMtNmQ4Yi00MzkwLWI4NTQtY2M1NmIxZjgwZWZkIiwiZXhwIjoxNzY3NjYwNzg4fQ.MzAla2gBuu09RDPB8pFKY9XG19JV6MXjJnKVA4-8rFU
 
 ###
 GET http://localhost:5001
@@ -79,4 +79,13 @@ Content-Type: application/json
   ],
   "temperature": 0.7,
   "max_tokens": 2048
+}
+
+###
+POST http://localhost:5001/api/user-roles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "role": "admin"
 }

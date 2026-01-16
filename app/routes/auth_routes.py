@@ -218,191 +218,7 @@ def get_user_response_data(user):
     permissions=UserPermission.query.filter_by(user_id=int(user.id)).all()
     
     # Build complete user data with ALL fields from the User model including relationship data
-    user_data = {
-        # Core user information
-        'id': user.id,
-        'firstName': user.first_name,
-        'lastName': user.last_name,
-        'email': user.email,
-        'isEmailVerified': user.is_email_verified,
-        'lastLogin': user.last_login.isoformat() if user.last_login else None,
-        'status': user._enum_to_value(user.status),
-        'role': user._enum_to_value(user.role),
-        
-        # XP and engagement
-        'xpPoints': user.xp_points,
-        'streakDays': user.streak_days,
-        'lastActivityDate': user.last_activity_date.isoformat() if user.last_activity_date else None,
-        
-        # Business metrics
-        'totalRevenue': user.total_revenue,
-        'satisfactionPercentage': user.satisfaction_percentage,
-        'activeStartupsCount': user.active_startups_count,
-        
-        # Profile information
-        'profile': {
-            'picture': user.profile_picture,
-            'bio': user.profile_bio,
-            'company': user.profile_company,
-            'socialLinks': user.profile_social_links or {},
-            'country': user.profile_country,
-            'city': user.profile_city,
-            'timezone': user.profile_timezone
-        },
-        
-        # Preferences
-        'preferences': {
-            'emailNotifications': user.pref_email_notifications,
-            'pushNotifications': user.pref_push_notifications,
-            'privacy': user._enum_to_value(user.pref_privacy),
-            'language': user.pref_language,
-            'timezone': user.pref_timezone,
-            'theme': user._enum_to_value(user.pref_theme)
-        },
-        
-        # Notification settings
-        'notificationSettings': {
-            'newComments': user.notif_new_comments,
-            'newLikes': user.notif_new_likes,
-            'newSuggestions': user.notif_new_suggestions,
-            'joinRequests': user.notif_join_requests,
-            'approvals': user.notif_approvals,
-            'storyViews': user.notif_story_views,
-            'postEngagement': user.notif_post_engagement,
-            'emailDigest': user._enum_to_value(user.notif_email_digest),
-            'quietHours': {
-                'enabled': user.notif_quiet_hours_enabled,
-                'start': user.notif_quiet_hours_start,
-                'end': user.notif_quiet_hours_end
-            }
-        },
-        
-        # Timestamps
-        'createdAt': user.created_at.isoformat(),
-        'updatedAt': user.updated_at.isoformat(),
-        
-        # Computed fields
-        'fullName': user.get_full_name(),
-        'timezone': user.get_timezone(),
-        
-        # Additional computed metrics
-        'notificationsCount': notifications_count,
-        'pendingTasksCount': pending_tasks,
-        'activeStartupsCount': active_startups,
-        
-        # Comprehensive statistics
-        'statistics': statistics,
-        
-        # Recent activity
-        'recentActivity': recent_activity,
-        
-        # ========== DASHBOARD METRICS ==========
-        'dashboardMetrics': {
-            'teamPerformance': {
-                'score': team_performance_score,
-                'activeMembers': active_members_count,
-                'tasksCompleted': completed_tasks_count,
-                'productivityLevel': 'high' if team_performance_score >= 80 else 'medium' if team_performance_score >= 60 else 'low'
-            },
-            'projectGoals': {
-                'progress': project_goals_progress,
-                'milestonesCompleted': milestones_completed,
-                'nextGoal': next_goal,
-                'totalGoals': len(user.project_goals.all()) if hasattr(user, 'project_goals') else 0
-            },
-            'growthMetrics': {
-                'growthPercentage': growth_percentage,
-                'userGrowth': user_growth,
-                'revenue': revenue_growth,
-                'marketShare': statistics.get('engagement_score', 0)
-            },
-            'achievements': {
-                'total': achievements_count,
-                'thisMonth': this_month_achievements,
-                'nextTarget': achievements_count + 5  # Next target is 5 more achievements
-            }
-        },
-        
-        # Relationship DATA (not just counts)
-        'relationships': {
-            # Core Authentication & Profile
-            'notifications': [notification.to_dict() for notification in user.notifications.limit(50).all()],
-            
-            # Content Creation
-            'ideas': [idea.to_dict() for idea in user.ideas.limit(50).all()],
-            'knowledgePosts': [knowledge.to_dict() for knowledge in user.knowledge_posts.limit(50).all()],
-            'startups': [startup.to_dict() for startup in user.startups.limit(50).all()],
-            'stories': [story.to_dict() for story in user.stories.limit(50).all()],
-            'authoredPosts': [post.to_dict() for post in user.authored_posts.limit(50).all()],
-            
-            # Comments & Engagement
-            'ideaComments': [comment.to_dict() for comment in user.idea_comments.limit(50).all()],
-            'knowledgeComments': [comment.to_dict() for comment in user.knowledge_comments.limit(50).all()],
-            'postComments': [comment.to_dict() for comment in user.post_comments_list.limit(50).all()],
-            
-            # Likes & Bookmarks
-            'postLikes': [like.to_dict() for like in user.post_likes.limit(50).all()],
-            'resourceLikes': [like.to_dict() for like in user.resource_likes.limit(50).all()],
-            'startupBookmarks': [bookmark.to_dict() for bookmark in user.startup_bookmarks.limit(50).all()],
-            'knowledgeBookmarks': [bookmark.to_dict() for bookmark in user.knowledge_bookmarks.limit(50).all()],
-            'ideaBookmarks': [bookmark.to_dict() for bookmark in user.idea_bookmarks.limit(50).all()],
-            
-            # Tasks & Projects
-            'ownedTasks': [task.to_dict() for task in user.owned_tasks.limit(50).all()],
-            'createdTasks': [task.to_dict() for task in user.created_tasks.limit(50).all()],
-            'assignedTasks': [task.to_dict() for task in user.assigned_tasks.limit(50).all()],
-            'projectGoals': [goal.to_dict() for goal in user.project_goals.limit(50).all()],
-            
-            # Team & Startup Relationships
-            'startupMemberships': [membership.to_dict() for membership in user.startup_memberships.limit(50).all()],
-            'joinRequests': [request.to_dict() for request in user.join_requests.limit(50).all()],
-            
-            # Achievements & Growth
-            'achievements': [achievement.to_dict() for achievement in user.user_achievements.limit(50).all()],
-            'growthMetrics': [metric.to_dict() for metric in user.growth_metrics.limit(50).all()],
-            
-            # Chat & Messaging
-            'sentMessages': [message.to_dict() for message in user.sent_messages.limit(50).all()],
-            'conversations': [conversation.to_dict() for conversation in user.conversations.limit(50).all()],
-            'createdConversations': [conversation.to_dict() for conversation in user.created_conversations.limit(50).all()],
-            'unread_count':sum(conversation.get_unread_message_count(user.id) for conversation in user.conversations) ,
-            
-            # Views & Analytics
-            'resourceViews': [view.to_dict() for view in user.resource_views.limit(50).all()],
-            'storyViews': [view.to_dict() for view in user.story_views.limit(50).all()],
-            
-            # Downloads
-            'resourceDownloads': [download.to_dict() for download in user.resource_downloads.limit(50).all()],
-            
-            # Suggestions
-            'suggestions': [suggestion.to_dict() for suggestion in user.suggestions.limit(50).all()],
-            
-            # Calendar Events
-            'calendarEvents': [event.to_dict() for event in user.calendar_events.limit(50).all()],
-            
-            # Goal Milestones
-            'goalMilestones': [milestone.to_dict() for milestone in user.goal_milestones.limit(50).all()]
-        },
-        
-        # Relationship counts for quick overview
-        'relationshipCounts': {
-            'ideas': user.ideas.count(),
-            'knowledgePosts': user.knowledge_posts.count(),
-            'startups': user.startups.count(),
-            'stories': user.stories.count(),
-            'authoredPosts': user.authored_posts.count(),
-            'achievements': user.user_achievements.filter_by(is_completed=True).count(),
-            'refreshTokens': user.refresh_tokens.count(),
-            'sentMessages': user.sent_messages.count(),
-            'conversations': user.conversations.count(),
-            'growthMetrics': user.growth_metrics.count(),
-            'calendarEvents': user.calendar_events.count(),
-            'goalMilestones': user.goal_milestones.count()
-        },
-        
-        'permissions':[perm.to_dict() for perm in permissions]
-    }
-    
+    user_data = user.to_dict()
     return user_data
 
 
@@ -545,17 +361,20 @@ def register():
         brand_name = os.getenv("BRAND_NAME", "SFCollab")
         # Add user to general chat
         ChatConversation.add_to_general_chat(user)
-
-        email_service.send_email(user.email, f"Welcome to {brand_name}!",
-                                                thank_email_template(
-                                                data={
-                                                    "user": {
-                                                    "name": f"{user.first_name} {user.last_name}",
-                                                    "email": user.email
-                                                    }
-                                                },
-                                                see_email_template=False
-                                            ))
+        try:
+            email_service.send_email(user.email, f"Welcome to {brand_name}!",
+                                                    thank_email_template(
+                                                    data={
+                                                        "user": {
+                                                        "name": f"{user.first_name} {user.last_name}",
+                                                        "email": user.email
+                                                        }
+                                                    },
+                                                    see_email_template=False
+                                                ))
+        except Exception as email_error:
+            print(f"Error sending welcome email: {str(email_error)}")
+            pass
         return jsonify({
             'message': 'User registered successfully',
             'access_token': access_token,
@@ -575,8 +394,8 @@ def register():
 def login():
     """Login user"""
     try:
+
         data = request.get_json()
-        print(data)
         # Validate required fields
         if not data.get('email') or not data.get('password'):
             return jsonify({'error': 'Email and password are required'}), 400
@@ -585,8 +404,9 @@ def login():
         user = User.query.filter_by(email=data['email'].lower()).first()
         
         if not user:
-            return jsonify({'error': 'Invalid credentials'}), 401
-        
+            return jsonify({'error': 'Invalid credentials', 'message': 'User not found'}), 401
+        if user.status == 'banned':
+            return jsonify({'error': 'Account is banned. Please contact support.'}), 403
         # Check password
         if not check_password_hash(user.password, data['password']):
             return jsonify({'error': 'Invalid credentials'}), 401
@@ -1100,7 +920,6 @@ def send_verification_code():
 
         
         email_service.send_email_verification_code(user, code)
-        print(f"Sent verification code {code} to {user.email}")
         return jsonify({
             'message': 'Verification code sent to email',
             'verification_token': verification_token
@@ -1112,6 +931,7 @@ def send_verification_code():
 @bp.route('/verify-code', methods=['POST'])
 @jwt_required()
 def verify_code():
+    user_id = get_jwt_identity()
     claims = get_jwt()
     data = request.get_json()
     parsed_token = claims.get("code")
@@ -1121,7 +941,9 @@ def verify_code():
         return error_response(data={
             "verified": False
         }, message="Invalid code", status=400)
-
+    user = User.query.get(int(user_id))
+    user.is_email_verified = True
+    db.session.commit()
     return success_response({
         "verified": True
     }, "Code verified")

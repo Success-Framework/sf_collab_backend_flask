@@ -1,82 +1,73 @@
+# run.py
 from gevent import monkey
 monkey.patch_all()
 
 import os
 import warnings
-import time
-import json
-from flask import request, g
+
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app import create_app
-from app.config import Config
 from app.socket_events import socketio
+from app.subscription_plans import insert_default_plans
 
+# =====================================================
+# ENV SETUP
+# =====================================================
 warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+ENV = os.getenv("FLASK_ENV", "development")
+PORT = int(os.getenv("PORT", 5000))
+DEBUG = ENV != "production"
+
 print("=" * 60)
-print("=== RUN.PY STARTING ===")
-print(f"PORT: {os.environ.get('PORT', 'NOT SET')}")
+print("🚀 SF COLLAB API STARTING")
+print(f"ENV: {ENV}")
+print(f"PORT: {PORT}")
 print("=" * 60)
 
-app = create_app()
+# =====================================================
+# CREATE APP
+# =====================================================
+app = create_app(ENV)
 
-env = os.environ.get("FLASK_ENV", "development")
-if env == "production":
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+# =====================================================
+# PROXY FIX (PRODUCTION ONLY)
+# =====================================================
+if ENV == "production":
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_proto=1,
+        x_host=1,
+        x_for=1
+    )
 
-# ================= REQUEST LOGGING =================
-@app.before_request
-def start_timer():
-    g.start_time = time.time()
-
-@app.after_request
-def log_response(response):
-    if request.path == "/favicon.ico":
-        return response
-
-    duration = round(time.time() - g.start_time, 4)
-
-    try:
-        data = response.get_json() if response.is_json else response.data.decode()[:400]
-    except Exception:
-        data = "Unable to read response"
-
-    print(f"""
--------------------------
-{request.method} {request.path}
-STATUS: {response.status_code}
-TIME: {duration}s
-DATA: {data}
--------------------------
-""")
-    return response
-# ===================================================
-
-# ===== SOCKET.IO SETUP =====
+# =====================================================
+# SOCKET.IO
+# =====================================================
 socketio.init_app(
     app,
     cors_allowed_origins=app.config.get('SOCKETIO_CORS_ALLOWED_ORIGINS', app.config['CORS_ORIGINS']),
-    allow_credentials=True,
     async_mode="gevent",
-    logger=True,
-    engineio_logger=True,
+    allow_credentials=True,
+    logger=DEBUG,
+    engineio_logger=DEBUG,
     ping_timeout=60,
     ping_interval=25
 )
 
-
-
-# ===== START SERVER =====
+# =====================================================
+# MAIN
+# =====================================================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    debug = env != "production"
+    with app.app_context():
+        insert_default_plans()
 
     socketio.run(
         app,
         host="0.0.0.0",
-        port=port,
-        debug=debug,
+        port=PORT,
+        debug=DEBUG,
         use_reloader=False
     )

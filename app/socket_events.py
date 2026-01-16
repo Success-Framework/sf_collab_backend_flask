@@ -8,10 +8,10 @@ from flask_jwt_extended import decode_token
 from flask import request
 from datetime import datetime
 import logging
-
+from app.config import Config
 
 # Initialize SocketIO (will be configured in app factory)
-socketio = SocketIO(cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(cors_allowed_origins=Config.CORS_ORIGINS, async_mode='gevent')
 
 # Store connected users: {user_id: [sid1, sid2, ...]}
 connected_users = {}

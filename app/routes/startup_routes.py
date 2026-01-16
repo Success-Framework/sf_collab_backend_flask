@@ -8,6 +8,7 @@ from app.models.joinRequest import JoinRequest
 from app.models.Enums import JoinRequestStatus, UserRoles
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
+from app.models.userRole import UserRole
 import os 
 from io import BytesIO
 import json
@@ -57,18 +58,24 @@ def generate_unique_filename(original_filename):
 @startups_bp.route('', methods=['GET'])
 @jwt_required()
 def get_startups():
-    """Get all startups with filtering"""
+    """Get all startups with filtering, or user's startups if requested"""
+    current_user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     industry = request.args.get('industry', type=str)
     stage = request.args.get('stage', type=str)
     search = request.args.get('search', type=str)
-    # New funding range parameters
+    my_startups = request.args.get('my_startups', type=bool)
     min_funding = request.args.get('min_funding', type=float)
     max_funding = request.args.get('max_funding', type=float)
     
     query = Startup.query
-     # Apply filters
+    
+    # Get user's startups if requested
+    if my_startups:
+        query = query.filter(Startup.creator_id == current_user_id)
+    
+    # Apply filters
     if industry:
         query = query.filter(Startup.industry.ilike(f'%{industry}%'))
     if stage:
@@ -78,12 +85,10 @@ def get_startups():
             (Startup.name.ilike(f'%{search}%')) |
             (Startup.description.ilike(f'%{search}%'))
         )
-    
     if min_funding is not None:
         query = query.filter(Startup.funding_amount >= min_funding)
     if max_funding is not None:
         query = query.filter(Startup.funding_amount <= max_funding)
-    
     
     result = paginate(query, page, per_page)
     
@@ -137,6 +142,9 @@ def register_startup():
     
     try:
         # Check if request has form data
+        print("FORM:", request.form)
+        print("FILES:", request.files)
+
         if not request.form:
             return error_response('Form data required', 400)
         
@@ -271,10 +279,18 @@ def register_startup():
                         document_type=data.get('document_type', 'general')
                     )
         
-        db.session.commit()
+        # Add user to userRoles as founder
+        existing_role = UserRole.query.filter_by(
+            user_id=current_user_id,
+            role="founder"
+        ).first()
+
+        if not existing_role:
+            db.session.add(UserRole(user_id=current_user_id, role="founder"))
+            db.session.commit()
         
         # Add creator as first member
-        startup_member = startup.add_member(
+        startup.add_member(
             current_user_id,
             current_user.first_name,
             current_user.last_name,
@@ -282,7 +298,10 @@ def register_startup():
         )
         
         
-        return success_response({'startup': startup.to_dict()}, 'Startup created successfully', 201)
+        return success_response({
+            'startup': startup.to_dict(),
+            'role': 'founder'
+            }, 'Startup created successfully', 201)
         
     except Exception as e:
         db.session.rollback()
@@ -390,7 +409,8 @@ def get_startup_members(startup_id):
     if not can_view_full_details(startup_id):
         return error_response("You need to be a member to see the team", 403)
     
-    members = startup.get_active_members()
+    members = StartupMember.query.filter_by(startup_id=startup_id).all()
+    
     return success_response({
         'members': [member.to_dict() for member in members]
     })

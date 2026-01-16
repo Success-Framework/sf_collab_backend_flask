@@ -12,6 +12,7 @@ services:
       - ../.env.development
     volumes:
       - ./uploads:/app/uploads
+      - ./vector_store:/app/vector_store
     depends_on:
       db:
         condition: service_healthy
@@ -47,6 +48,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
     logging:
       driver: "json-file"
       options:
@@ -72,3 +74,4 @@ services:
 
 volumes:
   mysqldata:
+  chroma_data:

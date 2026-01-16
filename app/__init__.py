@@ -12,7 +12,9 @@ import hmac
 import hashlib
 from app.blueprints import blueprints
 from app.socket_events import socketio
-
+import time
+from flask import request, g
+import json
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
@@ -33,7 +35,19 @@ def create_app(config_name=None):
     """Create and configure Flask application"""
 
     app = Flask(__name__, instance_relative_config=True)
-    
+    config_class = get_config(config_name)
+    app.config.from_object(config_class)
+    app.config.from_pyfile('config.py', silent=True)
+
+    # @app.after_request
+    # def after_request(response):
+    #     origin = request.headers.get('Origin')
+    #     if origin in app.config['CORS_ORIGINS']:
+    #         response.headers.add('Access-Control-Allow-Origin', origin)
+    #         response.headers.add('Access-Control-Allow-Credentials', 'true')
+    #         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
+    #         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
+    #     return response
     
     # JWT Configuration
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
@@ -46,17 +60,16 @@ def create_app(config_name=None):
     app.config['SESSION_SQLALCHEMY'] = db
     app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
     # Note: SESSION_SQLALCHEMY will be set after db.init_app()
-    print("Using SQLAlchemy (database) session storage for OAuth")
     
     app.config['SESSION_PERMANENT'] = True  # Changed to True to persist session
     app.config['SESSION_USE_SIGNER'] = True
-    app.config['SESSION_COOKIE_NAME'] = 'session'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     # Fix for OAuth CSRF state issues - use None (not Lax/Strict) for OAuth redirects
     app.config['SESSION_COOKIE_SAMESITE'] = None  # Changed from 'Lax' to None for OAuth
     app.config['SESSION_COOKIE_SECURE'] = True if os.getenv('FLASK_ENV') == 'production' else False
+    
     # Don't set SESSION_COOKIE_DOMAIN - let it default to the request domain
     # if os.getenv('FLASK_ENV') == 'production':
     #     app.config['SESSION_COOKIE_DOMAIN'] = '.sfcollab.com'
@@ -70,26 +83,8 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     
-    # Load configuration
-    config_class = get_config(config_name)
-    app.config.from_object(config_class)
-    app.config.from_pyfile('config.py', silent=True)
-    
-    # Configure CORS
-    CORS(app, 
-        resources={
-            r"/*": {
-                "origins": app.config.get('CORS_ORIGINS', Config.CORS_ORIGINS),
-                "methods": Config.CORS_METHODS,
-                "allow_headers": Config.CORS_ALLOW_HEADERS,
-                "supports_credentials": True,
-                "expose_headers": ["Content-Type", "Authorization"],
-                "max_age": 3600
-            }
-        },
-        supports_credentials=True
-    )
-    
+
+
     
     # Allowed origins for CORS (extended list)
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
@@ -104,21 +99,92 @@ def create_app(config_name=None):
     app.config['SMTP_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_password')
     app.config['SMTP_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'your_default_sender')
     
-    @app.after_request
-    def after_request(response):
-        origin = request.headers.get('Origin')
-        if origin in app.config['CORS_ORIGINS']:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-        return response
+    # AI services}  
+    app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
+    app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
+    app.config['HUGGINGFACE_API_KEY'] = os.getenv('HUGGINGFACE_API_KEY', '')
 
+
+    # Initialize CORS
+    print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
+    CORS(
+        app,
+        resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', [])}},
+        supports_credentials=True,
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With"
+        ],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    )
+    # Request logging
+    @app.before_request
+    def start_request_timer():
+        g.start_time = time.time()
+
+    @app.after_request
+    def log_response(response):
+        # Skip noise
+        if request.path in ("/favicon.ico", "/health"):
+            return response
+        if request.method == "OPTIONS" and not response.headers.get("Access-Control-Allow-Origin"):
+            print("⚠️  CORS WARNING: Missing Access-Control-Allow-Origin header")
+
+
+        duration = round(time.time() - g.start_time, 4)
+
+        # Request info
+        method = request.method
+        path = request.path
+        status = response.status_code
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+        origin = request.headers.get("Origin")
+        user_agent = request.headers.get("User-Agent")
+
+        # Auth presence (do NOT log tokens)
+        has_auth = "Authorization" in request.headers
+        has_cookie = bool(request.headers.get("Cookie"))
+
+        # Request payload size (safe)
+        content_length = request.content_length or 0
+
+        # Response preview (safe)
+        response_preview = ""
+        if response.is_json:
+            try:
+                data = response.get_json()
+                response_preview = json.dumps(data)[:300]
+            except Exception:
+                response_preview = "<invalid json>"
+        else:
+            response_preview = "<non-json response>"
+
+        print(f"""
+    ================= API REQUEST =================
+    {method} {path}
+    Status: {status}
+    Duration: {duration}s
+
+    Client IP: {ip}
+    Origin: {origin}
+    User-Agent: {user_agent}
+
+    Auth Header Present: {has_auth}
+    Cookie Present: {has_cookie}
+    Request Size: {content_length} bytes
+
+    Response Preview:
+    {response_preview}
+    =============================================
+    """)
+
+        return response
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    
+    Config.init_stripe()
    
     # Set SESSION_SQLALCHEMY to use the same db instance
     
