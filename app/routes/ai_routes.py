@@ -642,7 +642,7 @@ def upload_document():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
-    if not user or user.role not in ["ADMIN"]:
+    if not user or not user.is_admin():
         return {
             "success": False,
             "error": "You are not authorized to upload documents"
