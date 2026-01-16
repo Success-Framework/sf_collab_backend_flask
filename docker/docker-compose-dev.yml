@@ -12,6 +12,7 @@ services:
       - ../.env.development
     volumes:
       - ./uploads:/app/uploads
+      - ./vector_store:/app/vector_store
     depends_on:
       db:
         condition: service_healthy
