@@ -5,7 +5,7 @@ from app.models.startup_document import StartupDocument
 from app.models.startUpMember import StartupMember
 from app.models.user import User
 from app.models.joinRequest import JoinRequest
-from app.models.Enums import JoinRequestStatus
+from app.models.Enums import JoinRequestStatus, UserRoles
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 import os 
@@ -459,7 +459,33 @@ def delete_startup(startup_id):
         return error_response('Startup not found', 404)
     
     # Check if user is authorized to delete this startup
-    if not has_startup_management_access(current_user_id, startup_id):
+    role = get_current_user_startup_role(startup_id)
+    print(f"DELETE startup {startup_id}")
+    print(f"Current User: {current_user_id}")
+    print(f"Startup Creator: {startup.creator_id}")
+    print(f"User Role: {role}")
+    print(f"Can Manage Members: {can_manage_members(startup_id)}")
+    
+    # Additional debugging
+    user = User.query.get(current_user_id)
+    print(f"Current User Object: {user}")
+    print(f"Current User Email: {user.email if user else 'None'}")
+    print(f"Current User Role: {user.role if user else 'None'}")
+    
+    # Check membership directly
+    membership = StartupMember.query.filter_by(
+        user_id=current_user_id,
+        startup_id=startup_id,
+        is_active=True
+    ).first()
+    print(f"Direct Membership Check: {membership}")
+    if membership:
+        print(f"Membership Role: {membership.role}")
+        print(f"Membership Role Type: {type(membership.role)}")
+        print(f"Membership Role Value: {membership.role.value if hasattr(membership.role, 'value') else membership.role}")
+    
+    if not can_manage_members(startup_id):
+        print(f"❌ AUTHORIZATION FAILED - User {current_user_id} cannot manage members for startup {startup_id}")
         return error_response('Unauthorized to delete this startup', 403)
     
     try:
@@ -739,7 +765,7 @@ def get_join_requests(startup_id):
     startup = Startup.query.get_or_404(startup_id)
 
     # Optional: filter by status
-    status_filter = request.args.get('status', 'pending')  # default: pending
+    status_filter = request.args.get('status', 'all')  # default: all
     valid_statuses = ['pending', 'approved', 'rejected', 'cancelled', 'all']
     if status_filter not in valid_statuses:
         status_filter = 'pending'
@@ -751,11 +777,84 @@ def get_join_requests(startup_id):
     requests = query.order_by(JoinRequest.created_at.desc()).all()
 
     return success_response({
-        'requests': [req.to_dict() for req in requests],
+        'join_requests': [req.to_dict() for req in requests],
         'count': len(requests),
         'filter': status_filter,
         'current_user_role': get_current_user_startup_role(startup_id)
     })
+
+
+@startups_bp.route('/<int:startup_id>/join-request', methods=['OPTIONS'])
+def join_request_options(startup_id):
+    """CORS preflight handler for join requests"""
+    return success_response({'message': 'ok'}, status=200)
+
+
+@startups_bp.route('/<int:startup_id>/join-request', methods=['POST'])
+@jwt_required()
+def send_join_request(startup_id):
+    """Allow any authenticated user to submit a join request"""
+    try:
+        current_user_id = get_jwt_identity()
+        startup = Startup.query.get_or_404(startup_id)
+
+        print(f"Join Request - User ID: {current_user_id}, Startup ID: {startup_id}")
+
+        membership = StartupMember.query.filter_by(
+            startup_id=startup_id,
+            user_id=current_user_id
+        ).first()
+        if membership:
+            print(f"User {current_user_id} is already a member of startup {startup_id}")
+            return error_response('You are already a member of this startup', 400)
+
+        data = request.get_json() or {}
+        message = (data.get('message') or '').strip()
+        print(f"Join Request Data: {data}, Message: '{message}'")
+        
+        if not message:
+            print("No message provided")
+            return error_response('Please share why you want to join this team', 400)
+
+        existing = JoinRequest.query.filter_by(
+            startup_id=startup_id,
+            user_id=current_user_id,
+            status=JoinRequestStatus.pending
+        ).first()
+        if existing:
+            print(f"User {current_user_id} already has pending request {existing.id} for startup {startup_id}")
+            return error_response('You already have a pending request for this startup', 409)
+
+        user = User.query.get(current_user_id)
+        if not user:
+            print(f"User {current_user_id} not found")
+            return error_response('User not found', 404)
+
+        print(f"Creating join request for user {user.first_name} {user.last_name} to startup {startup.name}")
+
+        join_request = JoinRequest(
+            startup_id=startup_id,
+            startup_name=startup.name,
+            user_id=current_user_id,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            message=message,
+            role=data.get('role', 'member'),
+            status=JoinRequestStatus.pending
+        )
+
+        db.session.add(join_request)
+        db.session.commit()
+
+        print(f"Join request created successfully with ID {join_request.id}")
+
+        return success_response({
+            'join_request': join_request.to_dict()
+        }, 'Join request submitted successfully', 201)
+    except Exception as e:
+        print(f"Error in send_join_request: {str(e)}")
+        db.session.rollback()
+        return error_response(f'Failed to send join request: {str(e)}', 500)
 
 @startups_bp.route('/<int:startup_id>/join-requests/<int:request_id>/accept', methods=['POST'])
 @jwt_required()
@@ -891,4 +990,16 @@ def has_startup_management_access(user_id, startup_id):
         startup_id=startup_id
     ).first()
     
-    return membership and membership.role in ['admin', 'manager', 'founder', 'owner']
+    if not membership or not membership.role:
+        return False
+
+    membership_role_value = membership.role.value if hasattr(membership.role, 'value') else membership.role
+
+    allowed_roles = {
+        UserRoles.admin.value,
+        'manager',
+        UserRoles.founder.value,
+        'owner'
+    }
+
+    return membership_role_value in allowed_roles
