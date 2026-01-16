@@ -2,7 +2,7 @@ import requests
 import base64
 from flask import current_app
 
-HF_API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+HF_API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
 
 DEFAULT_PROMPT_TEMPLATE = """
 You are a professional image generation system.

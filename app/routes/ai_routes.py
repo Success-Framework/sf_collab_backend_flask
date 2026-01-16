@@ -20,6 +20,7 @@ import requests
 from app.models.user import User
 from app.services.ai_assistant.ingest import ingest_document
 from app.services.ai_assistant.rag import ask_assistant
+from app.services.ai_image_gen import generate_image
 # Load environment variables
 load_dotenv()
 
@@ -691,6 +692,43 @@ def assistant_query():
         "answer": answer
     })
 
+@ai_bp.route("/image/text-to-image", methods=["POST", "OPTIONS"])
+@jwt_required()
+def text_to_image():
+    if request.method == "OPTIONS":
+        return standard_response(True, {}, code=200)
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
+    if not user:
+        return standard_response(False, None, "Unauthorized", 401)
+
+    data = request.get_json()
+    prompt = data.get("prompt", "").strip()
+
+    if not prompt:
+        return standard_response(False, None, "Prompt is required", 400)
+
+    COST_PER_IMAGE = 10
+
+    if user.credits < COST_PER_IMAGE:
+        return standard_response(False, None, "Not enough credits", 402)
+
+    try:
+        image_base64 = generate_image(prompt)
+    except Exception as e:
+        return standard_response(False, None, str(e), 500)
+
+    user.credits -= COST_PER_IMAGE
+    db.session.commit()
+
+    return standard_response(True, {
+        "cost": COST_PER_IMAGE,
+        "image": {
+            "base64": image_base64
+        }
+    })
 
 # @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
 # @jwt_required()
