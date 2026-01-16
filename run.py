@@ -48,6 +48,7 @@ if ENV == "production":
 # =====================================================
 socketio.init_app(
     app,
+    cors_allowed_origins=app.config.get('SOCKETIO_CORS_ALLOWED_ORIGINS', app.config['CORS_ORIGINS']),
     async_mode="gevent",
     allow_credentials=True,
     logger=DEBUG,
