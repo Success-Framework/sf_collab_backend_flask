@@ -24,7 +24,8 @@ env = os.environ.get("FLASK_ENV", "development")
 app = create_app(env)
 
 
-
+if __name__ == "__main__":
+    socketio.run(app, host="127.0.0.1", port=5001, debug=False)
 if env == "production":
     app.wsgi_app = ProxyFix(
         app.wsgi_app,
@@ -83,8 +84,9 @@ if __name__ == "__main__":
 
     socketio.run(
         app,
-        host="0.0.0.0",
-        port=port,
+        host= "127.0.0.0",
+        #host="0.0.0.0",
+        port=5001,
         debug=debug,
         use_reloader=False
     )

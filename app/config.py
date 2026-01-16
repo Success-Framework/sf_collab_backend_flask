@@ -34,14 +34,25 @@ class Config:
     # ------------------------
     # Database
     # ------------------------
+    
+    # --- Session storage (local vs prod) ---
+    # ------------------------
+    # Sessions (config only)
+    # ------------------------
+    SESSION_TYPE = os.getenv("SESSION_TYPE", "sqlalchemy")  # or "filesystem" for local
+    SESSION_SQLALCHEMY_TABLE = os.getenv("SESSION_SQLALCHEMY_TABLE", "sessions")
+    SESSION_PERMANENT = True
+
+
+    
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
 
     SQLALCHEMY_POOL_SIZE = 5
-    SQLALCHEMY_MAX_OVERFLOW = 10
-    SQLALCHEMY_POOL_RECYCLE = 3600
-    SQLALCHEMY_POOL_TIMEOUT = 30
+    #SQLALCHEMY_MAX_OVERFLOW = 10
+    #SQLALCHEMY_POOL_RECYCLE = 3600
+    #SQLALCHEMY_POOL_TIMEOUT = 30
 
     # ------------------------
     # OAuth
@@ -166,6 +177,9 @@ class Config:
     # Timezone
     TIMEZONE = 'UTC'
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+    
+    
+    
     @staticmethod
     def init_stripe():
         if not Config.STRIPE_SECRET_KEY:

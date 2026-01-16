@@ -10,8 +10,12 @@ from datetime import datetime
 import logging
 from app.config import Config
 
+socketio = SocketIO()
+
+
 # Initialize SocketIO (will be configured in app factory)
-socketio = SocketIO(cors_allowed_origins=Config.CORS_ORIGINS, async_mode='gevent')
+#socketio = SocketIO(cors_allowed_origins=Config.CORS_ORIGINS, async_mode='gevent')
+#socketio = SocketIO(cors_allowed_origins="*")
 
 # Store connected users: {user_id: [sid1, sid2, ...]}
 connected_users = {}

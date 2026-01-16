@@ -541,6 +541,8 @@ class User(db.Model):
             'email': self.email,
             'isEmailVerified': self.is_email_verified,
             'lastLogin': self.last_login.isoformat() if self.last_login else None,
+            'last_seen': self.last_login.isoformat() if self.last_login else None, 
+            'profile_picture': self.profile_picture,
             'status': self._enum_to_value(self.status),
             'role': self._enum_to_value(self.role),
             'xp_points': self.xp_points,

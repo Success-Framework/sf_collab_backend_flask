@@ -12,6 +12,8 @@ import hmac
 import hashlib
 from app.blueprints import blueprints
 from app.socket_events import socketio
+from app.services.email_service import EmailService
+from flask_session import Session
 
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
@@ -29,23 +31,35 @@ AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 # os.environ['TRANSFORMERS_CACHE'] = os.path.join(BASE_DIR, 'model_cache')
 # os.environ['TORCH_HOME'] = os.path.join(BASE_DIR, 'model_cache')
 
+def get_email_service():
+    return EmailService()
+
 def create_app(config_name=None):
     """Create and configure Flask application"""
 
     app = Flask(__name__, instance_relative_config=True)
+    # 1) Load configuration early (MUST be before CORS/sessions/oauth)
+    config_class = get_config(config_name)
+    app.config.from_object(config_class)
+    app.config.from_pyfile('config.py', silent=True)
+
     
     CORS(
         app,
-        resources={r"/*": {"origins": list(Config.CORS_ORIGINS)}},
+        resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", [])}},
         supports_credentials=True,
-        allow_headers=[
-            "Content-Type",
-            "Authorization",
-            "X-Requested-With",
-            "Access-Control-Allow-Origin"
-        ],
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        allow_headers=app.config.get("CORS_ALLOW_HEADERS", ["Content-Type", "Authorization"]),
+        methods=app.config.get("CORS_METHODS", ["GET","POST","PUT","PATCH","DELETE","OPTIONS"]),
+        always_send=True,
     )
+    
+    socketio.init_app(
+        app,
+        cors_allowed_origins=app.config.get("CORS_ORIGINS", []),
+        async_mode="threading",
+    )
+
+    
     # @app.after_request
     # def after_request(response):
     #     origin = request.headers.get('Origin')
@@ -57,17 +71,23 @@ def create_app(config_name=None):
     #     return response
     
     # JWT Configuration
-    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
+    #app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
-    app.secret_key = os.getenv('SECRET_KEY')
+    #app.secret_key = os.getenv('SECRET_KEY')
+    
+    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY") or app.config.get("SECRET_KEY")
+
     
     # Session configuration for OAuth - Use SQLAlchemy (database-backed sessions)
     # This works across multiple workers and doesn't require Redis
-    app.config['SESSION_TYPE'] = 'sqlalchemy'
-    app.config['SESSION_SQLALCHEMY'] = db
-    app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
+    #app.config['SESSION_TYPE'] = 'sqlalchemy'
+    #app.config['SESSION_SQLALCHEMY'] = db
+    #app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
     # Note: SESSION_SQLALCHEMY will be set after db.init_app()
-    print("Using SQLAlchemy (database) session storage for OAuth")
+    #print("Using SQLAlchemy (database) session storage for OAuth")
+    # Sessions (let config/env decide)
+    print(f"SESSION_TYPE from config: {app.config.get('SESSION_TYPE')}")
+
     
     app.config['SESSION_PERMANENT'] = True  # Changed to True to persist session
     app.config['SESSION_USE_SIGNER'] = True
@@ -76,8 +96,16 @@ def create_app(config_name=None):
     app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     # Fix for OAuth CSRF state issues - use None (not Lax/Strict) for OAuth redirects
-    app.config['SESSION_COOKIE_SAMESITE'] = None  # Changed from 'Lax' to None for OAuth
-    app.config['SESSION_COOKIE_SECURE'] = True if os.getenv('FLASK_ENV') == 'production' else False
+    #app.config['SESSION_COOKIE_SAMESITE'] = None  # Changed from 'Lax' to None for OAuth
+    #app.config['SESSION_COOKIE_SECURE'] = True if os.getenv('FLASK_ENV') == 'production' else False
+    
+    if os.getenv("FLASK_ENV") == "production":
+        app.config["SESSION_COOKIE_SAMESITE"] = "None"
+        app.config["SESSION_COOKIE_SECURE"] = True
+    else:
+        app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+        app.config["SESSION_COOKIE_SECURE"] = False
+
     
     # Don't set SESSION_COOKIE_DOMAIN - let it default to the request domain
     # if os.getenv('FLASK_ENV') == 'production':
@@ -86,20 +114,21 @@ def create_app(config_name=None):
     # Ensure session keys have a prefix for Redis
     app.config['SESSION_KEY_PREFIX'] = 'flask_session:'
     
-    app.config['GITHUB_CLIENT_ID'] = Config.GITHUB_CLIENT_ID
-    app.config['GITHUB_CLIENT_SECRET'] = Config.GITHUB_CLIENT_SECRET
+    app.config.setdefault("GITHUB_CLIENT_ID", os.getenv("GITHUB_CLIENT_ID"))
+    app.config.setdefault("GITHUB_CLIENT_SECRET", os.getenv("GITHUB_CLIENT_SECRET"))
+
+    
+    #app.config['GITHUB_CLIENT_ID'] = Config.GITHUB_CLIENT_ID
+    #app.config['GITHUB_CLIENT_SECRET'] = Config.GITHUB_CLIENT_SECRET
 
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     
     # Load configuration
-    config_class = get_config(config_name)
-    app.config.from_object(config_class)
-    app.config.from_pyfile('config.py', silent=True)
 
     
     # Allowed origins for CORS (extended list)
-    app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
+    #app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
 
 
 
@@ -119,23 +148,41 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    Config.init_stripe()
+    #Config.init_stripe()
+    
+    if app.config.get("SESSION_TYPE") == "filesystem":
+        app.config["SESSION_FILE_DIR"] = os.path.join(BASE_DIR, "flask_session")
+        os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
+
+    sess = Session()
+    if app.config.get("SESSION_TYPE") == "sqlalchemy":
+        app.config["SESSION_SQLALCHEMY"] = db
+        app.config["SESSION_SQLALCHEMY_TABLE"] = "sessions"
+
+    sess.init_app(app)
    
     # Set SESSION_SQLALCHEMY to use the same db instance
     
-    with app.app_context():
-        sess.init_app(app)
     
     # Create sessions table if it doesn't exist
     with app.app_context():
-        try:
-            # Try to create the sessions table
-            db.create_all()
-            print("✓ Sessions table ready")
-        except Exception as e:
-            print(f"Warning: Could not create sessions table: {e}")
+        if app.config.get("SESSION_TYPE") == "sqlalchemy":
+            try:
+                db.create_all()
+                print("✓ Sessions table ready")
+            except Exception as e:
+                print(f"Warning: Could not create sessions table: {e}")
+        else:
+            print("✓ Using filesystem sessions (no sessions table needed)")
+
     
-    auth_routes.init_oauth(app)
+    # Only init OAuth if env vars are present (so local dev + migrations work)
+    if app.config.get("GOOGLE_CLIENT_ID") and app.config.get("GOOGLE_CLIENT_SECRET"):
+        auth_routes.init_oauth(app)
+        print("✓ OAuth initialized")
+    else:
+        print("⚠ OAuth not initialized (missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET)")
+
     # Register all blueprints
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
