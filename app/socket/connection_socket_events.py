@@ -3,7 +3,7 @@ from app.extensions import socketio
 
 # If you're using a different socket setup, adjust accordingly
 
-
+#
 def emit_new_connection_request(receiver_id, sender_data):
     """
     Emit event when a new connection request is sent.
