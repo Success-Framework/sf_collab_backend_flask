@@ -88,7 +88,7 @@ def send_connection_request():
         400: Invalid request
         404: User not found
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     data = request.get_json()
     
     if not data or 'receiver_id' not in data:
@@ -182,31 +182,29 @@ def send_connection_request():
 @connections_bp.route('/request/<int:request_id>/accept', methods=['POST'])
 @jwt_required()
 def accept_connection_request(request_id):
-    """
-    Accept an incoming connection request.
-    
-    Behavior:
-        - Only the receiver can accept
-        - Changes status to 'accepted'
-        - Both users are now connected
-    
-    Returns:
-        200: Accepted, now connected
-        403: Not the receiver
-        404: Request not found
-    """
-    current_user_id = get_jwt_identity()
-    
+    current_user_id = int(get_jwt_identity())
+
     conn_request = FriendRequest.query.get(request_id)
     if not conn_request:
         return error_response('Connection request not found', 404)
-    
-    # Only receiver can accept
+
+    print("ACCEPT DEBUG:", {
+        "jwt_identity": get_jwt_identity(),
+        "jwt_type": str(type(get_jwt_identity())),
+        "current_user_id": current_user_id,
+        "receiver_id": conn_request.receiver_id,
+        "receiver_type": str(type(conn_request.receiver_id)),
+        "sender_id": conn_request.sender_id,
+        "status": conn_request.status
+    })
+
     if conn_request.receiver_id != current_user_id:
         return error_response('You can only accept requests sent to you', 403)
-    
+
     if conn_request.status != 'pending':
         return error_response(f'Request is already {conn_request.status}', 400)
+
+
     
     try:
         conn_request.status = 'accepted'
@@ -227,6 +225,7 @@ def accept_connection_request(request_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to accept request: {str(e)}', 500)
+    
 
 
 # =============================================================================
@@ -249,7 +248,7 @@ def decline_connection_request(request_id):
         403: Not the receiver
         404: Request not found
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     conn_request = FriendRequest.query.get(request_id)
     if not conn_request:
@@ -294,7 +293,7 @@ def cancel_connection_request(request_id):
         403: Not the sender
         404: Request not found
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     conn_request = FriendRequest.query.get(request_id)
     if not conn_request:
@@ -336,7 +335,7 @@ def remove_connection(user_id):
         200: Connection removed
         404: Connection not found
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     if current_user_id == user_id:
         return error_response('Invalid request', 400)
@@ -393,7 +392,7 @@ def get_connections():
     Returns:
         List of connections with user info
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -471,7 +470,7 @@ def get_incoming_requests():
     Returns:
         List of incoming pending requests with sender info
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -524,7 +523,7 @@ def get_outgoing_requests():
     Returns:
         List of outgoing pending requests with receiver info
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -577,7 +576,7 @@ def get_connection_status(user_id):
         status: 'none' | 'request_sent' | 'request_received' | 'connected'
         request_id: ID of the request/connection (if exists)
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     # Self check
     if current_user_id == user_id:
@@ -645,7 +644,7 @@ def get_connection_counts():
         incoming: Pending incoming requests (needs action)
         outgoing: Pending outgoing requests
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     
     connections = FriendRequest.query.filter(
         FriendRequest.status == 'accepted',
