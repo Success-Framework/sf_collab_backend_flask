@@ -143,7 +143,7 @@ def checkout():
             metadata={
                 "user_id": user_id,
                 "plan_id": tier_id,
-                "option": option if option else "",
+                "option": str(option) if option else "",
 
             },
             

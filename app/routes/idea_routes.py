@@ -1,12 +1,13 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 from app.models.idea import Idea
-from app.models.ideaComment import IdeaComment
 from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.waitlist import Waitlist
 import datetime
+import json
+from app.utils.upload_to_s3 import upload_file_to_s3
 ideas_bp = Blueprint('ideas', __name__)
 
 @ideas_bp.route('', methods=['GET'])
@@ -64,37 +65,57 @@ def get_idea(idea_id):
     })
 
 @ideas_bp.route('', methods=['POST'])
+@jwt_required()
 def create_idea():
     """Create new idea"""
-    data = request.get_json()
+    user_id = get_jwt_identity()
     
-    required_fields = ['title', 'description', 'project_details', 'industry', 'stage', 'creator_id']
-    if not all(field in data for field in required_fields):
+    # Get form data
+    title = request.form.get('title')
+    description = request.form.get('description')
+    project_details = request.form.get('projectDetails')
+    industry = request.form.get('industry')
+    stage = request.form.get('stage')
+    tags = request.form.get('tags')
+    image_file = request.files.get('image')
+    creator_first_name = request.form.get('creator_first_name')
+    creator_last_name = request.form.get('creator_last_name')
+    
+    required_fields = {'title', 'description', 'projectDetails', 'industry', 'stage'}
+    if not all(request.form.get(field) for field in required_fields):
         return error_response('Missing required fields')
     
     try:
+        # Parse tags from JSON string
+        tags_list = json.loads(tags) if tags else []
+        
         idea = Idea(
-            title=data['title'],
-            description=data['description'],
-            project_details=data['project_details'],
-            industry=data['industry'],
-            stage=data['stage'],
-            tags=data.get('tags', []),
-            creator_id=data['creator_id'],
-            creator_first_name=data.get('creator_first_name'),
-            creator_last_name=data.get('creator_last_name')
+            title=title,
+            description=description,
+            project_details=project_details,
+            industry=industry,
+            stage=stage,
+            tags=tags_list,
+            creator_id=user_id,
+            creator_first_name=creator_first_name,
+            creator_last_name=creator_last_name,
         )
         
+        # Handle image upload if provided
+        if image_file:
+            image_url = upload_file_to_s3(image_file, folder='ideas')
+            idea.image_url = image_url 
+        
         db.session.add(idea)
-        waitlist_user = Waitlist.query.filter_by(user_id=data['creator_id']).first()
+        waitlist_user = Waitlist.query.filter_by(id=user_id).first()
         if waitlist_user:
-            today = datetime.utcnow().date()
+            today = datetime.datetime.now(datetime.timezone.utc).date()
             if waitlist_user.last_activity_at is None or waitlist_user.last_activity_at.date() < today:
                 waitlist_user.add_points(Waitlist.POINTS_PER_IDEA, 'custom')
         db.session.commit()
         
         # Check achievements for idea creation
-        AchievementService.check_achievements(data['creator_id'], 'ideas_created')
+        AchievementService.check_achievements(user_id, 'ideas_created')
         
         return success_response({
             'idea': idea.to_dict()
@@ -197,3 +218,11 @@ def delete_idea(idea_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to delete idea: {str(e)}', 500)
+    
+@ideas_bp.route('/images/<string:filename>', methods=['GET'])
+def get_idea_image(filename):
+    """Serve idea image files"""
+    from flask import send_from_directory
+    from app import UPLOAD_FOLDER
+    print(UPLOAD_FOLDER, "filename:", filename)
+    return send_from_directory(UPLOAD_FOLDER, filename) 

@@ -61,6 +61,7 @@ from .routes import (
     contribution_polls_routes,
     connection_routes,
     payment_routes, 
+    user_social_routes
     
     
     #! removed background_remover_route,
@@ -119,7 +120,7 @@ blueprints = [
 # { "blueprint": background_remover.background_bp, "url_prefix": '/api/background-remover'},
 # { "blueprint": qwen_chat_bp_pdg_br.qwen_bp, "url_prefix": '/api/ai'},
 { "blueprint": business_plan_routes.plans_bp, "url_prefix": "/api/plans" },
-{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},  # Commented - requires chromadb/pytorch
+{ "blueprint": ai_routes.ai_bp, "url_prefix": '/api/ai'},
 { "blueprint": image_editor_routes.image_editor_bp, "url_prefix": '/api/image-editor'},
 { "blueprint": cf_img_proccessing_routes.cf_bp, "url_prefix": '/api/cf'},
 { "blueprint": feedback_routes.feedback_bp, "url_prefix": '/api/feedback' },
@@ -130,5 +131,6 @@ blueprints = [
 { "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
 { "blueprint": builder_routes.builder_bp, "url_prefix": '/api/builder'},
 { "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' },
-{"blueprint": connection_routes.connections_bp, "url_prefix": "/api/connections"}
+{"blueprint": connection_routes.connections_bp, "url_prefix": "/api/connections"},
+{ "blueprint": user_social_routes.user_social_bp, "url_prefix": '/api/user-social' }
 ]
