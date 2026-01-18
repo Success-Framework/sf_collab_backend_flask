@@ -1,4 +1,4 @@
-from flask import Flask, request, abort
+from flask import Flask, request, abort, request, g, send_from_directory
 from flask_cors import CORS
 from .extensions import db, migrate, jwt, sess
 from app.config import Config
@@ -12,6 +12,8 @@ import hmac
 import hashlib
 from app.blueprints import blueprints
 from app.socket_events import socketio
+import time
+import json
 from app.services.email_service import EmailService
 from flask_session import Session
 
@@ -23,7 +25,7 @@ warnings.filterwarnings("ignore")
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_files')
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 
 # Set model cache location
@@ -38,7 +40,6 @@ def create_app(config_name=None):
     """Create and configure Flask application"""
 
     app = Flask(__name__, instance_relative_config=True)
-    # 1) Load configuration early (MUST be before CORS/sessions/oauth)
     config_class = get_config(config_name)
     app.config.from_object(config_class)
     app.config.from_pyfile('config.py', silent=True)
@@ -91,7 +92,6 @@ def create_app(config_name=None):
     
     app.config['SESSION_PERMANENT'] = True  # Changed to True to persist session
     app.config['SESSION_USE_SIGNER'] = True
-    app.config['SESSION_COOKIE_NAME'] = 'session'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -124,7 +124,12 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     
-    # Load configuration
+    # AWS S3 Configuration
+    app.config["AWS_ACCESS_KEY_ID"] = os.getenv("AWS_ACCESS_KEY_ID")
+    app.config["AWS_SECRET_ACCESS_KEY"] = os.getenv("AWS_SECRET_ACCESS_KEY")
+    app.config["AWS_REGION"] = os.getenv("AWS_REGION", "us-east-1")
+    app.config["AWS_S3_BUCKET"] = os.getenv("AWS_S3_BUCKET")
+    app.config["BACKEND_URL"] = Config.BACKEND_URL
 
     
     # Allowed origins for CORS (extended list)
@@ -143,7 +148,84 @@ def create_app(config_name=None):
     # AI services}  
     app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
     app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
+    app.config['HUGGINGFACE_API_KEY'] = os.getenv('HUGGINGFACE_API_KEY', '')
 
+
+    # Initialize CORS
+    print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
+    CORS(
+        app,
+        resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', [])}},
+        supports_credentials=True,
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With"
+        ],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    )
+    # Request logging
+    @app.before_request
+    def start_request_timer():
+        g.start_time = time.time()
+
+    @app.after_request
+    def log_response(response):
+        # Skip noise
+        if request.path in ("/favicon.ico", "/health"):
+            return response
+        if request.method == "OPTIONS" and not response.headers.get("Access-Control-Allow-Origin"):
+            print("⚠️  CORS WARNING: Missing Access-Control-Allow-Origin header")
+
+
+        duration = round(time.time() - g.start_time, 4)
+
+        # Request info
+        method = request.method
+        path = request.path
+        status = response.status_code
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+        origin = request.headers.get("Origin")
+        user_agent = request.headers.get("User-Agent")
+
+        # Auth presence (do NOT log tokens)
+        has_auth = "Authorization" in request.headers
+        has_cookie = bool(request.headers.get("Cookie"))
+
+        # Request payload size (safe)
+        content_length = request.content_length or 0
+
+        # Response preview (safe)
+        response_preview = ""
+        if response.is_json:
+            try:
+                data = response.get_json()
+                response_preview = json.dumps(data)[:300]
+            except Exception:
+                response_preview = "<invalid json>"
+        else:
+            response_preview = "<non-json response>"
+
+        print(f"""
+    ================= API REQUEST =================
+    {method} {path}
+    Status: {status}
+    Duration: {duration}s
+
+    Client IP: {ip}
+    Origin: {origin}
+    User-Agent: {user_agent}
+
+    Auth Header Present: {has_auth}
+    Cookie Present: {has_cookie}
+    Request Size: {content_length} bytes
+
+    Response Preview:
+    {response_preview}
+    =============================================
+    """)
+
+        return response
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
@@ -187,6 +269,9 @@ def create_app(config_name=None):
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
 
+    @app.route('/uploads/<path:filename>')
+    def uploaded_file(filename):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     # Health check endpoint
     @app.route('/health')

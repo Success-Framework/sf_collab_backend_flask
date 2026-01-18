@@ -129,8 +129,10 @@ class Config:
         "Origin",
     ]
 
+    DEFAULT_PAGE_SIZE = 10
+    MAX_PAGE_SIZE = 100
     SOCKETIO_CORS_ALLOWED_ORIGINS = CORS_ORIGINS
-
+    
     # ------------------------
     # Sessions
     # ------------------------

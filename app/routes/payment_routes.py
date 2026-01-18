@@ -7,6 +7,7 @@ from app.extensions import db
 from app.models.plan import Plan
 from app.subscription_plans import PLANS
 from app.models.user import User
+from app.utils.helper import success_response, error_response
 payment_bp = Blueprint("payments", __name__, url_prefix="/payments")
 
 
@@ -142,7 +143,7 @@ def checkout():
             metadata={
                 "user_id": user_id,
                 "plan_id": tier_id,
-                "option": option if option else "",
+                "option": str(option) if option else "",
 
             },
             
@@ -311,3 +312,13 @@ def create_donation_session():
         'url': session['url'],
         'success': True
     })
+@payment_bp.route("/total-donations", methods=["GET"])
+@jwt_required()
+def get_total_donations():
+    total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="donation", status="completed").scalar()
+    return success_response({"total_donations": total or 0})
+@payment_bp.route("/total-crowdfunding", methods=["GET"])
+@jwt_required()
+def get_total_crowdfunding():
+    total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="crowdfunding", status="completed").scalar()
+    return success_response({"total_crowdfunding": total or 0})

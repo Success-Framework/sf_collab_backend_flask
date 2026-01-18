@@ -72,6 +72,8 @@ class JoinRequest(db.Model):
         return value.value if hasattr(value, "value") else value
         
     def to_dict(self):
+        startup = self.target_startup
+        user = self.request_user
         return {
             'id': self.id,
             'startupId': self.startup_id,
@@ -87,14 +89,14 @@ class JoinRequest(db.Model):
             'isPending': self.is_pending(),
             'duration': str(self.get_duration()),
             'startup': {
-                'id': self.startup.id,
-                'name': self.startup.name,
-                'industry': self.startup.industry
-            } if self.startup else None,
+                'id': startup.id,
+                'name': startup.name,
+                'industry': startup.industry
+            } if startup else None,
             'user': {
-                'id': self.user.id,
-                'firstName': self.user.first_name,
-                'lastName': self.user.last_name,
-                'email': self.user.email
-            } if self.user else None
+                'id': user.id,
+                'firstName': user.first_name,
+                'lastName': user.last_name,
+                'email': user.email
+            } if user else None
         }

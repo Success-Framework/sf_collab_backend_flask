@@ -1,5 +1,6 @@
 from .routes import (
-    ai_routes,
+    builder_routes,
+    ai_routes,  # Commented - requires chromadb/pytorch
     auth_routes,
     user_routes,
     profile_routes,
@@ -58,7 +59,9 @@ from .routes import (
     application_routes,
     contribution_ideas_routes,
     contribution_polls_routes,
+    connection_routes,
     payment_routes, 
+    user_social_routes
     
     
     #! removed background_remover_route,
@@ -68,7 +71,6 @@ from .routes import (
     #! removed qwen_chat_route
 )
 
-from .routes.connection_routes import connections_bp
 
 
 blueprints = [ 
@@ -127,6 +129,8 @@ blueprints = [
 { "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' },
 { "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
 { "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
+{ "blueprint": builder_routes.builder_bp, "url_prefix": '/api/builder'},
 { "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' },
-{"blueprint": connections_bp, "url_prefix": "/api/connections"},
+{"blueprint": connection_routes.connections_bp, "url_prefix": "/api/connections"},
+{ "blueprint": user_social_routes.user_social_bp, "url_prefix": '/api/user-social' }
 ]
