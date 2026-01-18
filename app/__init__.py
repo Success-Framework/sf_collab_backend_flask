@@ -13,8 +13,9 @@ import hashlib
 from app.blueprints import blueprints
 from app.socket_events import socketio
 import time
-from flask import request, g
+from flask import request, g, send_from_directory
 import json
+
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
@@ -23,7 +24,7 @@ warnings.filterwarnings("ignore")
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_files')
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 
 # Set model cache location
@@ -83,7 +84,12 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     
-
+    # AWS S3 Configuration
+    app.config["AWS_ACCESS_KEY_ID"] = os.getenv("AWS_ACCESS_KEY_ID")
+    app.config["AWS_SECRET_ACCESS_KEY"] = os.getenv("AWS_SECRET_ACCESS_KEY")
+    app.config["AWS_REGION"] = os.getenv("AWS_REGION", "us-east-1")
+    app.config["AWS_S3_BUCKET"] = os.getenv("AWS_S3_BUCKET")
+    app.config["BACKEND_URL"] = Config.BACKEND_URL
 
     
     # Allowed origins for CORS (extended list)
@@ -205,6 +211,9 @@ def create_app(config_name=None):
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
 
+    @app.route('/uploads/<path:filename>')
+    def uploaded_file(filename):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     # Health check endpoint
     @app.route('/health')
