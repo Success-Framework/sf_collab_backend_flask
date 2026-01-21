@@ -31,7 +31,7 @@ startups_bp = Blueprint('startups', __name__)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'startups')
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'txt'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'txt', 'md', 'xlsx', 'pptx'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Ensure upload directory exists
@@ -65,15 +65,12 @@ def get_startups():
     industry = request.args.get('industry', type=str)
     stage = request.args.get('stage', type=str)
     search = request.args.get('search', type=str)
-    my_startups = request.args.get('my_startups', type=bool)
+    my_startups = request.args.get('my_startups', 'false').lower() == 'true'
     min_funding = request.args.get('min_funding', type=float)
     max_funding = request.args.get('max_funding', type=float)
-    
     query = Startup.query
     
-    # Get user's startups if requested
-    if my_startups:
-        query = query.filter(Startup.creator_id == current_user_id)
+
     
     # Apply filters
     if industry:
@@ -89,7 +86,14 @@ def get_startups():
         query = query.filter(Startup.funding_amount >= min_funding)
     if max_funding is not None:
         query = query.filter(Startup.funding_amount <= max_funding)
-    
+    # Get user's startups if requested
+    print("my_startups:", my_startups)
+    print("type(my_startups):", type(my_startups))
+    print(Startup.creator_id == current_user_id)
+    print(current_user_id)
+    print(Startup.creator_id)
+    if my_startups:
+        query = query.filter(Startup.creator_id == current_user_id)
     result = paginate(query, page, per_page)
     
     return success_response({
@@ -163,7 +167,12 @@ def register_startup():
         current_user = User.query.get(current_user_id)
         if not current_user:
             return error_response('User not found', 404)
-        
+        if not current_user.is_verified:
+            return error_response('User email not verified', 403)
+        if current_user.is_banned:
+            return error_response('User is banned', 403)
+        if len(current_user.active_startups_count) == 1 and current_user.plan_id == '':
+            return error_response('Startup creation limit reached for your plan', 403)
         # Parse roles if it's a string (JSON)
         roles_data = data.get('roles', {})
         if isinstance(roles_data, str):
@@ -410,7 +419,6 @@ def get_startup_members(startup_id):
         return error_response("You need to be a member to see the team", 403)
     
     members = StartupMember.query.filter_by(startup_id=startup_id).all()
-    
     return success_response({
         'members': [member.to_dict() for member in members]
     })
@@ -440,7 +448,7 @@ def add_startup_member(startup_id):
             data['user_id'],
             data['first_name'],
             data['last_name'],
-            data.get('role', 'member')
+            data.get('roles', 'member')
         )
         return success_response({'member': member.to_dict()}, 'Member added successfully')
     except Exception as e:
@@ -450,22 +458,18 @@ def add_startup_member(startup_id):
 @startups_bp.route('/<int:startup_id>/members/<int:member_id>', methods=['DELETE'])
 @jwt_required()
 def remove_startup_member(startup_id, member_id):
-    """Remove member from startup"""
-    current_user_id = get_jwt_identity()
-    
-    startup = Startup.query.get(startup_id)
-    if not startup:
-        return error_response('Startup not found', 404)
-    
-    # Check if user is authorized to remove members
-    if not has_startup_management_access(current_user_id, startup_id):
-        return error_response('Unauthorized to remove members from this startup', 403)
-    
-    try:
-        startup.remove_member(member_id)
-        return success_response(message='Member removed successfully')
-    except Exception as e:
-        return error_response(f'Failed to remove member: {str(e)}', 500)
+    startup = Startup.query.get_or_404(startup_id)
+
+    if not can_manage_members(startup_id):
+        return error_response('Unauthorized', 403)
+
+    removed = startup.remove_member_by_id(member_id)
+
+    if not removed:
+        return error_response('Member not found or already inactive', 404)
+
+    return success_response(message='Member removed successfully')
+
 
 #! DELETE STARTUP
 @startups_bp.route('/<int:startup_id>', methods=['DELETE'])
@@ -560,15 +564,22 @@ def get_startup_documents(startup_id):
     current_user_id = get_jwt_identity()
     
     startup = Startup.query.get_or_404(startup_id)
-    
     # Check if user has access to this startup
     if not can_view_full_details(startup_id):
         return error_response("You need to be a member of this startup to view documents", 403)
-    # if not has_startup_access(current_user_id, startup_id):
-    #     return error_response('Unauthorized to access this startup documents', 403)
-    
-    documents = [doc.to_dict() for doc in startup.get_documents()]
-    return success_response({'documents': documents})
+
+    # Filter documents based on visibility
+    visible_by = request.args.get('visible_by', 'all')  # default: all
+    documents = startup.get_documents()
+
+    if visible_by == 'public':
+        documents = [doc for doc in documents if doc.visible_by == 'public']
+    elif visible_by == 'private':
+        documents = [doc for doc in documents if doc.visible_by == 'private']
+    elif visible_by == 'team':
+        documents = [doc for doc in documents if doc.visible_by == 'team']
+
+    return success_response({'documents': [doc.to_dict() for doc in documents]})
 
 #! SERVE STARTUP FILE (Public - no auth required)
 @startups_bp.route('/uploads/<int:startup_id>/<filename>', methods=['GET'])
@@ -656,10 +667,11 @@ def upload_document(startup_id):
         
         # Create document with file_url
         file_url = f"/api/startups/uploads/{startup_id}/{unique_filename}"
-        
+        print(f"Uploading document: {document_file.filename}, visible_by: {request.form.get('visible_by', 'public')}")
         document = StartupDocument(
             startup_id=startup_id,
             filename=document_file.filename,
+            visible_by=request.form.get('visible_by', 'public'),
             file_path=doc_path,
             file_url=file_url,  # Set the file_url
             content_type=document_file.content_type,
@@ -900,12 +912,12 @@ def accept_join_request(startup_id, request_id):
     try:
         # The approve method already handles adding the member
         new_member = join_request.approve()
-
+        db.session.commit()
         return success_response({
             'message': "Join request accepted. User added as team member.",
             'new_member': {
                 'userId': new_member.user_id,
-                'role': new_member.role,
+                'role': new_member.role.value,
                 'joinedAt': new_member.joined_at.isoformat() if hasattr(new_member, 'joined_at') else None
             }
         }, status=200)
@@ -937,6 +949,7 @@ def reject_join_request(startup_id, request_id):
 
     try:
         join_request.reject()
+        db.session.commit()
         return success_response({
             "message": "Join request rejected successfully",
             "request_id": request_id

@@ -8,13 +8,13 @@ from .goalMilstone import GoalMilestone
 class ProjectGoal(db.Model):
     __tablename__ = 'project_goals'
     
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     startup_id = db.Column(db.Integer, db.ForeignKey('startups.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    
+
     progress_percentage = db.Column(db.Float, default=0)  # 78%
     milestones_completed = db.Column(db.Integer, default=0)  # 8
     milestones_total = db.Column(db.Integer, default=0)  # 10
@@ -22,17 +22,20 @@ class ProjectGoal(db.Model):
     is_on_track = db.Column(db.Boolean, default=True)
     next_milestone = db.Column(db.String(255))  # "MVP Launch"
     
-    target_date = db.Column(db.DateTime)
+    start_date = db.Column(db.DateTime, default=datetime.utcnow)
+    target_date = db.Column(db.DateTime, nullable=True)
     completed_date = db.Column(db.DateTime, nullable=True)
     status = db.Column(Enum('active', 'completed', 'on_hold', 'cancelled'), default='active')
-    
+    team_size = db.Column(db.Integer, default=1)
+    members_involved = db.Column(db.JSON, default=[])  # Comma-separated user IDs or JSON list
+    visible_by = db.Column(db.String(50), default='team')  # 'team', 'public', 'private'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     goal_owner = db.relationship('User', back_populates='project_goals', foreign_keys=[user_id])
     parent_startup = db.relationship('Startup', back_populates='project_goals', foreign_keys=[startup_id])
-    milestones = db.relationship('GoalMilestone', back_populates='project_goal', lazy='dynamic', cascade='all, delete-orphan')
+    milestones = db.relationship('GoalMilestone', back_populates='goal', lazy='dynamic', cascade='all, delete-orphan')
     
     # HELPER FUNCTIONS
     
@@ -85,7 +88,7 @@ class ProjectGoal(db.Model):
         
         
         if order is None:
-            order = self.milestones_list.count() + 1
+            order = self.milestones.count() + 1
         
         milestone = GoalMilestone(
             goal_id=self.id,
@@ -119,7 +122,7 @@ class ProjectGoal(db.Model):
     
     def get_milestones(self, completed_only=False):
         """Get milestones with optional filtering"""
-        query = self.milestones_list
+        query = self.milestones
         if completed_only:
             query = query.filter_by(is_completed=True)
         return query.order_by(GoalMilestone.order).all()
@@ -127,7 +130,7 @@ class ProjectGoal(db.Model):
     def _enum_to_value(self,value):
         return value.value if hasattr(value, "value") else value
         
-    def to_dict(self, include_milestones=False):
+    def to_dict(self, include_milestones=True):
         data = {
             'id': self.id,
             'startup_id': self.startup_id,
@@ -139,17 +142,21 @@ class ProjectGoal(db.Model):
             'milestones_total': self.milestones_total,
             'is_on_track': self.is_on_track,
             'next_milestone': self.next_milestone,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
             'target_date': self.target_date.isoformat() if self.target_date else None,
             'completed_date': self.completed_date.isoformat() if self.completed_date else None,
             'status': self._enum_to_value(self.status),
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
-            'days_remaining': self._get_days_remaining()
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'days_remaining': self._get_days_remaining(),
+            'team_size': self.team_size,
+            'members_involved': self.members_involved,
+            'visible_by': self.visible_by,
         }
         
         if include_milestones:
             data['milestones'] = [milestone.to_dict() for milestone in self.get_milestones()]
-        
+        print("ProjectGoal to_dict:", data)
         return data
     
     def _get_days_remaining(self):

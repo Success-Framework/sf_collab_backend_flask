@@ -22,37 +22,30 @@ class JoinRequest(db.Model):
     # Relationships
     target_startup = db.relationship('Startup', back_populates='join_requests', foreign_keys=[startup_id])
     request_user = db.relationship('User', back_populates='join_requests', foreign_keys=[user_id])
-    
+    startup = db.relationship('Startup', foreign_keys=[startup_id])
     # HELPER FUNCTIONS
     
-    def approve(self, reviewer_id=None):
-        """Approve join request"""
+    def approve(self):
         self.status = JoinRequestStatus.approved
         self.updated_at = datetime.utcnow()
-        
-        # Add user to startup members
-        from models.startUpMember import StartupMember
+
+        from app.models.startUpMember import StartupMember
         member = StartupMember(
             startup_id=self.startup_id,
             user_id=self.user_id,
             first_name=self.first_name,
             last_name=self.last_name,
-            role=self.role
+            role="member"
         )
+
         db.session.add(member)
-        
-        # Update startup member count
-        if self.startup:
-            self.startup.update_member_count()
-        
-        db.session.commit()
         return member
     
     def reject(self, reviewer_id=None):
         """Reject join request"""
         self.status = JoinRequestStatus.rejected
         self.updated_at = datetime.utcnow()
-        db.session.commit()
+        db.session.delete(self)
     
     def cancel(self):
         """Cancel join request (by user)"""
