@@ -15,7 +15,7 @@ class Idea(db.Model):
     stage = db.Column(db.String(100), nullable=False)
     tags = db.Column(JSON, default=[])
     privacy = db.Column(Enum(Privacy), default=Privacy.public)
-    
+    image_url = db.Column(db.String(255), nullable=True)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     creator_first_name = db.Column(db.String(100))
     creator_last_name = db.Column(db.String(100))
@@ -117,7 +117,10 @@ class Idea(db.Model):
         
     def _enum_to_value(self,value):
         return value.value if hasattr(value, "value") else value
-    
+    def save_image(self, image_url):
+        """Save image URL to idea (if applicable)"""
+        self.image_url = image_url
+        db.session.commit()
     def to_dict(self, include_comments=False, include_team=True):
         data = {
             'id': self.id,
@@ -139,7 +142,8 @@ class Idea(db.Model):
             'commentsCount': self.get_comments_count(),
             'teamSize': self.get_team_size(),
             'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat()
+            'updatedAt': self.updated_at.isoformat(),
+            'imageUrl': self.image_url
         }
         
         if include_team:
