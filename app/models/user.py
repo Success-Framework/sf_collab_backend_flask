@@ -20,7 +20,7 @@ class User(db.Model):
     xp_points = db.Column(db.Integer, default=0)
     streak_days = db.Column(db.Integer, default=0)
     last_activity_date = db.Column(db.Date)
-    plan_id = db.Column(db.String, nullable=True) # Subscription plan
+    plan_id = db.Column(db.String(255), nullable=True) # Subscription plan
     credits = db.Column(db.Integer, default=0)  # For tracking user credits
     # Computed/cached stats
     total_revenue = db.Column(db.Float, default=0.0)
@@ -280,22 +280,20 @@ class User(db.Model):
         cascade='all, delete-orphan',
         foreign_keys='GoalMilestone.user_id')
     
-    sent_requests = db.relationship(
+    sent_friend_requests = db.relationship(
         "FriendRequest",
-        lazy='dynamic', 
         foreign_keys="FriendRequest.sender_id",
         back_populates="sender",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
 
-    # Friend requests received by this user
-    received_requests = db.relationship(
+    received_friend_requests = db.relationship(
         "FriendRequest",
-        lazy='dynamic', 
         foreign_keys="FriendRequest.receiver_id",
         back_populates="receiver",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
+
     
     permissions = db.relationship(
         "UserPermission",
@@ -543,6 +541,8 @@ class User(db.Model):
             'email': self.email,
             'isEmailVerified': self.is_email_verified,
             'lastLogin': self.last_login.isoformat() if self.last_login else None,
+            'last_seen': self.last_login.isoformat() if self.last_login else None, 
+            'profile_picture': self.profile_picture,
             'status': self._enum_to_value(self.status),
             'role': self._enum_to_value(self.role),
             'xp_points': self.xp_points,

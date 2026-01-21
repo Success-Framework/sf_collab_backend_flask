@@ -4,7 +4,8 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
 knowledge_bp = Blueprint('knowledge', __name__)
-
+# For now it is a good idea to mix content from SForger and external sources.
+# In the future, we might want to separate them.
 @knowledge_bp.route('', methods=['GET'])
 def get_knowledge_posts():
     """Get all knowledge posts with filtering"""
@@ -14,7 +15,7 @@ def get_knowledge_posts():
     author_id = request.args.get('author_id', type=int)
     search = request.args.get('search', type=str)
     include_comments = request.args.get('include_comments', 'false').lower() == 'true'
-    
+    include_external = request.args.get('include_external', 'true').lower() == 'true'
     query = Knowledge.query
     
     if category:
@@ -27,7 +28,8 @@ def get_knowledge_posts():
             (Knowledge.title_description.ilike(f'%{search}%')) |
             (Knowledge.content_preview.ilike(f'%{search}%'))
         )
-    
+    # if include_external: 
+        
     result = paginate(query.order_by(Knowledge.created_at.desc()), page, per_page)
     
     return success_response({

@@ -7,6 +7,7 @@ from app.extensions import db
 from app.models.plan import Plan
 from app.subscription_plans import PLANS
 from app.models.user import User
+from app.utils.helper import success_response, error_response
 payment_bp = Blueprint("payments", __name__, url_prefix="/payments")
 
 
@@ -16,16 +17,14 @@ payment_bp = Blueprint("payments", __name__, url_prefix="/payments")
 @cross_origin()
 def get_plans():
     plans = PLANS
-    print("Fetching plans")
+
     type = request.args.get("type")
     if type:
         plans = list(filter(lambda p: p.get('category') == type, PLANS))
     return jsonify([{
-            "id": plan['id'],
-            "title": plan['title'],
+            "title": plan['category'],
             "currency": plan.get('currency', 'usd'),
             "description": plan.get('description', ''),
-            "interval": plan.get('interval'),
             "roles": plan.get('roles', []),
         } for plan in plans])
     # return jsonify([
@@ -41,11 +40,56 @@ def get_plans():
 
 @payment_bp.route("/plans/<plan_id>", methods=["GET"])
 def get_plan_by_id(plan_id):
-    print(plan_id)
-    for plan in PLANS:
-        if plan['id'] == plan_id:
-            return plan
-    return None
+    # Loop over all categories
+    for category in PLANS:
+        # 1️⃣ Check roles -> tiers (crowdfunding, standard)
+        if 'roles' in category:
+            for role in category['roles']:
+                for tier in role.get('tiers', []):
+                    if tier.get('id') == plan_id:
+                        # Include category and role in the response
+                        result = tier.copy()
+                        result['category'] = category.get('category')
+                        result['role'] = role.get('role')
+                        return jsonify(result)
+
+        # 2️⃣ Check ai-tools -> tools
+        if 'tools' in category:
+            for tool in category['tools']:
+                if tool.get('id') == plan_id:
+                    result = tool.copy()
+                    result['category'] = category.get('category')
+                    return jsonify(result)
+
+        # 3️⃣ Check extras -> extras -> items
+        if 'extras' in category:
+            for extra_group in category['extras']:
+                for item in extra_group.get('items', []):
+                    if item.get('id') == plan_id:
+                        result = item.copy()
+                        result['category'] = category.get('category')
+                        result['extra_group'] = extra_group.get('title')
+                        return jsonify(result)
+
+        # 4️⃣ Check credits -> credit_packs
+        if 'credit_packs' in category:
+            for pack in category['credit_packs']:
+                if pack.get('id') == plan_id:
+                    result = pack.copy()
+                    result['category'] = category.get('category')
+                    return jsonify(result)
+
+        # 5️⃣ Check credits -> topups
+        if 'topups' in category:
+            for topup in category['topups']:
+                if topup.get('id') == plan_id:
+                    result = topup.copy()
+                    result['category'] = category.get('category')
+                    return jsonify(result)
+
+    # Not found
+    return jsonify({"error": "Plan not found"}), 404
+
 @payment_bp.route("create-payment-intent", methods=["POST"] )
 @jwt_required()
 def create_payment_intent():
@@ -81,6 +125,8 @@ def checkout():
         user_id = data.get('user_id')
         product = data.get('title')
         amount = data.get('price')  # amount in cents
+        description = data.get('description', '')
+        option = data.get('option', None)
         session = stripe.checkout.Session.create(
             line_items=[
                 {
@@ -96,7 +142,8 @@ def checkout():
             ui_mode="hosted",
             metadata={
                 "user_id": user_id,
-                "plan_id": tier_id
+                "plan_id": tier_id,
+                "option": str(option) if option else "",
 
             },
             
@@ -265,3 +312,13 @@ def create_donation_session():
         'url': session['url'],
         'success': True
     })
+@payment_bp.route("/total-donations", methods=["GET"])
+@jwt_required()
+def get_total_donations():
+    total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="donation", status="completed").scalar()
+    return success_response({"total_donations": total or 0})
+@payment_bp.route("/total-crowdfunding", methods=["GET"])
+@jwt_required()
+def get_total_crowdfunding():
+    total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="crowdfunding", status="completed").scalar()
+    return success_response({"total_crowdfunding": total or 0})

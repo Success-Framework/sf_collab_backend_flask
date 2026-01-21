@@ -31,8 +31,9 @@ class Waitlist(db.Model):
     POINTS_PER_SMALL_CONTRIBUTION = 10
     POINTS_PER_CONTRIBUTION = 25
     POINTS_PER_LARGE_CONTRIBUTION = 50
+    POINTS_PER_IDEA = 10
     POINTS_PER_ACTIVITY = 1
-    POINTS_PER_STARTUP = 30
+    POINTS_PER_STARTUP = 15
     ACTIVITY_INTERVAL = timedelta(minutes=30)
     DISCOUNT_RANKS = {
         (1, 500): 25,
@@ -99,7 +100,7 @@ class Waitlist(db.Model):
     @hybrid_property
     def total_points_value(self) -> int:
         return (
-            (self.referral_points or 0) * 2
+            self.referral_points or 0
             + (self.contribution_points or 0)
             + (self.activity_points or 0)
         )
@@ -107,7 +108,7 @@ class Waitlist(db.Model):
     @total_points_value.expression
     def total_points_value(cls):
         return (
-            (cls.referral_points * 2)
+            (cls.referral_points * 5)
             + cls.contribution_points
             + cls.activity_points
         )
@@ -189,7 +190,7 @@ class Waitlist(db.Model):
         db.session.flush()  # assigns ID without committing
 
         position = user.get_position()
-        user.activity_points += max(0, int((Waitlist.MAX_V1 - position) / 50)) # max 2500 / 50 = 50 points
+        # user.activity_points += max(0, int((Waitlist.MAX_V1 - position) / 50)) # max 2500 / 50 = 50 points
 
         db.session.commit()
         return True, "Successfully joined waitlist", {

@@ -234,7 +234,7 @@ PLANS = [
                   {
                       "title": "Builder Early",
                       "id": "builder-early",
-                      "price": 9900,
+                      "price": 900,
                       "badge_id": "builder-early-badge",
                       "features": [
                           "Higher matching & discovery priority: surfaced earlier to founders",
@@ -276,7 +276,7 @@ PLANS = [
                   {
                       "title": "Builder Power Supporter",
                       "id": "builder-power-supporter",
-                      "price": 99900,
+                      "price": 9900,
                       "badge_id": "builder-power-supporter-badge",
                       "features": [
                           "Top priority across matching, access, and features",
@@ -500,7 +500,7 @@ PLANS = [
                 "id": "ai-tools-bundle",
                 "title": "AI Tools Bundle",
                 "description": "All AI tools included",
-                "price": 4900,
+                "price": 6900,
                 "currency": "usd",
                 "duration_months": 1,
                 "bundle": True,

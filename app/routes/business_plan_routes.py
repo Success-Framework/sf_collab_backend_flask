@@ -8,7 +8,7 @@ from app.utils.helper import success_response, error_response
 from datetime import datetime
 from app.services.financial_calculator import calculate_financials
 from app.services.pdf_exporter import export_business_plan_pdf
-from app.services.ai_plan_generator import generate_plan_section
+from app.services.ai_plan_generator import generate_section
 from app.services.docx_exporter import export_business_plan_docx
 
 import os
@@ -164,13 +164,13 @@ def generate_ai_section(plan_id):
 
     section = PlanSection.query.filter_by(
         plan_id=plan.id,
-        type=section_type
+        section_type=section_type
     ).first()
 
     existing_content = section.content if section else None
 
     try:
-        content = generate_plan_section(
+        content = generate_section(
             section_type=section_type,
             inputs=inputs,
             existing_content=existing_content,
@@ -182,7 +182,7 @@ def generate_ai_section(plan_id):
     if not section:
         section = PlanSection(
             plan_id=plan.id,
-            type=section_type,
+            section_type=section_type,
             content=content
         )
         db.session.add(section)
@@ -227,3 +227,69 @@ def export_plan_docx(plan_id):
         "file": os.path.basename(file_path),
         "path": file_path
     }, "DOCX generated successfully")
+
+
+@plans_bp.route('/<int:plan_id>/ai/generate-all', methods=['POST'])
+@jwt_required()
+def generate_all_sections(plan_id):
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+
+    inputs = data.get("inputs", {})
+
+    plan = BusinessPlan.query.filter_by(id=plan_id, user_id=user_id).first()
+    if not plan:
+        return error_response("Plan not found", 404)
+
+    SECTION_ORDER = [
+        "executive_summary",
+        "problem_solution",
+        "market_overview",
+        "business_model",
+        "operations",
+        "marketing",
+        "financial_narrative"
+    ]
+
+    generated_sections = []
+
+    try:
+        for section_type in SECTION_ORDER:
+            section = PlanSection.query.filter_by(
+                plan_id=plan.id,
+                section_type=section_type
+            ).first()
+
+            existing_content = section.content if section else None
+
+            content = generate_section(
+                section_type=section_type,
+                inputs=inputs,
+                existing_content=existing_content,
+                action="generate"
+            )
+
+            if not section:
+                section = PlanSection(
+                    plan_id=plan.id,
+                    section_type=section_type,
+                    content=content
+                )
+                db.session.add(section)
+            else:
+                section.content = content
+            db.session.flush()
+            generated_sections.append(section.to_dict())
+
+        db.session.commit()
+
+        return success_response(
+            {
+                "sections": generated_sections
+            },
+            "All sections generated successfully"
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
