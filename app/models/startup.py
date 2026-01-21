@@ -143,7 +143,20 @@ class Startup(db.Model):
         if member:
             member.is_active = False
             self.update_member_count()
-    
+    def remove_member_by_id(self, member_id):
+        member = self.startup_members.filter_by(
+            id=member_id,
+            is_active=True
+        ).first()
+
+        if not member:
+            return False
+
+        db.session.delete(member)
+        self.update_member_count()
+        db.session.commit()
+        return True
+
     def update_stage(self, new_stage):
         """Update startup stage"""
         self.stage = StartupStage(new_stage)

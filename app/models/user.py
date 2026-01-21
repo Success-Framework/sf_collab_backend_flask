@@ -590,7 +590,9 @@ class User(db.Model):
             'timezone': self.get_timezone(),
             'permissions': [perm.to_dict() for perm in self.permissions],
             'roles': [ur.role for ur in self.user_roles],
-
+            'planId': self.plan_id,
+            'credits': self.credits,
+            
             # Multi-role profile data
             # 'roles': self.roles or [],
             # 'founderProfile': self.founder_profile or {},

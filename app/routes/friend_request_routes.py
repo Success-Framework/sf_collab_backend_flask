@@ -60,10 +60,12 @@ def get_friend_request(request_id):
     })
 
 #! THIS 
-@friend_requests_bp.route('', methods=['POST'])
+@friend_requests_bp.route('', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def create_friend_request():
     """Send friend request"""
+    if request.method == "OPTIONS":
+        return "", 200
     current_user_id = get_jwt_identity()
     
     data = request.get_json()
@@ -112,10 +114,12 @@ def create_friend_request():
         return error_response(f'Failed to send friend request: {str(e)}', 500)
 
 #! and this
-@friend_requests_bp.route('/<int:request_id>/accept', methods=['POST'])
+@friend_requests_bp.route('/<int:request_id>/accept', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def accept_friend_request(request_id):
     """Accept friend request"""
+    if request.method == "OPTIONS":
+        return "", 200
     current_user_id = get_jwt_identity()
     
     friend_request = FriendRequest.query.get(request_id)
@@ -142,10 +146,12 @@ def accept_friend_request(request_id):
         return error_response(f'Failed to accept friend request: {str(e)}', 500)
 
 #! and this
-@friend_requests_bp.route('/<int:request_id>/reject', methods=['POST'])
+@friend_requests_bp.route('/<int:request_id>/reject', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def reject_friend_request(request_id):
     """Reject friend request"""
+    if request.method == "OPTIONS":
+        return "", 200
     current_user_id = get_jwt_identity()
     
     friend_request = FriendRequest.query.get(request_id)
@@ -172,10 +178,12 @@ def reject_friend_request(request_id):
         return error_response(f'Failed to reject friend request: {str(e)}', 500)
 
 #!and this sender
-@friend_requests_bp.route('/<int:request_id>/cancel', methods=['POST'])
+@friend_requests_bp.route('/<int:request_id>/cancel', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def cancel_friend_request(request_id):
     """Cancel sent friend request"""
+    if request.method == "OPTIONS":
+        return "", 200
     current_user_id = get_jwt_identity()
     
     friend_request = FriendRequest.query.get(request_id)

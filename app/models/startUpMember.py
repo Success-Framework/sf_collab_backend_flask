@@ -58,5 +58,6 @@ class StartupMember(db.Model):
             'isActive': self.is_active,
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
-            'fullName': self.get_full_name()
+            'fullName': self.get_full_name(),
+            'profilePicture': self.member_user.profile_picture if self.member_user else None,
         }
