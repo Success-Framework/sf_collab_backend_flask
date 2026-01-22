@@ -12,8 +12,9 @@ class OutreachSendJob(db.Model):
     email_account_id = db.Column(db.Integer, nullable=False)
 
     status = db.Column(
-        db.String(50), default="queued"
-    )  # queued | sending | sent | failed | skipped
+        db.String(50),
+        default="queued"
+    )  # queued | sending | sent | failed
 
     attempts = db.Column(db.Integer, default=0)
     error_message = db.Column(db.Text)

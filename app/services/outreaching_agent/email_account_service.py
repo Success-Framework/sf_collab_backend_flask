@@ -1,4 +1,4 @@
-from app.models.outreach.email_account import EmailAccount
+from app.models.outreach_email_account import EmailAccount
 from app.utils.crypto import encrypt, decrypt
 from app.extensions import db
 

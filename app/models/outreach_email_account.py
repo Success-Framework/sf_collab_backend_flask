@@ -1,11 +1,17 @@
 from datetime import datetime
 from app.extensions import db
 
-class EmailAccount(db.Model):
-    __tablename__ = "email_accounts"
+class OutreachEmailAccount(db.Model):
+    __tablename__ = "outreach_email_accounts"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
 
     email_address = db.Column(db.String(255), nullable=False)
     from_name = db.Column(db.String(255), nullable=False)

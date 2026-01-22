@@ -37,7 +37,7 @@ from .routes import (
     suggestion_routes,
     task_routes,
     user_achievement_routes,
-    outreach_bp,
+    outreach_routes,
     # gemini_route,
     pdf_signing_routes,
     # background_remover,
@@ -131,7 +131,7 @@ blueprints = [
 { "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
 { "blueprint": builder_routes.builder_bp, "url_prefix": '/api/builder'},
 { "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' },
-{ "blueprint": outreach_bp, "url_prefix": "/api/outreach" },
+{ "blueprint": outreach_routes.outreach_bp, "url_prefix": "/api/outreach" },
 {"blueprint": connection_routes.connections_bp, "url_prefix": "/api/connections"},
 { "blueprint": user_social_routes.user_social_bp, "url_prefix": '/api/user-social' }
 ]

@@ -8,10 +8,8 @@ if not FERNET_KEY:
 
 fernet = Fernet(FERNET_KEY)
 
+def encrypt(value: str) -> str:
+    return fernet.encrypt(value.encode()).decode()
 
-def encrypt(text: str) -> str:
-    return fernet.encrypt(text.encode()).decode()
-
-
-def decrypt(token: str) -> str:
-    return fernet.decrypt(token.encode()).decode()
+def decrypt(value: str) -> str:
+    return fernet.decrypt(value.encode()).decode()
