@@ -1,4 +1,4 @@
-from flask import Flask, request, abort
+from flask import Flask, request, abort, request, g, send_from_directory, make_response
 from flask_cors import CORS
 from .extensions import db, migrate, jwt, sess
 from app.config import Config
@@ -13,71 +13,64 @@ import hashlib
 from app.blueprints import blueprints
 from app.socket_events import socketio
 import time
-from flask import request, g, send_from_directory
 import json
+from app.services.email_service import EmailService
+from flask_session import Session
 
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
 # Suppress warnings first
+warnings.filterwarnings("ignore")
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 
-# Set model cache location
-# os.environ['HF_HOME'] = os.path.join(BASE_DIR, 'model_cache')
-# os.environ['TRANSFORMERS_CACHE'] = os.path.join(BASE_DIR, 'model_cache')
-# os.environ['TORCH_HOME'] = os.path.join(BASE_DIR, 'model_cache')
+def get_email_service():
+    return EmailService()
 
 def create_app(config_name=None):
     """Create and configure Flask application"""
 
     app = Flask(__name__, instance_relative_config=True)
+    
+    # ✅ REMOVED BROKEN PREFLIGHT HANDLER - Flask-CORS handles this automatically
+    
     config_class = get_config(config_name)
     app.config.from_object(config_class)
     app.config.from_pyfile('config.py', silent=True)
 
-    # @app.after_request
-    # def after_request(response):
-    #     origin = request.headers.get('Origin')
-    #     if origin in app.config['CORS_ORIGINS']:
-    #         response.headers.add('Access-Control-Allow-Origin', origin)
-    #         response.headers.add('Access-Control-Allow-Credentials', 'true')
-    #         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-    #         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-    #     return response
     
     # JWT Configuration
-    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
-    app.secret_key = os.getenv('SECRET_KEY')
+    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY") or app.config.get("SECRET_KEY")
+
     
-    # Session configuration for OAuth - Use SQLAlchemy (database-backed sessions)
-    # This works across multiple workers and doesn't require Redis
-    app.config['SESSION_TYPE'] = 'sqlalchemy'
-    app.config['SESSION_SQLALCHEMY'] = db
-    app.config['SESSION_SQLALCHEMY_TABLE'] = 'sessions'
-    # Note: SESSION_SQLALCHEMY will be set after db.init_app()
+    # Session configuration
+    print(f"SESSION_TYPE from config: {app.config.get('SESSION_TYPE')}")
+
     
-    app.config['SESSION_PERMANENT'] = True  # Changed to True to persist session
+    app.config['SESSION_PERMANENT'] = True
     app.config['SESSION_USE_SIGNER'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
-    # Fix for OAuth CSRF state issues - use None (not Lax/Strict) for OAuth redirects
-    app.config['SESSION_COOKIE_SAMESITE'] = None  # Changed from 'Lax' to None for OAuth
-    app.config['SESSION_COOKIE_SECURE'] = True if os.getenv('FLASK_ENV') == 'production' else False
     
-    # Don't set SESSION_COOKIE_DOMAIN - let it default to the request domain
-    # if os.getenv('FLASK_ENV') == 'production':
-    #     app.config['SESSION_COOKIE_DOMAIN'] = '.sfcollab.com'
+    if os.getenv("FLASK_ENV") == "production":
+        app.config["SESSION_COOKIE_SAMESITE"] = "None"
+        app.config["SESSION_COOKIE_SECURE"] = True
+    else:
+        app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+        app.config["SESSION_COOKIE_SECURE"] = False
+
     
     # Ensure session keys have a prefix for Redis
     app.config['SESSION_KEY_PREFIX'] = 'flask_session:'
     
-    app.config['GITHUB_CLIENT_ID'] = Config.GITHUB_CLIENT_ID
-    app.config['GITHUB_CLIENT_SECRET'] = Config.GITHUB_CLIENT_SECRET
+    app.config.setdefault("GITHUB_CLIENT_ID", os.getenv("GITHUB_CLIENT_ID"))
+    app.config.setdefault("GITHUB_CLIENT_SECRET", os.getenv("GITHUB_CLIENT_SECRET"))
 
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -89,12 +82,6 @@ def create_app(config_name=None):
     app.config["AWS_S3_BUCKET"] = os.getenv("AWS_S3_BUCKET")
     app.config["BACKEND_URL"] = Config.BACKEND_URL
 
-    
-    # Allowed origins for CORS (extended list)
-    app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
-
-
-
     # Email service
     app.config['SMTP_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.example.com')
     app.config['SMTP_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'true').lower() in ['true', '1', 't']
@@ -103,40 +90,56 @@ def create_app(config_name=None):
     app.config['SMTP_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_password')
     app.config['SMTP_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'your_default_sender')
     
-    # AI services}  
+    # AI services  
     app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
     app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
     app.config['HUGGINGFACE_API_KEY'] = os.getenv('HUGGINGFACE_API_KEY', '')
 
 
-    # Initialize CORS
+    # ✅ FIXED: Initialize CORS with proper configuration
     print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
+    
     CORS(
         app,
-        resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', [])}},
-        supports_credentials=True,
-        allow_headers=[
-            "Content-Type",
-            "Authorization",
-            "X-Requested-With"
-        ],
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        resources={
+            r"/api/*": {
+                "origins": app.config.get('CORS_ORIGINS', []),
+                "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+                "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+                "supports_credentials": True,
+                "expose_headers": ["Content-Type", "Authorization"],
+                "max_age": 3600  # Cache preflight requests for 1 hour
+            }
+        },
+        supports_credentials=True
     )
-    # Request logging
+
+
     @app.before_request
     def start_request_timer():
         g.start_time = time.time()
-
+        
     @app.after_request
     def log_response(response):
         # Skip noise
         if request.path in ("/favicon.ico", "/health"):
             return response
+            
+        # ✅ FIXED: Ensure CORS headers are present for all responses
+        if request.method == "OPTIONS":
+            # Flask-CORS should handle this, but let's ensure headers are set
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Max-Age'] = '3600'
+            return response
+            
         if request.method == "OPTIONS" and not response.headers.get("Access-Control-Allow-Origin"):
             print("⚠️  CORS WARNING: Missing Access-Control-Allow-Origin header")
-
-
-        duration = round(time.time() - g.start_time, 4)
+        
+        start = getattr(g, "start_time", None)
+        duration = round(time.time() - (start or time.time()), 4)
 
         # Request info
         method = request.method
@@ -180,31 +183,45 @@ def create_app(config_name=None):
 
     Response Preview:
     {response_preview}
-    =============================================
-    """)
-
+    =============================================""")
+    
         return response
+        
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    Config.init_stripe()
+    
+    if app.config.get("SESSION_TYPE") == "filesystem":
+        app.config["SESSION_FILE_DIR"] = os.path.join(BASE_DIR, "flask_session")
+        os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
+
+    sess = Session()
+    if app.config.get("SESSION_TYPE") == "sqlalchemy":
+        app.config["SESSION_SQLALCHEMY"] = db
+        app.config["SESSION_SQLALCHEMY_TABLE"] = "sessions"
+
+    sess.init_app(app)
    
-    # Set SESSION_SQLALCHEMY to use the same db instance
-    
-    with app.app_context():
-        sess.init_app(app)
-    
     # Create sessions table if it doesn't exist
     with app.app_context():
-        try:
-            # Try to create the sessions table
-            db.create_all()
-            print("✓ Sessions table ready")
-        except Exception as e:
-            print(f"Warning: Could not create sessions table: {e}")
+        if app.config.get("SESSION_TYPE") == "sqlalchemy":
+            try:
+                db.create_all()
+                print("✓ Sessions table ready")
+            except Exception as e:
+                print(f"Warning: Could not create sessions table: {e}")
+        else:
+            print("✓ Using filesystem sessions (no sessions table needed)")
+
     
-    auth_routes.init_oauth(app)
+    # Only init OAuth if env vars are present
+    if app.config.get("GOOGLE_CLIENT_ID") and app.config.get("GOOGLE_CLIENT_SECRET"):
+        auth_routes.init_oauth(app)
+        print("✓ OAuth initialized")
+    else:
+        print("⚠  OAuth not initialized (missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET)")
+
     # Register all blueprints
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
@@ -223,13 +240,16 @@ def create_app(config_name=None):
     def not_found(error):
         return {'success': False, 'error': 'Resource not found'}, 404
     
+    import traceback
+
     @app.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
-        return {'success': False, 'error': 'Internal server error'}, 500
+        print("🔥 500 ERROR:", error)
+        traceback.print_exc()
+        return {'success': False, 'error': str(error)}, 500
+
     
-
-
     @app.route('/api/webhook/github', methods=['POST'])
     def github_webhook():
         signature = request.headers.get('X-Hub-Signature-256')
@@ -245,7 +265,6 @@ def create_app(config_name=None):
         event = request.headers.get('X-GitHub-Event')
         payload = request.json
     
-        # Process your GitHub event here
         print(event, payload)
         return '', 200
 

@@ -4,7 +4,19 @@ from app.models.feedback import Feedback
 from app.utils.helper import success_response, error_response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.user import User
+
+friend_requests_bp = Blueprint('friend_requests', __name__)
+@friend_requests_bp.route('', methods=['OPTIONS'])
+def friend_requests_options():
+    return "", 200
+
+
 feedback_bp = Blueprint('feedback', __name__)
+@feedback_bp.route('', methods=['OPTIONS'])
+def feedback_options():
+    return "", 200
+
+
 
 @feedback_bp.route('', methods=['POST'])
 def create_feedback():

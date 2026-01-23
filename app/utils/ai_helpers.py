@@ -3,7 +3,7 @@ from groq import Groq
 import re
 import json
 from openai import OpenAI
-from weasyprint import HTML
+from xhtml2pdf import pisa
 import markdown
 def get_groq_client():
     key = current_app.config.get("GROQ_API_KEY")
@@ -51,11 +51,13 @@ def extract_text_from_response(response, *, expect_json=False, strict=False):
 
 
 def generate_pdf_from_markdown(markdown_text, output_path):
-    html = markdown.markdown(
+    # 1. Convert Markdown to HTML
+    html_body = markdown.markdown(
         markdown_text,
         extensions=["extra", "tables", "fenced_code"]
     )
 
+    # 2. Add your styling
     styled_html = f"""
     <html>
     <head>
@@ -71,10 +73,12 @@ def generate_pdf_from_markdown(markdown_text, output_path):
         table {{
           width: 100%;
           border-collapse: collapse;
+          margin-bottom: 20px;
         }}
         th, td {{
           border: 1px solid #ddd;
           padding: 8px;
+          text-align: left;
         }}
         th {{
           background-color: #f4f4f4;
@@ -82,12 +86,17 @@ def generate_pdf_from_markdown(markdown_text, output_path):
       </style>
     </head>
     <body>
-      {html}
+      {html_body}
     </body>
     </html>
     """
 
-    HTML(string=styled_html).write_pdf(output_path)
+    # 3. Generate the PDF using xhtml2pdf (pisa)
+    with open(output_path, "wb") as output_file:
+        pisa_status = pisa.CreatePDF(styled_html, dest=output_file)
+    
+    # Return True if successful, False if there was an error
+    return not pisa_status.err
 
 def get_response(model, system_prompt, user_prompt, temperature=0.7, max_tokens=2048):
     if model == 'qwen/qwen3-32b':

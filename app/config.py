@@ -185,7 +185,7 @@ class Config:
     @staticmethod
     def init_stripe():
         if not Config.STRIPE_SECRET_KEY:
-            raise RuntimeError("STRIPE_SECRET_KEY is not set")
+            print("WARNING: STRIPE_SECRET_KEY is missing. Payments will fail.")
         stripe.api_key = Config.STRIPE_SECRET_KEY
 
 

@@ -446,6 +446,8 @@ def login():
         db.session.rollback()
         print(f"Login error: {str(e)}")
         return jsonify({'error': 'Login failed. Please try again.'}), 500
+    except Exception as e:
+        return error_response(f"Login failed: {str(e)}", 401)
 
 
 # ========================== REFRESH TOKEN ==========================

@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 ENV = os.getenv("FLASK_ENV", "development")
-PORT = int(os.getenv("PORT", 5000))
+PORT = int(os.getenv("PORT", 5001))
 DEBUG = ENV != "production"
 
 print("=" * 60)

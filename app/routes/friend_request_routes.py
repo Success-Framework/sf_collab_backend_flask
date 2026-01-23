@@ -8,6 +8,9 @@ from datetime import datetime, timedelta
 
 friend_requests_bp = Blueprint('friend_requests', __name__)
 
+# ✅ REMOVED: Manual OPTIONS handler - Flask-CORS handles this automatically
+
+
 @friend_requests_bp.route('', methods=['GET'])
 @jwt_required()
 def get_friend_requests():
@@ -59,13 +62,10 @@ def get_friend_request(request_id):
         'friend_request': friend_request.to_dict(include_user_info=True)
     })
 
-#! THIS 
-@friend_requests_bp.route('', methods=['POST', 'OPTIONS'])
+@friend_requests_bp.route('', methods=['POST'])
 @jwt_required()
 def create_friend_request():
     """Send friend request"""
-    if request.method == "OPTIONS":
-        return "", 200
     current_user_id = get_jwt_identity()
     
     data = request.get_json()
@@ -113,13 +113,10 @@ def create_friend_request():
         db.session.rollback()
         return error_response(f'Failed to send friend request: {str(e)}', 500)
 
-#! and this
-@friend_requests_bp.route('/<int:request_id>/accept', methods=['POST', 'OPTIONS'])
+@friend_requests_bp.route('/<int:request_id>/accept', methods=['POST'])
 @jwt_required()
 def accept_friend_request(request_id):
     """Accept friend request"""
-    if request.method == "OPTIONS":
-        return "", 200
     current_user_id = get_jwt_identity()
     
     friend_request = FriendRequest.query.get(request_id)
@@ -145,13 +142,10 @@ def accept_friend_request(request_id):
         db.session.rollback()
         return error_response(f'Failed to accept friend request: {str(e)}', 500)
 
-#! and this
-@friend_requests_bp.route('/<int:request_id>/reject', methods=['POST', 'OPTIONS'])
+@friend_requests_bp.route('/<int:request_id>/reject', methods=['POST'])
 @jwt_required()
 def reject_friend_request(request_id):
     """Reject friend request"""
-    if request.method == "OPTIONS":
-        return "", 200
     current_user_id = get_jwt_identity()
     
     friend_request = FriendRequest.query.get(request_id)
@@ -177,13 +171,10 @@ def reject_friend_request(request_id):
         db.session.rollback()
         return error_response(f'Failed to reject friend request: {str(e)}', 500)
 
-#!and this sender
-@friend_requests_bp.route('/<int:request_id>/cancel', methods=['POST', 'OPTIONS'])
+@friend_requests_bp.route('/<int:request_id>/cancel', methods=['POST'])
 @jwt_required()
 def cancel_friend_request(request_id):
     """Cancel sent friend request"""
-    if request.method == "OPTIONS":
-        return "", 200
     current_user_id = get_jwt_identity()
     
     friend_request = FriendRequest.query.get(request_id)
@@ -206,7 +197,6 @@ def cancel_friend_request(request_id):
         db.session.rollback()
         return error_response(f'Failed to cancel friend request: {str(e)}', 500)
 
-#! and this
 @friend_requests_bp.route('/<int:request_id>', methods=['DELETE'])
 @jwt_required()
 def delete_friend_request(request_id):
@@ -229,7 +219,6 @@ def delete_friend_request(request_id):
         db.session.rollback()
         return error_response(f'Failed to delete friend request: {str(e)}', 500)
 
-#! this in both
 @friend_requests_bp.route('/check', methods=['GET'])
 @jwt_required()
 def check_friend_status():
