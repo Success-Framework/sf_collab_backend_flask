@@ -5,6 +5,8 @@ import json
 from openai import OpenAI
 from xhtml2pdf import pisa
 import markdown
+import io
+
 def get_groq_client():
     key = current_app.config.get("GROQ_API_KEY")
     return Groq(api_key=key) if key else None
