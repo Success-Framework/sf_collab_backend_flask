@@ -34,3 +34,8 @@ from .ResourceDownload import ResourceDownload
 from .refreshToken import RefreshToken
 from .waitlist import Waitlist
 from .builder import BuilderProfile, BuilderSkill, BuilderPortfolio, BuilderApplication, SavedStartup, ApplicationStatus
+from .outreach_email_account import OutreachEmailAccount
+from .outreach_campaign import OutreachCampaign
+from .outreach_contact import OutreachContact
+from .outreach_sendjobs import OutreachSendJob
+from .outreach_draft import OutreachDraft
