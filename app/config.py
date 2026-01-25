@@ -28,6 +28,7 @@ class Config:
     # Flask
     # ------------------------
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    SMTP_ENCRYPTION_KEY = os.getenv("SMTP_ENCRYPTION_KEY", "dev-smtp-encryption-key-change-in-production")
     DEBUG = True
     TESTING = False
 
