@@ -317,8 +317,88 @@ def create_donation_session():
 def get_total_donations():
     total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="donation", status="completed").scalar()
     return success_response({"total_donations": total or 0})
+@payment_bp.route("/donations", methods=["GET"])
+@jwt_required()
+def get_donations():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    
+    query = Transaction.query.filter_by(type="donation", status="completed")
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    result = []
+    for donation in paginated.items:
+        user = User.query.get(donation.user_id)
+        result.append({
+            "id": donation.id,
+            "user": {
+                "id": user.id,
+                "firstName": user.first_name,
+                "lastName": user.last_name,
+                "email": user.email
+            } if user else None,
+            "message": donation.donation_message,
+            "amount": donation.amount,
+            "currency": donation.currency,
+            "createdAt": donation.created_at.isoformat()
+        })
+    
+    return success_response({
+        "donations": result,
+        "pagination": {
+            "page": paginated.page,
+            "per_page": paginated.per_page,
+            "total": paginated.total,
+            "pages": paginated.pages
+        }
+    })
+
 @payment_bp.route("/total-crowdfunding", methods=["GET"])
 @jwt_required()
 def get_total_crowdfunding():
     total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="crowdfunding", status="completed").scalar()
     return success_response({"total_crowdfunding": total or 0})
+
+@payment_bp.route("/crowdfunding", methods=["GET"])
+@jwt_required()
+def get_crowdfunding_transactions():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    
+    query = Transaction.query.filter_by(type="crowdfunding", status="completed")
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    result = []
+    for tx in paginated.items:
+        user = User.query.get(tx.user_id)
+        result.append({
+            "id": tx.id,
+            "user": {
+                "id": user.id,
+                "firstName": user.first_name,
+                "lastName": user.last_name,
+                "email": user.email
+            } if user else None,
+            "amount": tx.amount,
+            "planId": tx.plan_id,
+            "currency": tx.currency,
+            "createdAt": tx.created_at.isoformat()
+        })
+    return success_response({
+        "crowdfunding_transactions": result,
+        "pagination": {
+            "page": paginated.page,
+            "per_page": paginated.per_page,
+            "total": paginated.total,
+            "pages": paginated.pages
+        }
+    })
+
+@payment_bp.route("/credits", methods=["GET"])
+@jwt_required()
+def get_credits():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return error_response("User not found", 404)
+    return success_response({"credits": user.credits})

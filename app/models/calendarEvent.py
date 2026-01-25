@@ -21,6 +21,7 @@ class CalendarEvent(db.Model):
     color = db.Column(db.String(20))  # hex color for calendar display
     
     location = db.Column(db.String(255))
+    link = db.Column(db.String(255))  # URL link for virtual meetings
     is_recurring = db.Column(db.Boolean, default=False)
     recurrence_rule = db.Column(db.String(255))  # RRULE format
     
@@ -110,6 +111,7 @@ class CalendarEvent(db.Model):
             'is_ongoing': self.is_ongoing(),
             'reminder_time': self.get_reminder_time().isoformat() if self.reminder_minutes > 0 else None,
             'should_remind': self.should_remind(),
+            'link': self.link,
             'user': {
                 'id': self.event_owner.id,
                 'firstName': self.event_owner.first_name,

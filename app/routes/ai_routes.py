@@ -427,12 +427,27 @@ def format_metadata_block(metadata: dict) -> str:
             )
 
 @ai_bp.route('/business-ideas', methods=['POST', 'OPTIONS'])
+@jwt_required()
 def qwen_business_ideas():
     try:
         if request.method == 'OPTIONS':
             return standard_response(True, {}, code=200)
         data = request.get_json()
         content_type = data.get('content_type', 'business_ideas')
+        IDEA_CREDITS_COST = 5
+        BUSINESS_PLAN_CREDITS_COST = 10
+        if content_type == 'business_ideas':
+            required_credits = IDEA_CREDITS_COST
+        elif content_type == 'business_plan':
+            required_credits = BUSINESS_PLAN_CREDITS_COST
+        else:
+            return standard_response(False, None, 'Invalid content_type. Choose business_ideas or business_plan', 400)
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return standard_response(False, None, 'User not found', 404)
+        if user.credits < required_credits:
+            return standard_response(False, None, 'Insufficient credits', 402)
         model = data.get('model', AVAILABLE_MODELS[0])
         max_tokens = data.get('max_tokens', 2048)
         metadata = data.get('metadata', {})
@@ -667,6 +682,11 @@ def qwen_business_ideas():
         else:
             enhanced_prompt = prompt
         response_text, tokens_used = get_response(model, system_prompt, enhanced_prompt, temperature=temperature, max_tokens=max_tokens)
+        user.credits -= required_credits
+        db.session.commit()
+        # =========================
+        # FILE GENERATION
+        # =========================
         download_links = {}
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         pdf_filename = f"{content_type}_{timestamp}.pdf"

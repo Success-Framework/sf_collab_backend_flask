@@ -11,11 +11,21 @@ def get_join_requests():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     startup_id = request.args.get('startup_id', type=int)
+    search = request.args.get('search', type=str)
     user_id = request.args.get('user_id', type=int)
     status = request.args.get('status', type=str)
     
     query = JoinRequest.query
     
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                JoinRequest.first_name.ilike(search_pattern),
+                JoinRequest.last_name.ilike(search_pattern),
+                JoinRequest.startup_name.ilike(search_pattern)
+            )
+        )
     if startup_id:
         query = query.filter(JoinRequest.startup_id == startup_id)
     if user_id:

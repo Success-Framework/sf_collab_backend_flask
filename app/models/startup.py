@@ -69,7 +69,7 @@ class Startup(db.Model):
         foreign_keys='JoinRequest.startup_id')
     
     startup_bookmarks = db.relationship('StartupBookmark',
-        back_populates='bookmarked_startup',
+        back_populates='startup',
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='StartupBookmark.startup_id')
@@ -109,7 +109,6 @@ class Startup(db.Model):
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='StartupDocument.startup_id')
-    
     # HELPER FUNCTIONS
     def increment_views(self):
         """Increment view count"""

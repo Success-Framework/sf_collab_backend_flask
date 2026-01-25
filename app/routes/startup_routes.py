@@ -87,11 +87,6 @@ def get_startups():
     if max_funding is not None:
         query = query.filter(Startup.funding_amount <= max_funding)
     # Get user's startups if requested
-    print("my_startups:", my_startups)
-    print("type(my_startups):", type(my_startups))
-    print(Startup.creator_id == current_user_id)
-    print(current_user_id)
-    print(Startup.creator_id)
     if my_startups:
         query = query.filter(Startup.creator_id == current_user_id)
     result = paginate(query, page, per_page)
@@ -167,12 +162,12 @@ def register_startup():
         current_user = User.query.get(current_user_id)
         if not current_user:
             return error_response('User not found', 404)
-        if not current_user.is_verified:
+        if not current_user.is_email_verified:
             return error_response('User email not verified', 403)
-        if current_user.is_banned:
+        if current_user.is_banned():
             return error_response('User is banned', 403)
-        if len(current_user.active_startups_count) == 1 and current_user.plan_id == '':
-            return error_response('Startup creation limit reached for your plan', 403)
+        # if current_user.active_startups_count == 1 and current_user.plan_id == '':
+        #     return error_response('Startup creation limit reached for your plan', 403) For later plans
         # Parse roles if it's a string (JSON)
         roles_data = data.get('roles', {})
         if isinstance(roles_data, str):
@@ -327,8 +322,9 @@ def register_startup():
 def update_startup(startup_id):
     """Update startup"""
     current_user_id = get_jwt_identity()
-    
     startup = Startup.query.get(startup_id)
+    if current_user_id != startup.creator_id:
+        return error_response('Only the startup creator can update the startup', 403)
     if not startup:
         return error_response('Startup not found', 404)
     
@@ -739,7 +735,22 @@ def get_user_startups(user_id):
             'pages': result['pages']
         }
     })
-
+# GET startup names
+@startups_bp.route('/names', methods=['GET'])
+@jwt_required()
+def get_startup_names():
+    """Get names and IDs of all startups"""
+    user_id = get_jwt_identity()
+    startups = Startup.query.all()
+    startup_list = [{'id': s.id, 'name': s.name} for s in startups]
+    # Get startups where user is a member
+    member_startups = StartupMember.query.filter_by(user_id=user_id, is_active=True).all()
+    for member in member_startups:
+        if not any(s['id'] == member.startup_id for s in startup_list):
+            startup = Startup.query.get(member.startup_id)
+            if startup:
+                startup_list.append({'id': startup.id, 'name': startup.name})
+    return success_response({'startups': startup_list})
 #! GET STARTUP STATS
 @startups_bp.route('/<int:startup_id>/stats', methods=['GET'])
 @jwt_required()
@@ -842,6 +853,15 @@ def send_join_request(startup_id):
 
         data = request.get_json() or {}
         message = (data.get('message') or '').strip()
+        role = data.get('role', 'member')
+        linkedin_url = (data.get('linkedin_url') or '').strip()
+        portfolio_url = (data.get('portfolio_url') or '').strip()
+        github_url = (data.get('github_url') or '').strip()
+        media_links = {
+            'linkedin': linkedin_url,
+            'portfolio': portfolio_url,
+            'github': github_url
+        }
         print(f"Join Request Data: {data}, Message: '{message}'")
         
         if not message:
@@ -870,8 +890,9 @@ def send_join_request(startup_id):
             user_id=current_user_id,
             first_name=user.first_name,
             last_name=user.last_name,
+            media_links=media_links,
             message=message,
-            role=data.get('role', 'member'),
+            role=role,
             status=JoinRequestStatus.pending
         )
 
