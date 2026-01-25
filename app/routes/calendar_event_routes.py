@@ -110,6 +110,7 @@ def create_calendar_event():
             start_date=datetime.fromisoformat(data['start_date'].replace('Z', '+00:00')),
             end_date=datetime.fromisoformat(data['end_date'].replace('Z', '+00:00')) if data.get('end_date') else None,
             all_day=data.get('all_day', False),
+            link=data.get('link', None),
             category=data.get('category', 'event'),
             color=data.get('color'),
             location=data.get('location'),

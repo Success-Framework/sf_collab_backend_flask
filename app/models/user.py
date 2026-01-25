@@ -152,7 +152,7 @@ class User(db.Model):
         foreign_keys='ResourceLike.user_id')
     
     startup_bookmarks = db.relationship('StartupBookmark', 
-        back_populates='bookmark_owner', 
+        back_populates='user', 
         lazy='dynamic', 
         cascade='all, delete-orphan',
         foreign_keys='StartupBookmark.user_id')
@@ -417,6 +417,9 @@ class User(db.Model):
     def is_active(self):
         """Check if user is active"""
         return self.status == UserStatus.active
+    def is_banned(self):
+        """Check if user is banned"""
+        return self.status == UserStatus.banned
     def is_admin(self):
         """Check if user has admin role"""
         return self.role == UserRoles.admin
