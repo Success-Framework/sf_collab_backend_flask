@@ -1,15 +1,14 @@
 from cryptography.fernet import Fernet
-import os
+from app.config import Config
 
-FERNET_KEY = os.getenv("SMTP_ENCRYPTION_KEY")
-
-if not FERNET_KEY:
-    raise RuntimeError("SMTP_ENCRYPTION_KEY not set")
-
-fernet = Fernet(FERNET_KEY)
+def _get_fernet():
+    key = Config.SMTP_ENCRYPTION_KEY
+    if not key:
+        raise RuntimeError("SMTP_ENCRYPTION_KEY not set")
+    return Fernet(key.encode())
 
 def encrypt(value: str) -> str:
-    return fernet.encrypt(value.encode()).decode()
+    return _get_fernet().encrypt(value.encode()).decode()
 
 def decrypt(value: str) -> str:
-    return fernet.decrypt(value.encode()).decode()
+    return _get_fernet().decrypt(value.encode()).decode()
