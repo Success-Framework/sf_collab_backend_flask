@@ -47,6 +47,7 @@ CREATE TABLE `users` (
   `credits` int DEFAULT 0,
   `xp_points` int DEFAULT NULL,
   `streak_days` int DEFAULT NULL,
+  `credits` int DEFAULT 0,
   `last_activity_date` date DEFAULT NULL,
   `total_revenue` float DEFAULT NULL,
   `satisfaction_percentage` float DEFAULT NULL,
