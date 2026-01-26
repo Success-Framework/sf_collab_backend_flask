@@ -7,88 +7,162 @@ PLANS = [
         "currency": "usd",
         "description": "Special early access plans for crowdfunding supporters.",
         "roles": [
-          {
-              "role": "founder",
-              "tiers": [
-                  {
-                      "title": "Founder Starter",
-                      "id": "crowdfunding-founder-starter",
-                      "price": 1900,
-                      "badge_id": "crowdfunding-founder-starter-badge",
-                      "features": [
-                          "Access to exclusive founder community",
-                          "Early access to new features",
-                          "Special recognition on platform",
-                          "High priority access",
-                          "Earlier onboarding than standard founders",
-                          "Supporter badge",
-                          "Supporter-only updates: roadmap, infrastructure, and platform progress"
-                      ],
-                      "options": [{
-                          "title": "Founder Starter",
-                          "description": "basic project creation and collaboration access",
-                          "duration_months": 2
-                      },{
-                          "title": "Founder Pro",
-                          "description": "Advanced analytics and priority support",
-                          "duration_months": 1
-                      }]
-                  },
-                  {
-                      "title": "Founder Pro Supporter",
-                      "id": "crowdfunding-founder-pro",
-                      "price": 4900,
-                      "badge_id": "crowdfunding-founder-pro-badge",
-                      "features": [
-                          "Everything in Founder Starter +",
-                          "Advanced analytics",
-                          "Very high priority access",
-                          "Advanced analytics : insights into team activity and progress",
-                          "Longer duration than standard founders",
-                          "Priority support",
-                          "Pro supporter badge"
-                      ],
-                      "options": [
-                          {
-                              "title": "Founder Starter",
-                              "description": "Basic project creation and collaboration access",
-                              "duration_months": 6
-                          },
-                          {
-                              "title": "Founder Pro",
-                              "description": "Advanced analytics and priority support",
-                              "duration_months": 2
-                          }
-                      ]
-                  }, 
-                  {
-                      "title": "Founder Power Supporter",
-                      "id": "crowdfunding-founder-power",
-                      "price": 9900,
-                      "badge_id": "crowdfunding-founder-power-badge",
-                      "features": [
-                          "Top priority access",
-                          "Feature request voting",
-                          "Full founder community access",
-                          "Extended duration than standard founders",
-                          "Dedicated supporter badge",
-                          "All previous benefits included"
-                      ],
-                      "options": [
-                          {
-                              "title": "Founder Starter",
-                              "description": "Basic project creation and collaboration access",
-                              "duration_months": 12,
-                          },
-                          {
-                              "title": "Founder Pro",
-                              "description": "Advanced analytics and priority support",
-                              "duration_months": 4,
-                          },
-                          {
-                              "title": "Founder Scale",
-                              "description": "Higher limits and advanced collaboration capacity",
-                              "duration_months": 1,
+            {
+                "role": "founder",
+                "tiers": [
+                    {
+                        "title": "Founder Explorer",
+                        "id": "crowdfunding-founder-explorer",
+                        "price": 900,
+                        "badge_id": "crowdfunding-founder-explorer-badge",
+                        "features": [
+                            "Early access priority: ahead of public rollout",
+                            "Access to exclusive founder community",
+                            "Supporter badge",
+                            "Supporter-only updates"
+                        ],
+                        "options": [{
+                            "title": "Founder Starter",
+                            "description": "basic project creation and collaboration access",
+                            "duration_months": 1,
+                            "features": [
+                                    "Create up to 3 projects at a time",
+                                    "Collaborators: up to 15 per project",
+                                    "Storage: 20 GB",
+                                    "Tasks & milestones: up to 200",
+                                    "Ad-free experience",
+                                    "AI tools: 1,000 credits/month",
+                                ]
+                        }]
+                    },
+                    {
+                        "title": "Founder Starter Supporter",
+                        "id": "crowdfunding-founder-starter-supporter",
+                        "price": 1900,
+                        "badge_id": "crowdfunding-founder-starter-supporter-badge",
+                        "features": [
+                            "Access to exclusive founder community",
+                            "Early access to new features",
+                            "Special recognition on platform",
+                            "High priority access",
+                            "Earlier onboarding than standard founders",
+                            "Supporter badge",
+                            "Supporter-only updates: roadmap, infrastructure, and platform progress"
+                        ],
+                        "options": [{
+                            "title": "Founder Starter",
+                            "description": "basic project creation and collaboration access",
+                            "duration_months": 2,
+                            "features": [
+                                "Create up to 3 projects at a time",
+                                "Collaborators: up to 15 per project",
+                                "Storage: 20 GB",
+                                "Tasks & milestones: up to 200",
+                                "Ad-free experience",
+                                "AI tools: 1,000 credits/month",
+                            ]
+                        }]
+                    },
+                    {
+                        "title": "Founder Pro Supporter",
+                        "id": "crowdfunding-founder-pro",
+                        "price": 4900,
+                        "badge_id": "crowdfunding-founder-pro-badge",
+                        "features": [
+                            "Everything in Founder Starter +",
+                            "Advanced analytics",
+                            "Very high priority access",
+                            "Advanced analytics : insights into team activity and progress",
+                            "Longer duration than standard founders",
+                            "Priority support",
+                            "Pro supporter badge"
+                        ],
+                        "options": [
+                            {
+                                "title": "Founder Starter",
+                                "description": "Basic project creation and collaboration access",
+                                "duration_months": 4,
+                                "features": [
+                                    "Create up to 3 projects at a time",
+                                    "Collaborators: up to 15 per project",
+                                    "Storage: 20 GB",
+                                    "Tasks & milestones: up to 200",
+                                    "Ad-free experience",
+                                    "AI tools: 1,000 credits/month",
+                                ]
+                            },
+                            {
+                                "title": "Founder Pro",
+                                "description": "Advanced analytics and priority support",
+                                "duration_months": 1,
+                                "features": [
+                                        "Everything in Founder Starter +",
+                                        "Projects: up to 10 projects active at a time",
+                                        "Collaborators: up to 40 per project",
+                                        "Storage: 75 GB",
+                                        "Tasks & milestones: up to 500",
+                                        "Advanced team roles & permissions",
+                                        "AI tools: 5,000 credits/month",
+                                ]
+                            }
+                        ]
+                    }, 
+                    {
+                        "title": "Founder Power Supporter",
+                        "id": "crowdfunding-founder-power",
+                        "price": 9900,
+                        "badge_id": "crowdfunding-founder-power-badge",
+                        "features": [
+                            "Top priority access",
+                            "Feature request voting",
+                            "Full founder community access",
+                            "Extended duration than standard founders",
+                            "Dedicated supporter badge",
+                            "All previous benefits included"
+                        ],
+                        "options": [
+                            {
+                                "title": "Founder Starter",
+                                "description": "Basic project creation and collaboration access",
+                                "duration_months": 8,
+                                "features": [
+                                    "Everything in Founder Starter +",
+                                    "Create up to 3 projects at a time",
+                                    "Collaborators: up to 15 per project",
+                                    "Storage: 20 GB",
+                                    "Tasks & milestones: up to 200",
+                                    "Ad-free experience",
+                                    "AI tools: 1,000 credits/month",
+                                ]
+                            },
+                            {
+                                "title": "Founder Pro",
+                                "description": "Advanced analytics and priority support",
+                                "duration_months": 3,
+                                "features": [
+                                    "Everything in Founder Starter +",
+                                    "Projects: up to 10 projects active at a time",
+                                    "Collaborators: up to 40 per project",
+                                    "Storage: 75 GB",
+                                    "Tasks & milestones: up to 500",
+                                    "Advanced team roles & permissions",
+                                    "AI tools: 5,000 credits/month",
+                                ]
+                            },
+                            {
+                                "title": "Founder Scale",
+                                "description": "Higher limits and advanced collaboration capacity",
+                                "duration_months": 1,
+                                "features": [
+                                    "Everything in Founder Pro +",
+                                    "Unlimited projects",
+                                    "Collaborators: up to 100 per project",
+                                    "Storage: 300 GB",
+                                    "Tasks & milestones: unlimited",
+                                    "Advanced analytics & reports",
+                                    "Priority support",
+                                    "AI tools: 10,000 credits/month",
+                              ]
                           }
                       ]
                   },
@@ -107,17 +181,45 @@ PLANS = [
                           {
                               "title": "Founder Starter",
                               "description": "Basic project creation and collaboration access",
-                              "duration_months": 24,
+                              "duration_months": 18,
+                              "features": [
+                                    "Everything in Founder Starter +",
+                                    "Create up to 3 projects at a time",
+                                    "Collaborators: up to 15 per project",
+                                    "Storage: 20 GB",
+                                    "Tasks & milestones: up to 200",
+                                    "Ad-free experience",
+                                    "AI tools: 1,000 credits/month",
+                              ]
                           },
                           {
                               "title": "Founder Pro",
                               "description": "Advanced analytics and priority support",
-                              "duration_months": 9,
+                              "duration_months": 6,
+                              "features": [
+                                    "Everything in Founder Starter +",
+                                    "Projects: up to 10 projects active at a time",
+                                    "Collaborators: up to 40 per project",
+                                    "Storage: 75 GB",
+                                    "Tasks & milestones: up to 500",
+                                    "Advanced team roles & permissions",
+                                    "AI tools: 5,000 credits/month",
+                              ]
                           },
                           {
                               "title": "Founder Scale",
                               "description": "Higher limits and advanced collaboration capacity",
-                              "duration_months": 3
+                              "duration_months": 3,
+                                "features": [
+                                        "Everything in Founder Pro +",
+                                        "Unlimited projects",
+                                        "Collaborators: up to 100 per project",
+                                        "Storage: 300 GB",
+                                        "Tasks & milestones: unlimited",
+                                        "Advanced analytics & reports",
+                                        "Priority support",
+                                        "AI tools: 10,000 credits/month",
+                                ]   
                           }
                       ]
                   },
@@ -136,17 +238,45 @@ PLANS = [
                           {
                               "title": "Founder Starter",
                               "description": "Basic project creation and collaboration access",
-                              "duration_months": -1
+                              "duration_months": 36,
+                              "features": [
+                                    "Everything in Founder Starter +",
+                                    "Create up to 3 projects at a time",
+                                    "Collaborators: up to 15 per project",
+                                    "Storage: 20 GB",
+                                    "Tasks & milestones: up to 200",
+                                    "Ad-free experience",
+                                    "AI tools: 1,000 credits/month",
+                              ]
                           },
                           {
                               "title": "Founder Pro",
                               "description": "Advanced analytics and priority support",
-                              "duration_months": 18
+                              "duration_months": 12,
+                              "features": [
+                                    "Everything in Founder Starter +",
+                                    "Projects: up to 10 projects active at a time",
+                                    "Collaborators: up to 40 per project",
+                                    "Storage: 75 GB",
+                                    "Tasks & milestones: up to 500",
+                                    "Advanced team roles & permissions",
+                                    "AI tools: 5,000 credits/month",
+                              ]
                           }, 
                           {
                               "title": "Founder Scale",
                               "description": "Higher limits and advanced collaboration capacity",
-                              "duration_months": 6
+                              "duration_months": 6,
+                              "features": [
+                                    "Everything in Founder Pro +",
+                                    "Unlimited projects",
+                                    "Collaborators: up to 100 per project",
+                                    "Storage: 300 GB",
+                                    "Tasks & milestones: unlimited",
+                                    "Advanced analytics & reports",
+                                    "Priority support",
+                                    "AI tools: 10,000 credits/month",
+                              ]
                           }
                       ]
                   },
@@ -166,17 +296,60 @@ PLANS = [
                           {
                               "title": "Founder Starter",
                               "description": "Basic project creation and collaboration access",
-                              "duration_months": -1
+                              "duration_months": 72,
+                                "features": [
+                                        "Everything in Founder Starter +",
+                                        "Create up to 3 projects at a time",
+                                        "Collaborators: up to 15 per project",
+                                        "Storage: 20 GB",
+                                        "Tasks & milestones: up to 200",
+                                        "Ad-free experience",
+                                        "AI tools: 1,000 credits/month",
+                                ]
                           },
                           {
                               "title": "Founder Pro",
                               "description": "Advanced analytics and priority support",
-                              "duration_months": -1
+                              "duration_months": 24,
+                                "features": [
+                                        "Everything in Founder Starter +",
+                                        "Projects: up to 10 projects active at a time",
+                                        "Collaborators: up to 40 per project",
+                                        "Storage: 75 GB",
+                                        "Tasks & milestones: up to 500",
+                                        "Advanced team roles & permissions",
+                                        "AI tools: 5,000 credits/month",
+                                ]
                           }, 
                           {
                               "title": "Founder Scale",
                               "description": "Higher limits and advanced collaboration capacity",
-                              "duration_months": 12
+                              "duration_months": 12,
+                              "features": [
+                                    "Everything in Founder Pro +",
+                                    "Unlimited projects",
+                                    "Collaborators: up to 100 per project",
+                                    "Storage: 300 GB",
+                                    "Tasks & milestones: unlimited",
+                                    "Advanced analytics & reports",
+                                    "Priority support",
+                                    "AI tools: 10,000 credits/month",
+                              ]
+                          },
+                          {
+                                "title": "Founder Partner",
+                                "description": "Highest platform stability & limits",
+                                "duration_months": 6,
+                                "features": [
+                                      "Everything in Founder Scale +",
+                                      "Collaborators: up to 200 per project",
+                                      "Storage: 500 GB",
+                                      "Highest platform stability & limits",
+                                      "Eligibility for SF-supported initiatives (merit-based)",
+                                      "Early access to new SF domains and systems",
+                                      "Dedicated support & structured feedback channel",
+                                      "AI tools: 25,000 credits/month",
+                                ]
                           }
                       ]
                   },
@@ -198,17 +371,60 @@ PLANS = [
                             {
                                 "title": "Founder Starter",
                                 "description": "Basic project creation and collaboration access",
-                                "duration_months": -1
+                                "duration_months": 120,
+                                "features": [
+                                        "Everything in Founder Starter +",
+                                        "Create up to 3 projects at a time",
+                                        "Collaborators: up to 15 per project",
+                                        "Storage: 20 GB",
+                                        "Tasks & milestones: up to 200",
+                                        "Ad-free experience",
+                                        "AI tools: 1,000 credits/month",
+                                    ]
                             },
                             {
                                 "title": "Founder Pro",
                                 "description": "Advanced analytics and priority support",
-                                "duration_months": -1
+                                "duration_months": 48,
+                                "features": [
+                                        "Everything in Founder Pro +",
+                                        "Create up to 10 projects at a time",
+                                        "Collaborators: up to 50 per project",
+                                        "Storage: 100 GB",
+                                        "Tasks & milestones: up to 1000",
+                                        "Priority support",
+                                        "AI tools: 5,000 credits/month",
+                                    ]
                             },
                             {
                                 "title": "Founder Scale",
                                 "description": "Higher limits and advanced collaboration capacity",
-                                "duration_months": -1
+                                "duration_months": 24,
+                                "features": [
+                                        "Everything in Founder Scale +",
+                                        "Unlimited projects",
+                                        "Collaborators: up to 150 per project",
+                                        "Storage: 400 GB",
+                                        "Tasks & milestones: unlimited",
+                                        "Advanced analytics & reports",
+                                        "Priority support",
+                                        "AI tools: 10,000 credits/month",
+                                    ]
+                            },
+                            {
+                                "title": "Founder Partner",
+                                "description": "Highest platform stability & limits",
+                                "duration_months": 12,
+                                "features": [
+                                        "Everything in Founder Partner +",
+                                        "Collaborators: up to 250 per project",
+                                        "Storage: 600 GB",
+                                        "Highest platform stability & limits",
+                                        "Eligibility for SF-supported initiatives (merit-based)",
+                                        "Early access to new SF domains and systems",
+                                        "Dedicated support & structured feedback channel",
+                                        "AI tools: 25,000 credits/month",
+                                    ]
                             }
                         ],
                     }
@@ -239,7 +455,7 @@ PLANS = [
                       "features": [
                           "Higher matching & discovery priority: surfaced earlier to founders",
                           "0% platform fee on first $1500 earned",
-                          "Beta feature access",
+                          "Early access to new features",
                           "Early supporter badge"
                       ],
                       "options": [],
@@ -251,10 +467,10 @@ PLANS = [
                       "price": 1900,
                       "badge_id": "builder-starter-badge",
                       "features": [
-                          "High priority access to projects: preferred during selection",
-                          "0% platform fee on first $3500 earned",
-                          "Starter templates pack",
-                          "Community access"
+                            "High priority during project selection"
+                            "0% platform fee on first $3,500 earned"
+                            "Faster access to new opportunities"
+                            "Starter Supporter badge"
                       ],
                       "options": [],
                       "money_before_fee": 350000
@@ -268,7 +484,7 @@ PLANS = [
                           "Very high priority across SF",
                           "0% platform fee on first $10000 earned",
                           "Priority support",
-                          "Premium templates"
+                          "Pro Supporter badge"
                       ],
                       "options": [],
                       "money_before_fee": 1000000
@@ -282,7 +498,7 @@ PLANS = [
                           "Top priority across matching, access, and features",
                           "0% platform fee on first $25000 earned",
                           "Feature request voting",
-                          "Advanced analytics"
+                          "Power Supporter badge"
                       ],
                       "options": [],
                       "money_before_fee": 2500000
@@ -293,9 +509,10 @@ PLANS = [
                       "price": 24900,
                       "badge_id": "builder-champion-badge",
                       "features": [
-                          "Guaranteed first access at launch",
-                          "0% platform fee on first $85000 earned",
-                          "Long-term priority status"
+                           "Guaranteed early access at launch",
+                           "0% platform fee on first $85,000 earned",
+                           "Long-term priority status",
+                           "Champion badge"
                       ],
                       "options": [],
                       "money_before_fee": 8500000
@@ -306,10 +523,10 @@ PLANS = [
                       "price": 49900,
                       "badge_id": "builder-patron-badge",
                       "features": [
-                          "Immediate access at launch",
-                          "Lifetime priority",
-                          "0% platform fee on first $200000 earned",
-                          "Patron recognition badge"
+                         "Immediate access at launch",
+                         "Lifetime priority across SF",
+                         "0% platform fee on first $200,000 earned",
+                         "Patron recognition badge"
                       ],
                       "options": [],
                       "money_before_fee": 20000000
@@ -323,20 +540,25 @@ PLANS = [
         "currency": "usd",
         "description": "Standard subscription plans for all users.",
         "roles": [
-          {
+            {
             "role": "founder",
             "tiers": [
                 {
                     "title": "Founder Free",
-                    "id": "founder-free",
+                    "id": "",
                     "price": 0,
                     "duration_months": -1,
                     "features": [
                         "Create 1 project at a time",
                         "Recruit & manage contributors",
-                        "Ads visible",
-                        "Basic contributor search",
-                        "Core collaboration tools"
+                        "Up to 5 collaborators per project",
+                        "Storage limit: 1 GB",
+                        "Tasks & milestones: up to 30",
+                        "Meetings: unlimited",
+                        "Core collaboration tools (tasks, milestones, files, meetings, discussions)",
+                        "Basic execution & task tracking",
+                        "Ads visible in the platform",
+                        "AI tools: not included"
                     ]
                 },
                 {
@@ -345,11 +567,13 @@ PLANS = [
                     "price": 4900,
                     "duration_months": 1,
                     "features": [
+                        "Everything in Founder Free +",
                         "Create up to 3 projects at a time",
-                        "Recruit & manage contributors",
-                        "No ads",
-                        "Core collaboration tools",
-                        "Increase visibility"
+                        "Collaborators: up to 15 per project",
+                        "Storage: 20 GB",
+                        "Tasks & milestones: up to 200",
+                        "Ad-free experience",
+                        "AI tools: 1000 credits/month",
                     ]
                 },
                 {
@@ -359,10 +583,12 @@ PLANS = [
                     "duration_months": 1,
                     "features": [
                         "Everything in Founder Starter +",
-                        "Create up to 10 projects simultaneously",
-                        "High visibility",
-                        "Priority contributor access",
-                        "Featured placement"
+                        "Projects: up to 10 projects active at a time",
+                        "Collaborators: up to 40 per project",
+                        "Storage: 75 GB",
+                        "Tasks & milestones: up to 500",
+                        "Advanced team roles & permissions",
+                        "AI tools: 5,000 credits/month",
                     ]
                 },
                 {
@@ -373,8 +599,12 @@ PLANS = [
                     "features": [
                         "Everything in Founder Pro +",
                         "Unlimited projects",
-                        "Maximum platform exposure",
-                        "Higher platform limits",
+                        "Collaborators: up to 100 per project",
+                        "Storage: 300 GB",
+                        "Tasks & milestones: unlimited",
+                        "Advanced analytics & reports",
+                        "Priority support",
+                        "AI tools: 10,000 credits/month",
                     ]
                 },
                 {
@@ -384,10 +614,13 @@ PLANS = [
                     "duration_months": 1,
                     "features": [
                         "Everything in Founder Scale +",
-                        "Top-tier access & white-glove support",
-                        "Early access to beta features",
-                        "Dedicated account manager",
-                        "Priority feedback & support"
+                        "Collaborators: up to 200 per project",
+                        "Storage: 500 GB",
+                        "Highest platform stability & limits",
+                        "Eligibility for SF-supported initiatives (merit-based)",
+                        "Early access to new SF domains and systems",
+                        "Dedicated support & structured feedback channel",
+                        "AI tools: 25,000 credits/month",
                     ]
                 }
             ]
@@ -397,16 +630,18 @@ PLANS = [
             "tiers": [
                 {
                     "title": "Builder Free",
-                    "id": "builder-free",
+                    "id": "",
                     "price": 0,
                     "duration_months": -1,
                     "fee": 0.20,
                     "features": [
+                        "Platform fee: 20% when earning",
                         "Work on 1 project at a time",
-                        "Core tools & dashboard",
-                        "Ads visible",
+                        "Apply to 5 projects at a time",
+                        "Core tools & personal dashboard",
                         "Basic project matching",
-                        "Platform fee: 20% when earning"
+                        "Community access",
+                        "Ads visible",
                     ]
                 },
                 {
@@ -416,11 +651,14 @@ PLANS = [
                     "duration_months": 1,
                     "fee": 0.10,
                     "features": [
-                        "Work on up to 3 projects simultaneously", 
-                        "Higher priority in project matching",
+                        "Platform Fee: 10%",
+                        "Everything in Builder Free +",
+                        "Work on up to 3 projects simultaneously",
+                        "Apply to 15 projects at a time",
                         "Ad-free experience",
+                        "Improved project matching relevance",
                         "Advanced filtering & search",
-                        "Platform fee: 10% when earning"
+                        "Priority support access"
                     ]
                 },
                 {
@@ -430,11 +668,13 @@ PLANS = [
                     "duration_months": 1,
                     "fee": 0.05,
                     "features": [
+                        "Platform Fee: 5%",
                         "Everything in Builder Pro +",
                         "Unlimited simultaneous projects",
-                        "Top-tier project matching algorithm",
+                        "Apply to 50 projects at a time",
+                        "Higher-quality project matching",
                         "Direct messaging with founders",
-                        "Platform fee: 5% when earning"
+                        "Public portfolio & contribution showcase"
                     ]
                 },
                 {
@@ -444,11 +684,14 @@ PLANS = [
                     "duration_months": 1,
                     "fee": 0.02,
                     "features": [
+                        "Platform Fee: 2%",
                         "Everything in Builder Plus +",
-                        "Maximum visibility to founders",
-                        "Access to high-value projects",
-                        "Priority support",
-                        "Platform fee: 2% when earning"
+                        "Apply to unlimited projects at a time",
+                        "Priority access to high-value projects",
+                        "Highest matching priority",
+                        "Skill verification & endorsements",
+                        "Dedicated priority support",
+                        "Best for top builders working on serious, long-term projects."
                     ]
                 }
             ]

@@ -15,7 +15,7 @@ class JoinRequest(db.Model):
     message = db.Column(db.Text)
     role = db.Column(db.String(100), default='member')
     status = db.Column(Enum(JoinRequestStatus), default=JoinRequestStatus.pending)
-    
+    media_links = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -91,5 +91,6 @@ class JoinRequest(db.Model):
                 'firstName': user.first_name,
                 'lastName': user.last_name,
                 'email': user.email
-            } if user else None
+            } if user else None,
+            'mediaLinks': self.media_links
         }
