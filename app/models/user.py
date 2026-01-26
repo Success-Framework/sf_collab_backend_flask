@@ -22,6 +22,9 @@ class User(db.Model):
     last_activity_date = db.Column(db.Date)
     plan_id = db.Column(db.String(255), nullable=True) # Subscription plan
     credits = db.Column(db.Integer, default=0)  # For tracking user credits
+    last_login = db.Column(db.DateTime, nullable=True)
+    last_login_ip = db.Column(db.String(45), nullable=True)  # IPv4/IPv6
+
     # Computed/cached stats
     total_revenue = db.Column(db.Float, default=0.0)
     satisfaction_percentage = db.Column(db.Float, default=100.0)

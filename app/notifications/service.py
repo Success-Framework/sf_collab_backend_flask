@@ -1,9 +1,10 @@
 """
 SF Collab Notification Service
 Core service for creating and managing notifications
+Enhanced with email and real-time support
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
 from app.extensions import db
 from app.models.notification import Notification
@@ -26,7 +27,8 @@ class NotificationService:
         actor_id: Optional[int] = None,
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
-        auto_send: bool = True
+        auto_send: bool = True,
+        send_email: bool = False
     ) -> Optional[Notification]:
         """
         Create a notification from a template
@@ -40,11 +42,17 @@ class NotificationService:
             entity_type: Type of entity (idea, task, startup, etc.)
             entity_id: ID of the related entity
             auto_send: Whether to send via Socket.IO immediately
+            send_email: Whether to send email notification
             
         Returns:
             Created Notification object or None if failed
         """
         try:
+            # Don't notify yourself
+            if actor_id and actor_id == user_id:
+                logger.debug(f"Skipping self-notification for user {user_id}")
+                return None
+            
             # Get template
             template = NOTIFICATION_TEMPLATES.get(template_key)
             if not template:
@@ -65,27 +73,20 @@ class NotificationService:
             # Prepare metadata
             full_metadata = {
                 "template_key": template_key,
-                "category": template.get("category"),
-                "priority": template.get("priority"),
                 **(metadata or {})
             }
             
-            # Add actor info if provided
-            if actor_id:
-                full_metadata["actor_id"] = actor_id
-            
-            # Add entity info if provided
-            if entity_type:
-                full_metadata["entity_type"] = entity_type
-            if entity_id:
-                full_metadata["entity_id"] = entity_id
-            
-            # Create notification
+            # Create notification with all fields
             notification = Notification(
                 user_id=user_id,
+                actor_id=actor_id,
                 notification_type=template.get("type", "info"),
+                category=template.get("category", "system"),
+                priority=template.get("priority", "medium"),
                 title=title,
                 message=message,
+                entity_type=entity_type,
+                entity_id=entity_id,
                 data=full_metadata,
                 is_read=False
             )
@@ -97,7 +98,11 @@ class NotificationService:
             if auto_send:
                 NotificationService.send_realtime_notification(notification)
             
-            logger.info(f"Created notification {notification.id} for user {user_id}")
+            # Send email if requested and priority is high/critical
+            if send_email or template.get("priority") in ["critical", "high"]:
+                NotificationService.send_email_notification(notification)
+            
+            logger.info(f"Created notification {notification.id} for user {user_id} (template: {template_key})")
             return notification
             
         except Exception as e:
@@ -135,6 +140,52 @@ class NotificationService:
             return False
 
     @staticmethod
+    def send_email_notification(notification: Notification) -> bool:
+        """
+        Send notification via email
+        
+        Args:
+            notification: Notification object to send
+            
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        try:
+            # Only send email for certain priorities
+            if notification.priority not in ["critical", "high"]:
+                return False
+            
+            user = User.query.get(notification.user_id)
+            if not user or not user.email:
+                return False
+            
+            # Check user preferences (TODO: implement preferences)
+            # if not user.notification_preferences.email_enabled:
+            #     return False
+            
+            from app.services.email_service import EmailService
+            email_service = EmailService()
+            
+            # Send email
+            email_service.send_email(
+                to_email=user.email,
+                subject=notification.title,
+                body=notification.message
+            )
+            
+            # Update notification
+            notification.email_sent = True
+            notification.email_sent_at = datetime.utcnow()
+            db.session.commit()
+            
+            logger.info(f"Sent email notification {notification.id} to {user.email}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error sending email notification: {e}")
+            return False
+
+    @staticmethod
     def bulk_create_notifications(
         user_ids: List[int],
         template_key: str,
@@ -142,19 +193,25 @@ class NotificationService:
         metadata: Optional[Dict[str, Any]] = None,
         actor_id: Optional[int] = None,
         entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None
+        entity_id: Optional[int] = None,
+        exclude_actor: bool = True
     ) -> List[Notification]:
         """
         Create notifications for multiple users
         
         Args:
             user_ids: List of user IDs to receive notifications
+            exclude_actor: If True, don't notify the actor
             Other args same as create_notification
             
         Returns:
             List of created Notification objects
         """
         notifications = []
+        
+        # Remove actor from recipients if requested
+        if exclude_actor and actor_id and actor_id in user_ids:
+            user_ids = [uid for uid in user_ids if uid != actor_id]
         
         for user_id in user_ids:
             notification = NotificationService.create_notification(
@@ -216,21 +273,23 @@ class NotificationService:
             Number of notifications marked as read
         """
         try:
-            unread_notifications = Notification.query.filter_by(
+            now = datetime.utcnow()
+            count = Notification.query.filter_by(
                 user_id=user_id,
                 is_read=False
-            ).all()
+            ).update({
+                'is_read': True,
+                'read_at': now
+            })
             
-            count = 0
-            for notification in unread_notifications:
-                notification.mark_as_read()
-                count += 1
+            db.session.commit()
             
             logger.info(f"Marked {count} notifications as read for user {user_id}")
             return count
             
         except Exception as e:
             logger.error(f"Error marking all notifications as read: {e}")
+            db.session.rollback()
             return 0
 
     @staticmethod
@@ -294,12 +353,17 @@ class NotificationService:
             if filters:
                 if 'type' in filters:
                     query = query.filter_by(notification_type=filters['type'])
+                if 'category' in filters:
+                    query = query.filter_by(category=filters['category'])
+                if 'priority' in filters:
+                    query = query.filter_by(priority=filters['priority'])
                 if 'is_read' in filters:
                     query = query.filter_by(is_read=filters['is_read'])
-                # Add category/priority filters via JSON if needed
             
-            # Order by created_at desc (newest first)
-            query = query.order_by(Notification.created_at.desc())
+            # Order by priority then created_at
+            query = query.order_by(
+                Notification.created_at.desc()
+            )
             
             # Paginate
             from app.utils.helper import paginate
@@ -346,6 +410,32 @@ class NotificationService:
             return 0
 
     @staticmethod
+    def get_unread_count_by_category(user_id: int) -> Dict[str, int]:
+        """
+        Get unread count grouped by category
+        
+        Args:
+            user_id: ID of user
+            
+        Returns:
+            Dict of category -> count
+        """
+        try:
+            results = db.session.query(
+                Notification.category,
+                db.func.count(Notification.id)
+            ).filter(
+                Notification.user_id == user_id,
+                Notification.is_read == False
+            ).group_by(Notification.category).all()
+            
+            return {category: count for category, count in results}
+            
+        except Exception as e:
+            logger.error(f"Error getting unread count by category: {e}")
+            return {}
+
+    @staticmethod
     def cleanup_old_notifications(days: int = 90) -> int:
         """
         Delete old read notifications
@@ -357,17 +447,12 @@ class NotificationService:
             Number of notifications deleted
         """
         try:
-            from datetime import timedelta
             cutoff_date = datetime.utcnow() - timedelta(days=days)
             
-            old_notifications = Notification.query.filter(
+            count = Notification.query.filter(
                 Notification.is_read == True,
                 Notification.created_at < cutoff_date
-            ).all()
-            
-            count = len(old_notifications)
-            for notification in old_notifications:
-                db.session.delete(notification)
+            ).delete()
             
             db.session.commit()
             
@@ -378,6 +463,59 @@ class NotificationService:
             logger.error(f"Error cleaning up old notifications: {e}")
             db.session.rollback()
             return 0
+
+    @staticmethod
+    def get_notification_stats(user_id: int) -> Dict[str, Any]:
+        """
+        Get notification statistics for a user
+        
+        Args:
+            user_id: ID of user
+            
+        Returns:
+            Dict with various statistics
+        """
+        try:
+            total = Notification.query.filter_by(user_id=user_id).count()
+            unread = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+            
+            # By type
+            type_stats = db.session.query(
+                Notification.notification_type,
+                db.func.count(Notification.id)
+            ).filter_by(user_id=user_id).group_by(Notification.notification_type).all()
+            
+            # By category
+            category_stats = db.session.query(
+                Notification.category,
+                db.func.count(Notification.id)
+            ).filter_by(user_id=user_id).group_by(Notification.category).all()
+            
+            # By priority
+            priority_stats = db.session.query(
+                Notification.priority,
+                db.func.count(Notification.id)
+            ).filter_by(user_id=user_id).group_by(Notification.priority).all()
+            
+            return {
+                'total': total,
+                'unread': unread,
+                'read': total - unread,
+                'typeBreakdown': {t: c for t, c in type_stats},
+                'categoryBreakdown': {c: cnt for c, cnt in category_stats},
+                'priorityBreakdown': {p: c for p, c in priority_stats}
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting notification stats: {e}")
+            return {
+                'total': 0,
+                'unread': 0,
+                'read': 0,
+                'typeBreakdown': {},
+                'categoryBreakdown': {},
+                'priorityBreakdown': {}
+            }
 
 
 # Singleton instance

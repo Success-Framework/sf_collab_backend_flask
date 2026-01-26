@@ -1,7 +1,7 @@
 import os
 from groq import Groq
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = None
 
 TARGET_CTA = {
     "clients": "Would you be open to a quick conversation?",
@@ -11,6 +11,15 @@ TARGET_CTA = {
 }
 
 def generate_outreach_draft(campaign, user):
+    global client
+
+    # Lazily create the Groq client only when this function is called
+    if client is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY is not set")
+        client = Groq(api_key=api_key)
+
     prompt = f"""
 Write a short, human outreach email.
 

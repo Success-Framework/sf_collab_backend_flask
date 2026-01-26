@@ -1,18 +1,31 @@
-# Ignore Python virtual environment
+﻿# Python
+.venv/
 venv/
-.env
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.swp
-.DS_Store
+.pytest_cache/
+.mypy_cache/
 
-# Git and other unnecessary files
+# Git
 .git/
 .gitignore
 
-# Node / other build artifacts if any
+# Logs / temp
+*.log
+tmp/
+temp/
+
+# Editors
+.vscode/
+.idea/
+
+# Node
 node_modules/
-dist/
-build/
+
+# Local data
+*.sqlite
+*.db
+instance/
+uploads/
