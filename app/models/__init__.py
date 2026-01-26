@@ -33,3 +33,8 @@ from .ResourceLike import ResourceLike
 from .ResourceDownload import ResourceDownload
 from .refreshToken import RefreshToken
 from .waitlist import Waitlist
+from .planVersion import PlanVersion
+from .businessPlan import BusinessPlan
+from .planSection import PlanSection
+
+
