@@ -176,6 +176,8 @@ def get_or_create_direct_conversation(other_user_id):
         conversation.add_participant(other_user, 'member')
 
         db.session.commit()
+        
+        
 
         return success_response({
             'conversation': conversation.to_dict(for_user=current_user),
@@ -376,7 +378,41 @@ def send_message(conversation_id):
         db.session.add(message)
         conversation.updated_at = datetime.utcnow()
         conversation.increment_unread_count(user.id)
+
+        # Create notifications (do NOT commit yet)
+        from app.models.notification import Notification
+        from app.socket_events import emit_notification
+
+        sender = User.query.get(current_user_id)
+        sender_name = f"{sender.first_name} {sender.last_name}" if sender else "Someone"
+        preview = content[:80] if content else "Sent a file"
+
+        new_notifications = []
+
+        for participant in conversation.participants:
+            if participant.id != current_user_id:
+                notification = Notification(
+                    user_id=participant.id,
+                    notification_type="info",
+                    title=f"💬 New message from {sender_name}",
+                    message=preview,
+                    data={
+                        "conversation_id": conversation.id,
+                        "sender_id": current_user_id,
+                        "message_type": message_type,
+                    },
+                )
+                db.session.add(notification)
+                new_notifications.append((participant.id, notification))
+
+        # ONE commit for everything
         db.session.commit()
+
+        # Emit after commit (so notification has ID and is stored)
+        for participant_id, notification in new_notifications:
+            emit_notification(participant_id, notification.to_dict())
+            print(f"✅ Notification sent to user {participant_id}")
+
         
         response_data = message.to_dict(for_user=user)
         
