@@ -31,6 +31,11 @@ services:
     container_name: sfcollab-mysql
     env_file:
       - ../.env.development
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: defaultdb
+      MYSQL_USER: sfcollab
+      MYSQL_PASSWORD: sfcollab_pass
     ports:
       - "3306:3306"
     volumes:
@@ -41,7 +46,7 @@ services:
       - sfcollab_net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 10s
       timeout: 5s
       retries: 5

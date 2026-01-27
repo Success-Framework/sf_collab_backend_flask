@@ -11,6 +11,7 @@ class Idea(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
     project_details = db.Column(db.Text, nullable=False)
+    image_url = db.Column(db.String(255), nullable=True)
     industry = db.Column(db.String(100), nullable=False)
     stage = db.Column(db.String(100), nullable=False)
     tags = db.Column(JSON, default=[])

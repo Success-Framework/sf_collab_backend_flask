@@ -288,3 +288,26 @@ def emit_to_user(user_id, event, data):
 def is_user_online(user_id):
     """Check if user is currently online"""
     return user_id in connected_users
+
+def emit_notification(user_id, notification_data):
+    """Emit notification to user in real-time"""
+    try:
+        socketio.emit('new_notification', {
+            'notification': notification_data,
+            'timestamp': datetime.utcnow().isoformat()
+        }, room=f"user_{user_id}")
+        
+        logging.info(f"Notification emitted to user {user_id}")
+    except Exception as e:
+        logging.error(f"Error emitting notification: {e}")
+
+def emit_user_status_update(user_id, status):
+    """Emit user status update"""
+    try:
+        socketio.emit('user_status', {
+            'user_id': user_id,
+            'status': status,
+            'timestamp': datetime.utcnow().isoformat()
+        }, room=f"user_{user_id}")
+    except Exception as e:
+        logging.error(f"Error emitting status: {e}")

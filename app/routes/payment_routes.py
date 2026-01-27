@@ -1,3 +1,7 @@
+"""
+Payment Routes with Notification Triggers
+SF Collab Notification System - Section 4.7 Rewards & Payments
+"""
 import stripe
 from flask import Blueprint, request, jsonify, current_app, abort
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -8,9 +12,32 @@ from app.models.plan import Plan
 from app.subscription_plans import PLANS
 from app.models.user import User
 from app.utils.helper import success_response, error_response
+
+# Import notification helpers
+from app.notifications.helpers import (
+    notify_payment_sent,
+    notify_payment_received,
+    notify_points_earned,
+    notify_contribution_verified
+)
+
 payment_bp = Blueprint("payments", __name__, url_prefix="/payments")
 
 
+def get_user_full_name(user_id):
+    """Helper to get user's full name"""
+    user = User.query.get(user_id)
+    if user:
+        return f"{user.first_name or ''} {user.last_name or ''}".strip() or "Someone"
+    return "Someone"
+
+
+def format_amount(amount_cents, currency='usd'):
+    """Format amount from cents to readable string"""
+    amount = amount_cents / 100
+    if currency.upper() == 'USD':
+        return f"${amount:.2f}"
+    return f"{amount:.2f} {currency.upper()}"
 
 
 @payment_bp.route("/plans", methods=["GET"])
@@ -27,16 +54,7 @@ def get_plans():
             "description": plan.get('description', ''),
             "roles": plan.get('roles', []),
         } for plan in plans])
-    # return jsonify([
-    #     {
-    #         "id": plan.id,
-    #         "name": plan.name,
-    #         "price": plan.price_cents / 100,
-    #         "interval": plan.interval,
-    #         "features": plan.features
-    #     }
-    #     for plan in plans
-    # ]), 200
+
 
 @payment_bp.route("/plans/<plan_id>", methods=["GET"])
 def get_plan_by_id(plan_id):
@@ -47,7 +65,6 @@ def get_plan_by_id(plan_id):
             for role in category['roles']:
                 for tier in role.get('tiers', []):
                     if tier.get('id') == plan_id:
-                        # Include category and role in the response
                         result = tier.copy()
                         result['category'] = category.get('category')
                         result['role'] = role.get('role')
@@ -90,7 +107,8 @@ def get_plan_by_id(plan_id):
     # Not found
     return jsonify({"error": "Plan not found"}), 404
 
-@payment_bp.route("create-payment-intent", methods=["POST"] )
+
+@payment_bp.route("create-payment-intent", methods=["POST"])
 @jwt_required()
 def create_payment_intent():
     data = request.get_json()
@@ -109,13 +127,14 @@ def create_payment_intent():
             "plan_id": plan['id']
             },
         return_url=current_app.config['FRONTEND_URL'] + '/checkout/success',
-        confirm=True # Optional: automatically confirm the payment intent
+        confirm=True
     )
-
 
     return jsonify({
         "clientSecret": intent.client_secret
     }), 200
+
+
 @payment_bp.route('/create-checkout-session', methods=['POST'])
 def checkout():
     try:
@@ -144,12 +163,10 @@ def checkout():
                 "user_id": user_id,
                 "plan_id": tier_id,
                 "option": str(option) if option else "",
-
             },
-            
             # The URL of your payment completion page
             success_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{current_app.config['FRONTEND_URL']}/checkout/${tier_id}",
+            cancel_url=f"{current_app.config['FRONTEND_URL']}/checkout/cancel",
         )
         return jsonify({
             'checkoutSessionClientSecret': session['client_secret'],
@@ -157,13 +174,15 @@ def checkout():
             'success': True
         })
     except Exception as e:
-        return jsonify(error=str(e)), 403
+        return jsonify({"error": str(e)}), 500
+
+
 @payment_bp.route("/checkout-session/<session_id>", methods=["GET"])
-@jwt_required()
 def get_checkout_session(session_id):
-    print("Retrieving session:", session_id)
     session = stripe.checkout.Session.retrieve(session_id)
     return jsonify(session)
+
+
 @payment_bp.route("/record-transaction", methods=["POST"])
 @jwt_required()
 def record_transaction():
@@ -177,6 +196,7 @@ def record_transaction():
 
         if type not in ["subscription", "donation"]:
             return jsonify({"error": "Invalid transaction type"}), 400
+        
         if type == "subscription":
             stripe_payment_intent_id = data.get("stripe_payment_intent_id")
             if not all([user_id, plan_id, amount, currency, stripe_payment_intent_id]):
@@ -193,11 +213,12 @@ def record_transaction():
                 status="completed"
             )
 
-        # Update user's plan here if needed
+            # Update user's plan here if needed
             user = User.query.get(user_id)
             if user:
                 user.plan_id = plan_id
             db.session.add(transaction)
+            
         elif type == "donation":
             stripe_checkout_session_id = data.get("stripe_checkout_session_id")
             if not all([user_id, amount, currency, stripe_checkout_session_id]):
@@ -214,7 +235,33 @@ def record_transaction():
                 type="donation"
             )
             db.session.add(transaction)
+        
         db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Payment Sent/Received (4.7)
+        # ════════════════════════════════════════════════════════════
+        try:
+            amount_str = format_amount(amount, currency)
+            
+            # Notify user their payment was processed
+            notify_payment_sent(
+                user_id=user_id,
+                amount=amount_str,
+                recipient="SF Collab",
+                payment_id=transaction.id
+            )
+            
+            # If donation, also notify as contribution
+            if type == "donation":
+                notify_contribution_verified(
+                    user_id=user_id,
+                    project="SF Collab Platform",
+                    contribution_id=transaction.id
+                )
+        except Exception as e:
+            print(f"⚠️ Payment notification failed: {e}")
+        
         return jsonify({
             "success": True,
             "message": "Transaction recorded successfully",
@@ -223,6 +270,8 @@ def record_transaction():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
 @payment_bp.route("/webhook", methods=["POST"])
 def stripe_webhook():
     payload = request.data
@@ -267,8 +316,39 @@ def stripe_webhook():
                 user.plan_id = session["metadata"].get("plan_id")
 
         db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Payment via Webhook (4.7)
+        # ════════════════════════════════════════════════════════════
+        try:
+            if user_id:
+                amount_str = format_amount(session["amount_total"], session["currency"])
+                
+                notify_payment_sent(
+                    user_id=int(user_id),
+                    amount=amount_str,
+                    recipient="SF Collab",
+                    payment_id=tx.id
+                )
+                
+                # Award points for payments
+                if tx_type == "donation":
+                    notify_points_earned(
+                        user_id=int(user_id),
+                        points=100,
+                        reason="Donation to SF Collab"
+                    )
+                elif tx_type == "crowdfunding":
+                    notify_points_earned(
+                        user_id=int(user_id),
+                        points=250,
+                        reason="Crowdfunding contribution"
+                    )
+        except Exception as e:
+            print(f"⚠️ Webhook payment notification failed: {e}")
 
     return "", 200
+
 
 @payment_bp.route("/create-donation-session", methods=["POST", "OPTIONS"])
 @jwt_required()
@@ -283,7 +363,7 @@ def create_donation_session():
     message = data.get("message")
     if not all([amount, user_id, email]):
         return jsonify({"error": "Missing required fields"}), 400
-    # Create a payment intent or session here
+    
     session = stripe.checkout.Session.create(
             line_items=[
                 {
@@ -303,7 +383,6 @@ def create_donation_session():
                 "name": name,
                 "type": "donation"
             },
-            # The URL of your payment completion page
             success_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}?donation=true",
             cancel_url=f"{current_app.config['FRONTEND_URL']}/donate",
         )
@@ -312,11 +391,15 @@ def create_donation_session():
         'url': session['url'],
         'success': True
     })
+
+
 @payment_bp.route("/total-donations", methods=["GET"])
 @jwt_required()
 def get_total_donations():
     total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="donation", status="completed").scalar()
     return success_response({"total_donations": total or 0})
+
+
 @payment_bp.route("/donations", methods=["GET"])
 @jwt_required()
 def get_donations():
@@ -353,11 +436,13 @@ def get_donations():
         }
     })
 
+
 @payment_bp.route("/total-crowdfunding", methods=["GET"])
 @jwt_required()
 def get_total_crowdfunding():
     total = db.session.query(db.func.sum(Transaction.amount)).filter_by(type="crowdfunding", status="completed").scalar()
     return success_response({"total_crowdfunding": total or 0})
+
 
 @payment_bp.route("/crowdfunding", methods=["GET"])
 @jwt_required()
@@ -393,6 +478,7 @@ def get_crowdfunding_transactions():
             "pages": paginated.pages
         }
     })
+
 
 @payment_bp.route("/credits", methods=["GET"])
 @jwt_required()
