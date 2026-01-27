@@ -10,7 +10,6 @@ from app.extensions import db
 from app.models.chatConversation import ChatConversation, conversation_participants
 from app.models.chatMessage import ChatMessage
 import logging
-from app.socket_events import socketio
 
 
 # ============================================

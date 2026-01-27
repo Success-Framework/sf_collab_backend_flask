@@ -14,7 +14,11 @@ services:
       - ../:/app 
       - ./uploads:/app/uploads
       - ./vector_store:/app/vector_store
-    command: flask run --host=0.0.0.0 --port=5000 --reload 
+    command: >
+      gunicorn run:app
+      -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker
+      -b 0.0.0.0:5000
+      --reload
     depends_on:
       db:
         condition: service_healthy

@@ -20,24 +20,25 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
+    command: >
+      gunicorn run:app
+      -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker
+      -b 0.0.0.0:5000
+      --workers 1
+      --threads 2
+      --timeout 120
     restart: unless-stopped
-
-    # HARD memory limit (prevents EC2 freeze)
     mem_limit: 900m
-
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 5s
       retries: 5
-
 
   # ===== MYSQL =====
   db:
@@ -47,15 +48,11 @@ services:
       - .env.production
     ports:
       - "3306:3306"
-
     volumes:
       - mysqldata:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-
     restart: unless-stopped
-
     mem_limit: 700m
-
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -67,33 +64,25 @@ services:
         max-size: "10m"
         max-file: "3"
 
-
   # ===== REDIS =====
   redis:
     image: redis:7
     container_name: sfcollab-redis
-
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-
     ports:
       - "6379:6379"
-
     restart: unless-stopped
-
     mem_limit: 100m
-
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-
 
 volumes:
   mysqldata:

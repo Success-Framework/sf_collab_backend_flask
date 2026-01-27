@@ -2,8 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System dependencies
-# --- SYSTEM DEPENDENCIES FOR WEASYPRINT ---
+# =====================================================
+# SYSTEM DEPENDENCIES
+# =====================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libpango-1.0-0 \
@@ -19,29 +20,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps first (cache-friendly)
-COPY requirements.txt requirements.docker.txt ./
-RUN pip install --no-cache-dir -r requirements.docker.txt
+# =====================================================
+# PYTHON DEPENDENCIES
+# =====================================================
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir gevent gevent-websocket
 
-
-
-# Copy app
+# =====================================================
+# APP CODE
+# =====================================================
 COPY . .
 
-# Environment
+# =====================================================
+# ENVIRONMENT
+# =====================================================
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_ENV=production
 ENV PORT=5000
+
+# Gunicorn config for WebSockets
 ENV GUNICORN_CMD_ARGS="\
     --bind=0.0.0.0:5000 \
     --workers=2 \
-    --worker-class=geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+    --worker-class=gevent \
     --worker-connections=1000 \
-    --timeout=120"
+    --timeout=120 \
+    --log-level=info"
+
 
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+# =====================================================
+# HEALTHCHECK
+# =====================================================
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
+# =====================================================
+# START
+# =====================================================
 CMD ["gunicorn", "run:app"]

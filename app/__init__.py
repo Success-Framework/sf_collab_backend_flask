@@ -10,8 +10,9 @@ import logging
 import warnings
 import hmac
 import hashlib
+from app.extensions import socketio
+import app.socket_events
 from app.blueprints import blueprints
-from app.socket_events import socketio
 import time
 import json
 from app.services.email_service import EmailService
@@ -205,17 +206,26 @@ def create_app(config_name=None):
    
     # Create sessions table if it doesn't exist
     with app.app_context():
-        if app.config.get("SESSION_TYPE") == "sqlalchemy":
-            try:
-                db.create_all()
-                print("✓ Sessions table ready")
-            except Exception as e:
-                print(f"Warning: Could not create sessions table: {e}")
-        else:
-            print("✓ Using filesystem sessions (no sessions table needed)")
-
+        try:
+            # Try to create the sessions table
+            db.create_all()
+            print("✓ Sessions table ready")
+        except Exception as e:
+            print(f"Warning: Could not create sessions table: {e}")
     
-    # Only init OAuth if env vars are present
+    auth_routes.init_oauth(app)
+    socketio.init_app(app)
+
+    # socketio.init_app(
+    #     app,
+    #     async_mode="gevent",
+    #     cors_allowed_origins=app.config.get('CORS_ORIGINS', []),
+    #     allow_credentials=True,
+    #     logger=DEBUG,
+    #     engineio_logger=DEBUG,
+    #     ping_timeout=60,
+    #     ping_interval=25,
+    # )
     if app.config.get("GOOGLE_CLIENT_ID") and app.config.get("GOOGLE_CLIENT_SECRET"):
         auth_routes.init_oauth(app)
         print("✓ OAuth initialized")
@@ -237,8 +247,14 @@ def create_app(config_name=None):
     
     # Error handlers
     @app.errorhandler(404)
-    def not_found(error):
-        return {'success': False, 'error': 'Resource not found'}, 404
+    def not_found(e):
+        if request.path.startswith("/socket.io"):
+            return e  # let Socket.IO handle it
+
+        return {
+            "success": False,
+            "error": "Resource not found"
+        }, 404
     
     import traceback
 
