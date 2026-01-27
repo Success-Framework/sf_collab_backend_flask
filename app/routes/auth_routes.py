@@ -136,9 +136,8 @@ def grant_default_permissions(user_id):
 
 
 def get_user_response_data(user):
-    """Get formatted user data for response"""
     notifications_count = user.notifications.filter_by(is_read=False).count()
-    
+
     try:
         from app.models.startUpMember import StartupMember
         active_startups = StartupMember.query.filter_by(
@@ -147,7 +146,7 @@ def get_user_response_data(user):
         ).count()
     except:
         active_startups = 0
-    
+
     try:
         from app.models.task import Task
         pending_tasks = Task.query.filter_by(
@@ -156,28 +155,11 @@ def get_user_response_data(user):
         ).count()
     except:
         pending_tasks = 0
-    
+
     permissions = UserPermission.query.filter_by(user_id=int(user.id)).all()
-    
-    return {
-        'id': user.id,
-        'firstName': user.first_name,
-        'lastName': user.last_name,
-        'email': user.email,
-        'role': user.role,
-        'status': user.status,
-        'isEmailVerified': user.is_email_verified,
-        'profilePicture': user.profile_picture,
-        'bio': user.bio,
-        'createdAt': user.created_at.isoformat() if user.created_at else None,
-        'lastLogin': user.last_login.isoformat() if user.last_login else None,
-        'permissions': [p.to_dict() for p in permissions],
-        'metrics': {
-            'unreadNotifications': notifications_count,
-            'activeStartups': active_startups,
-            'pendingTasks': pending_tasks
-        }
-    }
+
+    return user.to_dict(include_statistics = True, include_recent_activity=True)
+
 
 
 # ========================== REGISTER ==========================

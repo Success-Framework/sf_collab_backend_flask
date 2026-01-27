@@ -95,52 +95,35 @@ def create_app(config_name=None):
     app.config['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY', '')
     app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
     app.config['HUGGINGFACE_API_KEY'] = os.getenv('HUGGINGFACE_API_KEY', '')
+    app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
 
-
-    # ✅ FIXED: Initialize CORS with proper configuration
     print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
-    
     CORS(
         app,
-        resources={
-            r"/api/*": {
-                "origins": app.config.get('CORS_ORIGINS', []),
-                "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-                "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
-                "supports_credentials": True,
-                "expose_headers": ["Content-Type", "Authorization"],
-                "max_age": 3600  # Cache preflight requests for 1 hour
-            }
-        },
-        supports_credentials=True
+        resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', [])}},
+        supports_credentials=True,
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With"
+        ],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     )
-
-
+    # Request logging
     @app.before_request
     def start_request_timer():
         g.start_time = time.time()
-        
+
     @app.after_request
     def log_response(response):
         # Skip noise
         if request.path in ("/favicon.ico", "/health"):
             return response
-            
-        # ✅ FIXED: Ensure CORS headers are present for all responses
-        if request.method == "OPTIONS":
-            # Flask-CORS should handle this, but let's ensure headers are set
-            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Max-Age'] = '3600'
-            return response
-            
         if request.method == "OPTIONS" and not response.headers.get("Access-Control-Allow-Origin"):
             print("⚠️  CORS WARNING: Missing Access-Control-Allow-Origin header")
-        
-        start = getattr(g, "start_time", None)
-        duration = round(time.time() - (start or time.time()), 4)
+
+
+        duration = round(time.time() - g.start_time, 4)
 
         # Request info
         method = request.method
@@ -184,8 +167,9 @@ def create_app(config_name=None):
 
     Response Preview:
     {response_preview}
-    =============================================""")
-    
+    =============================================
+    """)
+
         return response
         
     # Initialize extensions
@@ -213,7 +197,7 @@ def create_app(config_name=None):
         except Exception as e:
             print(f"Warning: Could not create sessions table: {e}")
     
-    auth_routes.init_oauth(app)
+    # auth_routes.init_oauth(app)
     socketio.init_app(app)
 
     # socketio.init_app(
