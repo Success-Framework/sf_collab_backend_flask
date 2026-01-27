@@ -31,7 +31,7 @@ PLANS = [
                                     "Storage: 20 GB",
                                     "Tasks & milestones: up to 200",
                                     "Ad-free experience",
-                                    "AI tools: 1,000 credits/month",
+                                    "AI tools: 1,000 credits",
                                 ]
                         }]
                     },
@@ -59,7 +59,7 @@ PLANS = [
                                 "Storage: 20 GB",
                                 "Tasks & milestones: up to 200",
                                 "Ad-free experience",
-                                "AI tools: 1,000 credits/month",
+                                "AI tools: 1,000 credits",
                             ]
                         }]
                     },
@@ -88,7 +88,7 @@ PLANS = [
                                     "Storage: 20 GB",
                                     "Tasks & milestones: up to 200",
                                     "Ad-free experience",
-                                    "AI tools: 1,000 credits/month",
+                                    "AI tools: 1,000 credits",
                                 ]
                             },
                             {
@@ -102,7 +102,7 @@ PLANS = [
                                         "Storage: 75 GB",
                                         "Tasks & milestones: up to 500",
                                         "Advanced team roles & permissions",
-                                        "AI tools: 5,000 credits/month",
+                                        "AI tools: 2,500 credits",
                                 ]
                             }
                         ]
@@ -132,7 +132,7 @@ PLANS = [
                                     "Storage: 20 GB",
                                     "Tasks & milestones: up to 200",
                                     "Ad-free experience",
-                                    "AI tools: 1,000 credits/month",
+                                    "AI tools: 1,000 credits",
                                 ]
                             },
                             {
@@ -146,7 +146,7 @@ PLANS = [
                                     "Storage: 75 GB",
                                     "Tasks & milestones: up to 500",
                                     "Advanced team roles & permissions",
-                                    "AI tools: 5,000 credits/month",
+                                    "AI tools: 2,500 credits",
                                 ]
                             },
                             {
@@ -161,7 +161,7 @@ PLANS = [
                                     "Tasks & milestones: unlimited",
                                     "Advanced analytics & reports",
                                     "Priority support",
-                                    "AI tools: 10,000 credits/month",
+                                    "AI tools: 7,000 credits",
                               ]
                           }
                       ]
@@ -189,7 +189,7 @@ PLANS = [
                                     "Storage: 20 GB",
                                     "Tasks & milestones: up to 200",
                                     "Ad-free experience",
-                                    "AI tools: 1,000 credits/month",
+                                    "AI tools: 1,000 credits",
                               ]
                           },
                           {
@@ -203,7 +203,7 @@ PLANS = [
                                     "Storage: 75 GB",
                                     "Tasks & milestones: up to 500",
                                     "Advanced team roles & permissions",
-                                    "AI tools: 5,000 credits/month",
+                                    "AI tools: 2,500 credits",
                               ]
                           },
                           {
@@ -218,7 +218,7 @@ PLANS = [
                                         "Tasks & milestones: unlimited",
                                         "Advanced analytics & reports",
                                         "Priority support",
-                                        "AI tools: 10,000 credits/month",
+                                        "AI tools: 7,000 credits",
                                 ]   
                           }
                       ]
@@ -246,7 +246,7 @@ PLANS = [
                                     "Storage: 20 GB",
                                     "Tasks & milestones: up to 200",
                                     "Ad-free experience",
-                                    "AI tools: 1,000 credits/month",
+                                    "AI tools: 1,000 credits",
                               ]
                           },
                           {
@@ -260,7 +260,7 @@ PLANS = [
                                     "Storage: 75 GB",
                                     "Tasks & milestones: up to 500",
                                     "Advanced team roles & permissions",
-                                    "AI tools: 5,000 credits/month",
+                                    "AI tools: 2,500 credits",
                               ]
                           }, 
                           {
@@ -275,7 +275,7 @@ PLANS = [
                                     "Tasks & milestones: unlimited",
                                     "Advanced analytics & reports",
                                     "Priority support",
-                                    "AI tools: 10,000 credits/month",
+                                    "AI tools: 7,000 credits",
                               ]
                           }
                       ]
@@ -304,7 +304,7 @@ PLANS = [
                                         "Storage: 20 GB",
                                         "Tasks & milestones: up to 200",
                                         "Ad-free experience",
-                                        "AI tools: 1,000 credits/month",
+                                        "AI tools: 1,000 credits",
                                 ]
                           },
                           {
@@ -318,7 +318,7 @@ PLANS = [
                                         "Storage: 75 GB",
                                         "Tasks & milestones: up to 500",
                                         "Advanced team roles & permissions",
-                                        "AI tools: 5,000 credits/month",
+                                        "AI tools: 2,500 credits",
                                 ]
                           }, 
                           {
@@ -333,7 +333,7 @@ PLANS = [
                                     "Tasks & milestones: unlimited",
                                     "Advanced analytics & reports",
                                     "Priority support",
-                                    "AI tools: 10,000 credits/month",
+                                    "AI tools: 7,000 credits",
                               ]
                           },
                           {
@@ -348,7 +348,7 @@ PLANS = [
                                       "Eligibility for SF-supported initiatives (merit-based)",
                                       "Early access to new SF domains and systems",
                                       "Dedicated support & structured feedback channel",
-                                      "AI tools: 25,000 credits/month",
+                                      "AI tools: 10,000 credits",
                                 ]
                           }
                       ]
@@ -379,7 +379,7 @@ PLANS = [
                                         "Storage: 20 GB",
                                         "Tasks & milestones: up to 200",
                                         "Ad-free experience",
-                                        "AI tools: 1,000 credits/month",
+                                        "AI tools: 1,000 credits",
                                     ]
                             },
                             {
@@ -393,7 +393,7 @@ PLANS = [
                                         "Storage: 100 GB",
                                         "Tasks & milestones: up to 1000",
                                         "Priority support",
-                                        "AI tools: 5,000 credits/month",
+                                        "AI tools: 2,500 credits",
                                     ]
                             },
                             {
@@ -408,7 +408,7 @@ PLANS = [
                                         "Tasks & milestones: unlimited",
                                         "Advanced analytics & reports",
                                         "Priority support",
-                                        "AI tools: 10,000 credits/month",
+                                        "AI tools: 7,000 credits",
                                     ]
                             },
                             {
@@ -423,7 +423,7 @@ PLANS = [
                                         "Eligibility for SF-supported initiatives (merit-based)",
                                         "Early access to new SF domains and systems",
                                         "Dedicated support & structured feedback channel",
-                                        "AI tools: 25,000 credits/month",
+                                        "AI tools: 10,000 credits",
                                     ]
                             }
                         ],
@@ -449,9 +449,9 @@ PLANS = [
                   }, 
                   {
                       "title": "Builder Early",
-                      "id": "builder-early",
+                      "id": "crowdfunding-builder-early",
                       "price": 900,
-                      "badge_id": "builder-early-badge",
+                      "badge_id": "crowdfunding-builder-early-badge",
                       "features": [
                           "Higher matching & discovery priority: surfaced earlier to founders",
                           "0% platform fee on first $1500 earned",
@@ -463,13 +463,13 @@ PLANS = [
                   },
                   {
                       "title": "Builder Starter",
-                      "id": "builder-starter",
+                      "id": "crowdfunding-builder-starter",
                       "price": 1900,
-                      "badge_id": "builder-starter-badge",
+                      "badge_id": "crowdfunding-builder-starter-badge",
                       "features": [
-                            "High priority during project selection"
-                            "0% platform fee on first $3,500 earned"
-                            "Faster access to new opportunities"
+                            "High priority during project selection",
+                            "0% platform fee on first $3,500 earned",
+                            "Faster access to new opportunities",
                             "Starter Supporter badge"
                       ],
                       "options": [],
@@ -477,9 +477,9 @@ PLANS = [
                   },
                   {
                       "title": "Builder Pro Supporter",
-                      "id": "builder-pro-supporter",
+                      "id": "crowdfunding-builder-pro-supporter",
                       "price": 4900,
-                      "badge_id": "builder-pro-supporter-badge",
+                      "badge_id": "crowdfunding-builder-pro-supporter-badge",
                       "features": [
                           "Very high priority across SF",
                           "0% platform fee on first $10000 earned",
@@ -491,9 +491,9 @@ PLANS = [
                   },
                   {
                       "title": "Builder Power Supporter",
-                      "id": "builder-power-supporter",
+                      "id": "crowdfunding-builder-power-supporter",
                       "price": 9900,
-                      "badge_id": "builder-power-supporter-badge",
+                      "badge_id": "crowdfunding-builder-power-supporter-badge",
                       "features": [
                           "Top priority across matching, access, and features",
                           "0% platform fee on first $25000 earned",
@@ -505,9 +505,9 @@ PLANS = [
                   },
                   {
                       "title": "Builder Champion",
-                      "id": "builder-champion",
+                      "id": "crowdfunding-builder-champion",
                       "price": 24900,
-                      "badge_id": "builder-champion-badge",
+                      "badge_id": "crowdfunding-builder-champion-badge",
                       "features": [
                            "Guaranteed early access at launch",
                            "0% platform fee on first $85,000 earned",
@@ -519,9 +519,9 @@ PLANS = [
                   },
                   {
                       "title": "Builder Patron",
-                      "id": "builder-patron",
+                      "id": "crowdfunding-builder-patron",
                       "price": 49900,
-                      "badge_id": "builder-patron-badge",
+                      "badge_id": "crowdfunding-builder-patron-badge",
                       "features": [
                          "Immediate access at launch",
                          "Lifetime priority across SF",

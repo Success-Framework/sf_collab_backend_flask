@@ -10,8 +10,9 @@ import logging
 import warnings
 import hmac
 import hashlib
+from app.extensions import socketio
+import app.socket_events
 from app.blueprints import blueprints
-from app.socket_events import socketio
 import time
 from flask import request, g, send_from_directory
 import json
@@ -205,6 +206,19 @@ def create_app(config_name=None):
             print(f"Warning: Could not create sessions table: {e}")
     
     auth_routes.init_oauth(app)
+    socketio.init_app(app)
+
+    # socketio.init_app(
+    #     app,
+    #     async_mode="gevent",
+    #     cors_allowed_origins=app.config.get('CORS_ORIGINS', []),
+    #     allow_credentials=True,
+    #     logger=DEBUG,
+    #     engineio_logger=DEBUG,
+    #     ping_timeout=60,
+    #     ping_interval=25,
+    # )
+
     # Register all blueprints
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
@@ -220,8 +234,14 @@ def create_app(config_name=None):
     
     # Error handlers
     @app.errorhandler(404)
-    def not_found(error):
-        return {'success': False, 'error': 'Resource not found'}, 404
+    def not_found(e):
+        if request.path.startswith("/socket.io"):
+            return e  # let Socket.IO handle it
+
+        return {
+            "success": False,
+            "error": "Resource not found"
+        }, 404
     
     @app.errorhandler(500)
     def internal_error(error):
