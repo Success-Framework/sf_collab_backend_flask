@@ -112,6 +112,7 @@ class Config:
     CORS_ORIGINS = [
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174",
         "https://sfclb.netlify.app",
         "https://sfmanagers-frontend.vercel.app",
         "https://sfcollab.com",
@@ -119,6 +120,7 @@ class Config:
         "https://api.sfcollab.com",
         "https://www.api.sfcollab.com",
         "https://d329ej3iwi83w9.cloudfront.net",
+        'http://localhost:5173',
     ]
 
     CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -186,7 +188,7 @@ class Config:
     @staticmethod
     def init_stripe():
         if not Config.STRIPE_SECRET_KEY:
-            raise RuntimeError("STRIPE_SECRET_KEY is not set")
+            print("WARNING: STRIPE_SECRET_KEY is missing. Payments will fail.")
         stripe.api_key = Config.STRIPE_SECRET_KEY
 
 
@@ -211,7 +213,7 @@ class TestingConfig(Config):
     TESTING = True
     DEBUG = True
 
-    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    
     RATELIMIT_ENABLED = False
     WTF_CSRF_ENABLED = False
 

@@ -23,6 +23,15 @@ from app.utils.startup_permissions import (
     can_manage_members,
     can_edit_startup_core_info
 )
+from app.notifications.helpers import (
+    notify_startup_created,
+    notify_added_to_startup,
+    notify_removed_from_startup,
+    notify_startup_role_assigned,
+    notify_startup_milestone,
+    notify_access_granted,
+    notify_info
+)
 
 
 startups_bp = Blueprint('startups', __name__)
@@ -53,6 +62,15 @@ def generate_unique_filename(original_filename):
     random_str = os.urandom(4).hex()
     file_extension = os.path.splitext(original_filename)[1]
     return f"{timestamp}_{random_str}{file_extension}"
+
+def get_startup_member_ids(startup_id, exclude_user_id=None):
+    """Get list of user IDs who are members of a startup"""
+    from app.models.startUpMember import StartupMember
+    members = StartupMember.query.filter_by(startup_id=startup_id, is_active=True).all()
+    user_ids = [m.user_id for m in members if m.user_id]
+    if exclude_user_id:
+        user_ids = [uid for uid in user_ids if uid != exclude_user_id]
+    return user_ids
 
 #! FOR EVERYONE (Public - no auth required)
 @startups_bp.route('', methods=['GET'])
@@ -224,6 +242,18 @@ def register_startup():
         
         db.session.add(startup)
         db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Startup Created (4.4)
+        # ════════════════════════════════════════════════════════════
+        try:
+            notify_startup_created(
+                user_id=current_user_id,
+                startup_name=startup.name,
+                startup_id=startup.id
+            )
+        except Exception as e:
+            print(f"⚠️ Startup creation notification failed: {e}")
         
         # Create startup-specific upload directory
         startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup.id))
@@ -424,6 +454,10 @@ def get_startup_members(startup_id):
 @jwt_required()
 def add_startup_member(startup_id):
     """Add member to startup"""
+    from flask_jwt_extended import get_jwt_identity
+    from app.models.startup import Startup
+    from app.utils.helper import error_response, success_response
+    
     current_user_id = get_jwt_identity()
     
     startup = Startup.query.get(startup_id)
@@ -446,25 +480,26 @@ def add_startup_member(startup_id):
             data['last_name'],
             data.get('roles', 'member')
         )
+        db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Added to Startup (4.4)
+        # ════════════════════════════════════════════════════════════
+        try:
+            role = data.get('roles', 'member')
+            notify_added_to_startup(
+                user_id=data['user_id'],
+                startup_name=startup.name,
+                startup_id=startup.id,
+                role=role
+            )
+        except Exception as e:
+            print(f"⚠️ Added to startup notification failed: {e}")
+        
         return success_response({'member': member.to_dict()}, 'Member added successfully')
     except Exception as e:
+        db.session.rollback()
         return error_response(f'Failed to add member: {str(e)}', 500)
-
-#! REMOVE STARTUP MEMBER
-@startups_bp.route('/<int:startup_id>/members/<int:member_id>', methods=['DELETE'])
-@jwt_required()
-def remove_startup_member(startup_id, member_id):
-    startup = Startup.query.get_or_404(startup_id)
-
-    if not can_manage_members(startup_id):
-        return error_response('Unauthorized', 403)
-
-    removed = startup.remove_member_by_id(member_id)
-
-    if not removed:
-        return error_response('Member not found or already inactive', 404)
-
-    return success_response(message='Member removed successfully')
 
 
 #! DELETE STARTUP
@@ -898,6 +933,31 @@ def send_join_request(startup_id):
 
         db.session.add(join_request)
         db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: New Join Request (4.4)
+        # ════════════════════════════════════════════════════════════
+        try:
+            from app.notifications.helpers import notify_access_request_pending
+            # Notify startup owner/founders about the join request
+            from app.models.startUpMember import StartupMember, MemberRole
+            
+            # Get owners and founders
+            managers = StartupMember.query.filter(
+                StartupMember.startup_id == startup_id,
+                StartupMember.role.in_([MemberRole.owner, MemberRole.founder]),
+                StartupMember.is_active == True
+            ).all()
+            
+            requester_name = f"{current_user.first_name} {current_user.last_name}"
+            for manager in managers:
+                notify_access_request_pending(
+                    user_id=manager.user_id,
+                    resource=f"Join request from {requester_name} for {startup.name}",
+                    request_id=join_request.id
+                )
+        except Exception as e:
+            print(f"⚠️ Join request notification failed: {e}")
 
         print(f"Join request created successfully with ID {join_request.id}")
 
@@ -915,6 +975,9 @@ def accept_join_request(startup_id, request_id):
     """
     Accept a pending join request and automatically add the user as a member
     """
+    from app.models.joinRequest import JoinRequest, JoinRequestStatus
+    from app.models.startup import Startup
+    
     if not can_manage_members(startup_id):
         return error_response(
             "Only the startup owner or founders can accept join requests", 
@@ -930,10 +993,35 @@ def accept_join_request(startup_id, request_id):
     if not join_request:
         return error_response("Join request not found or already processed", 404)
 
+    # Get startup info for notification
+    startup = Startup.query.get(startup_id)
+    user_id_to_notify = join_request.user_id
+
     try:
         # The approve method already handles adding the member
         new_member = join_request.approve()
         db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Join Request Accepted / Added to Startup (4.4)
+        # ════════════════════════════════════════════════════════════
+        try:
+            notify_added_to_startup(
+                user_id=user_id_to_notify,
+                startup_name=startup.name,
+                startup_id=startup.id,
+                role=new_member.role.value if hasattr(new_member.role, 'value') else str(new_member.role)
+            )
+            
+            # Also notify as access granted
+            notify_access_granted(
+                user_id=user_id_to_notify,
+                resource=startup.name,
+                resource_id=startup.id
+            )
+        except Exception as e:
+            print(f"⚠️ Join request acceptance notification failed: {e}")
+        
         return success_response({
             'message': "Join request accepted. User added as team member.",
             'new_member': {
@@ -947,12 +1035,16 @@ def accept_join_request(startup_id, request_id):
         db.session.rollback()
         return error_response(f"Failed to accept request: {str(e)}", 500)
 
+
 @startups_bp.route('/<int:startup_id>/join-requests/<int:request_id>/reject', methods=['POST'])
 @jwt_required()
 def reject_join_request(startup_id, request_id):
     """
     Reject a pending join request
     """
+    from app.models.joinRequest import JoinRequest, JoinRequestStatus
+    from app.models.startup import Startup
+    
     if not can_manage_members(startup_id):
         return error_response(
             "Only the startup owner or founders can reject join requests", 
@@ -968,9 +1060,25 @@ def reject_join_request(startup_id, request_id):
     if not join_request:
         return error_response("Join request not found or already processed", 404)
 
+    # Get startup info for notification
+    startup = Startup.query.get(startup_id)
+    user_id_to_notify = join_request.user_id
+
     try:
         join_request.reject()
         db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Join Request Rejected (4.4)
+        # ════════════════════════════════════════════════════════════
+        try:
+            notify_info(
+                user_id=user_id_to_notify,
+                message=f"Your request to join {startup.name} was not approved at this time."
+            )
+        except Exception as e:
+            print(f"⚠️ Join request rejection notification failed: {e}")
+        
         return success_response({
             "message": "Join request rejected successfully",
             "request_id": request_id
@@ -979,6 +1087,7 @@ def reject_join_request(startup_id, request_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f"Failed to reject request: {str(e)}", 500)
+
 
 
 # Optional: Allow user to cancel their own request
@@ -1057,3 +1166,53 @@ def has_startup_management_access(user_id, startup_id):
     }
 
     return membership_role_value in allowed_roles
+
+
+
+def get_startup_member_ids(startup_id, exclude_user_id=None):
+    """Get list of user IDs who are members of a startup"""
+    from app.models.startUpMember import StartupMember
+    members = StartupMember.query.filter_by(startup_id=startup_id, is_active=True).all()
+    user_ids = [m.user_id for m in members if m.user_id]
+    if exclude_user_id:
+        user_ids = [uid for uid in user_ids if uid != exclude_user_id]
+    return user_ids
+
+@startups_bp.route('/<int:startup_id>/members/<int:member_id>', methods=['DELETE'])
+@jwt_required()
+def remove_startup_member(startup_id, member_id):
+    """Remove member from startup"""
+    from app.models.startup import Startup
+    from app.models.startUpMember import StartupMember
+    
+    startup = Startup.query.get_or_404(startup_id)
+
+    if not can_manage_members(startup_id):
+        return error_response('Unauthorized', 403)
+
+    # Get member info before removal for notification
+    member = StartupMember.query.get(member_id)
+    member_user_id = member.user_id if member else None
+    
+    removed = startup.remove_member_by_id(member_id)
+
+    if not removed:
+        return error_response('Member not found or already inactive', 404)
+    
+    db.session.commit()
+    
+    # ════════════════════════════════════════════════════════════
+    # ✨ NOTIFICATION: Removed from Startup (4.4)
+    # ════════════════════════════════════════════════════════════
+    if member_user_id:
+        try:
+            notify_removed_from_startup(
+                user_id=member_user_id,
+                startup_name=startup.name,
+                startup_id=startup.id
+            )
+        except Exception as e:
+            print(f"⚠️ Removed from startup notification failed: {e}")
+
+    return success_response(message='Member removed successfully')
+

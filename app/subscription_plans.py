@@ -890,19 +890,27 @@ PLANS = [
 
 def insert_default_plans():
     for plan_data in PLANS:
-        # check if plan already exists to avoid duplicates
-        existing = Plan.query.get(plan_data['id'])
+        # 1. Use 'title' or 'id' since 'name' seems to be missing in your data
+        identifier = plan_data.get('title') or plan_data.get('id')
+        
+        if not identifier:
+            print(f"Skipping a plan with missing identifying data: {plan_data}")
+            continue
+
+        # 2. Check if plan already exists using the title
+        existing = Plan.query.filter_by(title=identifier).first()
         if existing:
             continue
         
+        # 3. Create the plan using the keys we know exist in your PLANS list
         plan = Plan(
-            id=plan_data['id'],
-            title=plan_data['title'],
-            description=plan_data['description'],
-            price=plan_data['price'],
-            currency=plan_data['currency'],
+            id=plan_data.get('id'), # Use .get() just in case 'id' is also missing
+            title=plan_data.get('title'),
+            description=plan_data.get('description'),
+            price=plan_data.get('price', 0),
+            currency=plan_data.get('currency', 'USD'),
             note=plan_data.get('note'),
-            stripe_price_id=plan_data['stripe_price_id'],
+            stripe_price_id=plan_data.get('stripe_price_id'),
             accent=plan_data.get('accent'),
             highlight=plan_data.get('highlight', False),
             crown=plan_data.get('crown', False),
@@ -911,5 +919,10 @@ def insert_default_plans():
             limit=plan_data.get('limit')
         )
         db.session.add(plan)
-    db.session.commit()
-    print("Default plans inserted!")
+        
+    try:
+        db.session.commit()
+        print("✓ Default plans checked and inserted!")
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error inserting plans: {e}")

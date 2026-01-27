@@ -183,7 +183,7 @@ tifffile==2025.10.16
 tinycss2==1.5.1
 tinyhtml5==2.0.0
 tokenizers==0.22.1
-torch==2.9.1
+# torch==2.9.1
 tqdm==4.67.1
 transformers==4.57.5
 twilio==9.9.0

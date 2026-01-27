@@ -42,13 +42,37 @@ def handle_connect():
     
     from flask import request
     
-    # Get token from query string
-    token = request.args.get('token')
-    print(f"Token received: {token[:50] if token else 'None'}...")  # Debug
-    
+    # ✅ Get token from Socket.IO auth payload
+    token = None
+
+    # Flask-SocketIO puts auth payload in request.args? no.
+    # In python-socketio, auth is available via request.environ under 'socketio'
+    environ_socketio = request.environ.get("socketio")
+    if isinstance(environ_socketio, dict):
+        auth = environ_socketio.get("auth")
+    else:
+        auth = None
+
+    # auth might be dict: {"token": "..."} or string
+    if isinstance(auth, dict):
+        token = auth.get("token")
+    elif isinstance(auth, str):
+        token = auth
+
+    # Fallback: allow query string token (backward compatibility)
     if not token:
-        print(" No token provided")
+        token = request.args.get("token")
+
+    if token and token.startswith("Bearer "):
+        token = token.split(" ", 1)[1]
+
+    print(f"Token received: {token[:50] if token else 'None'}...")
+
+    if not token:
+        print("No token provided")
         return False
+
+
     
     user_id = get_user_from_token(token)
     print(f"User ID from token: {user_id}")  # Debug
@@ -354,3 +378,26 @@ def emit_to_user(user_id, event, data):
 def is_user_online(user_id):
     """Check if user is currently online"""
     return user_id in connected_users
+
+def emit_notification(user_id, notification_data):
+    """Emit notification to user in real-time"""
+    try:
+        socketio.emit('new_notification', {
+            'notification': notification_data,
+            'timestamp': datetime.utcnow().isoformat()
+        }, room=f"user_{user_id}")
+        
+        logging.info(f"Notification emitted to user {user_id}")
+    except Exception as e:
+        logging.error(f"Error emitting notification: {e}")
+
+def emit_user_status_update(user_id, status):
+    """Emit user status update"""
+    try:
+        socketio.emit('user_status', {
+            'user_id': user_id,
+            'status': status,
+            'timestamp': datetime.utcnow().isoformat()
+        }, room=f"user_{user_id}")
+    except Exception as e:
+        logging.error(f"Error emitting status: {e}")
