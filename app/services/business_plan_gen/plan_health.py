@@ -1,3 +1,5 @@
+from app.services.business_plan_gen.health_score import calculate_health_score
+
 def calculate_plan_health(financial_analysis, scenario_results):
     score = 0
     flags = []
@@ -60,88 +62,141 @@ def readiness_label(score):
     return "NOT_READY"
 
 
-def evaluate_plan_health(scenarios):
-    score = 100
-    warnings = []
-    insights = []
+# def evaluate_plan_health(scenarios):
+#     score = 100
+#     warnings = []
+#     insights = []
 
-    likely = scenarios.get("likely")
-    best = scenarios.get("best")
+#     likely = scenarios.get("likely")
+#     best = scenarios.get("best")
+#     worst = scenarios.get("worst")
+
+#     # -------------------------------
+#     # 1. Profitability / Break-even
+#     # -------------------------------
+#     break_even = likely.get("break_even_year")
+
+#     if not break_even:
+#         score -= 25
+#         warnings.append("Plan does not reach break-even within projected period.")
+#     elif break_even > 3:
+#         score -= 15
+#         warnings.append("Late break-even may concern investors.")
+#     else:
+#         insights.append(f"Break-even achieved in year {break_even}.")
+
+#     # -------------------------------
+#     # 2. Revenue Growth Realism
+#     # -------------------------------
+#     projections = likely.get("projections", [])
+#     if len(projections) >= 2:
+#         rev_y1 = projections[0]["revenue"]
+#         rev_y3 = projections[-1]["revenue"]
+
+#         if rev_y3 > rev_y1 * 6:
+#             score -= 15
+#             warnings.append("Revenue growth appears overly aggressive.")
+#         elif rev_y3 < rev_y1 * 1.5:
+#             score -= 10
+#             warnings.append("Revenue growth may be too conservative.")
+#         else:
+#             insights.append("Revenue growth aligns with early-stage SaaS norms.")
+
+#     # -------------------------------
+#     # 3. Cost Structure Sanity
+#     # -------------------------------
+#     for year in projections:
+#         if year["expenses"] > year["revenue"] * 1.2:
+#             score -= 10
+#             warnings.append("Cost structure too heavy relative to revenue.")
+#             break
+
+#     # -------------------------------
+#     # 4. Scenario Resilience
+#     # -------------------------------
+#     worst_profit_years = [
+#         p["profit"] for p in worst.get("projections", [])
+#     ]
+
+#     if all(p < 0 for p in worst_profit_years):
+#         score -= 15
+#         warnings.append("Worst-case scenario shows sustained losses.")
+#     else:
+#         insights.append("Plan shows resilience under downside scenario.")
+
+#     # -------------------------------
+#     # 5. Best-case Validation
+#     # -------------------------------
+#     best_profit = max(p["profit"] for p in best.get("projections", []))
+#     if best_profit < 0:
+#         score -= 10
+#         warnings.append("Even best-case scenario fails to reach profitability.")
+
+#     # -------------------------------
+#     # Clamp Score
+#     # -------------------------------
+#     score = max(0, min(score, 100))
+
+#     return {
+#         "score": score,
+#         "grade": health_grade(score),
+#         "warnings": warnings,
+#         "insights": insights
+#     }
+
+def evaluate_plan_health(plan, scenarios):
+    base = scenarios.get("base")
     worst = scenarios.get("worst")
 
-    # -------------------------------
-    # 1. Profitability / Break-even
-    # -------------------------------
-    break_even = likely.get("break_even_year")
+    if not base or not worst:
+        raise ValueError("Scenario data incomplete")
 
-    if not break_even:
-        score -= 25
-        warnings.append("Plan does not reach break-even within projected period.")
-    elif break_even > 3:
-        score -= 15
-        warnings.append("Late break-even may concern investors.")
-    else:
-        insights.append(f"Break-even achieved in year {break_even}.")
+    # -----------------------------
+    # Build base_analysis summary
+    # -----------------------------
+    revenues = [p["revenue"] for p in base["projections"]]
+    expenses = [p["expenses"] for p in base["projections"]]
+    profits = [p["profit"] for p in base["projections"]]
 
-    # -------------------------------
-    # 2. Revenue Growth Realism
-    # -------------------------------
-    projections = likely.get("projections", [])
-    if len(projections) >= 2:
-        rev_y1 = projections[0]["revenue"]
-        rev_y3 = projections[-1]["revenue"]
+    gross_margin = (
+        (sum(revenues) - sum(expenses)) / sum(revenues)
+        if sum(revenues) > 0 else 0
+    )
 
-        if rev_y3 > rev_y1 * 6:
-            score -= 15
-            warnings.append("Revenue growth appears overly aggressive.")
-        elif rev_y3 < rev_y1 * 1.5:
-            score -= 10
-            warnings.append("Revenue growth may be too conservative.")
-        else:
-            insights.append("Revenue growth aligns with early-stage SaaS norms.")
+    avg_profit = sum(profits) / len(profits)
 
-    # -------------------------------
-    # 3. Cost Structure Sanity
-    # -------------------------------
-    for year in projections:
-        if year["expenses"] > year["revenue"] * 1.2:
-            score -= 10
-            warnings.append("Cost structure too heavy relative to revenue.")
-            break
-
-    # -------------------------------
-    # 4. Scenario Resilience
-    # -------------------------------
-    worst_profit_years = [
-        p["profit"] for p in worst.get("projections", [])
-    ]
-
-    if all(p < 0 for p in worst_profit_years):
-        score -= 15
-        warnings.append("Worst-case scenario shows sustained losses.")
-    else:
-        insights.append("Plan shows resilience under downside scenario.")
-
-    # -------------------------------
-    # 5. Best-case Validation
-    # -------------------------------
-    best_profit = max(p["profit"] for p in best.get("projections", []))
-    if best_profit < 0:
-        score -= 10
-        warnings.append("Even best-case scenario fails to reach profitability.")
-
-    # -------------------------------
-    # Clamp Score
-    # -------------------------------
-    score = max(0, min(score, 100))
-
-    return {
-        "score": score,
-        "grade": health_grade(score),
-        "warnings": warnings,
-        "insights": insights
+    base_analysis = {
+        "summary": {
+            "gross_margin_percent": round(gross_margin * 100, 2),
+            "break_even_year": base.get("break_even_year"),
+            "avg_profit": round(avg_profit, 2),
+        }
     }
 
+    # -----------------------------
+    # Scenario comparison
+    # -----------------------------
+    worst_total_profit = sum(p["profit"] for p in worst["projections"])
+
+    if worst_total_profit < 0:
+        risk_level = "HIGH"
+    elif worst_total_profit < avg_profit * len(profits):
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "LOW"
+
+    scenario_comparison = {
+        "risk_level": risk_level
+    }
+
+    # -----------------------------
+    # Final investor-grade score
+    # -----------------------------
+    return calculate_health_score(
+        base_analysis=base_analysis,
+        scenario_comparison=scenario_comparison,
+        industry=plan.industry
+    )
 
 def health_grade(score):
     if score >= 85:

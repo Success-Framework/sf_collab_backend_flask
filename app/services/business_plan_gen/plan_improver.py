@@ -7,7 +7,7 @@ from app.models.planSection import PlanSection
 def improve_plan_from_health(plan, health):
     improvements = []
 
-    for warning in health["warnings"]:
+    for warning in health.get("warnings", []):
         rule = IMPROVEMENT_MAP.get(warning)
         if not rule:
             continue

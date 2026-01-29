@@ -389,7 +389,7 @@ def get_plan_health(plan_id):
         return error_response("Plan or financials not found", 404)
 
     scenarios = generate_financial_scenarios(plan.financials)
-    health = evaluate_plan_health(scenarios)
+    health = evaluate_plan_health(plan,scenarios)
 
     return success_response({
         "health": health,
@@ -407,9 +407,16 @@ def improve_plan(plan_id):
         return error_response("Plan or financials not found", 404)
 
     scenarios = generate_financial_scenarios(plan.financials)
-    health = evaluate_plan_health(scenarios)
+    health = evaluate_plan_health(plan, scenarios)
 
     improvements = improve_plan_from_health(plan, health)
+    create_plan_version(
+    plan_id=plan.id,
+    trigger_type="ai_improvement",
+    summary=f"AI improvement suggestions generated (score {health['score']})",
+    health_score=health["score"],
+    health_status=health["grade"]
+    )
 
     return success_response({
         "health_before": health,
