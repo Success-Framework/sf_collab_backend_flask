@@ -9,6 +9,9 @@ from app.models.Enums import JoinRequestStatus, UserRoles
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from app.models.userRole import UserRole
+from app.notifications.helpers import notify_access_request_pending
+# Notify startup owner/founders about the join request
+from app.models.startUpMember import StartupMember
 import os 
 from io import BytesIO
 import json
@@ -188,6 +191,7 @@ def register_startup():
         #     return error_response('Startup creation limit reached for your plan', 403) For later plans
         # Parse roles if it's a string (JSON)
         roles_data = data.get('roles', {})
+        
         if isinstance(roles_data, str):
             try:
                 roles_data = json.loads(roles_data)
@@ -321,7 +325,7 @@ def register_startup():
 
         if not existing_role:
             db.session.add(UserRole(user_id=current_user_id, role="founder"))
-            db.session.commit()
+        current_user.active_startups_count += 1
         
         # Add creator as first member
         startup.add_member(
@@ -353,7 +357,10 @@ def update_startup(startup_id):
     """Update startup"""
     current_user_id = get_jwt_identity()
     startup = Startup.query.get(startup_id)
-    if current_user_id != startup.creator_id:
+    print("CURRENT USER ID AND STARTUP CREATOR ID:")
+    print(startup.to_dict())
+    print(current_user_id, startup.creator_id,  int(current_user_id) != int(startup.creator_id))
+    if int(current_user_id) != int(startup.creator_id):
         return error_response('Only the startup creator can update the startup', 403)
     if not startup:
         return error_response('Startup not found', 404)
@@ -401,23 +408,24 @@ def update_startup(startup_id):
             startup.financial_notes = data['financial_notes']
         
         if 'tech_stack' in data:
-            startup.tech_stack = data['tech_stack']
+            startup.tech_stack = json.loads(data['tech_stack'])
             
         # Recalculate total positions if roles are updated
         if 'roles' in data and data['roles']:
+            """
+            Roles
+            {
+                "developer": {"positionsNumber": 3, "roleType": "equity (full-time, part, etc)" },
+            }
+            """
+            roles_data = json.loads(data['roles'])
             total_positions = 0
-            roles_data = data['roles']
-            
-            # Handle both old and new roles structure
             for role_key, role_value in roles_data.items():
-                if isinstance(role_value, dict):
-                    # New structure: { "Role Title": { "roleType": "Full Time", "positionsNumber": 2 } }
-                    positions = role_value.get('positionsNumber', 1)
-                    total_positions += int(positions) if positions is not None else 1
+                if isinstance(role_value, dict) and 'positionsNumber' in role_value:
+                    total_positions += int(role_value.get('positionsNumber', 0))
                 else:
-                    # Old structure: { "Role Title": "Full Time" } - count as 1 position per role
                     total_positions += 1
-            
+            startup.roles = roles_data
             startup.positions = total_positions
         
         db.session.commit()
@@ -877,7 +885,10 @@ def send_join_request(startup_id):
         startup = Startup.query.get_or_404(startup_id)
 
         print(f"Join Request - User ID: {current_user_id}, Startup ID: {startup_id}")
-
+        current_user = User.query.get(current_user_id)
+        if not current_user:
+            print(f"User {current_user_id} not found")
+            return error_response('User not found', 404)
         membership = StartupMember.query.filter_by(
             startup_id=startup_id,
             user_id=current_user_id
@@ -938,14 +949,13 @@ def send_join_request(startup_id):
         # ✨ NOTIFICATION: New Join Request (4.4)
         # ════════════════════════════════════════════════════════════
         try:
-            from app.notifications.helpers import notify_access_request_pending
-            # Notify startup owner/founders about the join request
-            from app.models.startUpMember import StartupMember, MemberRole
+            
             
             # Get owners and founders
+
             managers = StartupMember.query.filter(
                 StartupMember.startup_id == startup_id,
-                StartupMember.role.in_([MemberRole.owner, MemberRole.founder]),
+                StartupMember.role.in_([UserRoles.owner, UserRoles.founder]),
                 StartupMember.is_active == True
             ).all()
             
