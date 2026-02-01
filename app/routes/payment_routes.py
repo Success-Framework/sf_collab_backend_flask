@@ -11,8 +11,7 @@ from app.extensions import db
 from app.models.plan import Plan
 from app.subscription_plans import PLANS
 from app.models.user import User
-from app.utils.helper import success_response, error_response
-
+from app.utils.helper import success_response, error_response, paginate
 # Import notification helpers
 from app.notifications.helpers import (
     notify_payment_sent,
@@ -113,7 +112,7 @@ def get_plan_by_id(plan_id):
 def create_payment_intent():
     data = request.get_json()
     price_id = data.get("priceId")
-
+    
     plan = next((plan for plan in PLANS if plan['stripe_price_id'] == price_id), None)
     if not plan:
         return jsonify({"error": "Invalid price ID"}), 400
@@ -145,7 +144,9 @@ def checkout():
         product = data.get('title')
         amount = data.get('price')  # amount in cents
         description = data.get('description', '')
+        type = data.get('type', 'subscription')
         option = data.get('option', None)
+
         session = stripe.checkout.Session.create(
             line_items=[
                 {
@@ -163,6 +164,7 @@ def checkout():
                 "user_id": user_id,
                 "plan_id": tier_id,
                 "option": str(option) if option else "",
+                "type": type
             },
             # The URL of your payment completion page
             success_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}",
@@ -183,93 +185,93 @@ def get_checkout_session(session_id):
     return jsonify(session)
 
 
-@payment_bp.route("/record-transaction", methods=["POST"])
-@jwt_required()
-def record_transaction():
-    try:
-        data = request.get_json()
-        user_id = data.get("user_id")
-        plan_id = data.get("plan_id")
-        amount = data.get("amount")
-        currency = data.get("currency")
-        type = data.get("type", "subscription")
+# @payment_bp.route("/record-transaction", methods=["POST"])
+# @jwt_required()
+# def record_transaction():
+#     try:
+#         data = request.get_json()
+#         user_id = data.get("user_id")
+#         plan_id = data.get("plan_id")
+#         amount = data.get("amount")
+#         currency = data.get("currency")
+#         type = data.get("type", "subscription")
 
-        if type not in ["subscription", "donation"]:
-            return jsonify({"error": "Invalid transaction type"}), 400
+#         if type not in ["subscription", "donation"]:
+#             return jsonify({"error": "Invalid transaction type"}), 400
         
-        if type == "subscription":
-            stripe_payment_intent_id = data.get("stripe_payment_intent_id")
-            if not all([user_id, plan_id, amount, currency, stripe_payment_intent_id]):
-                return jsonify({"error": "Missing required fields"}), 400
-            existing_tx = Transaction.query.filter_by(stripe_payment_intent_id=stripe_payment_intent_id).first()
-            if existing_tx:
-                return jsonify({"error": "Transaction already recorded"}), 400
-            transaction = Transaction(
-                user_id=user_id,
-                plan_id=plan_id,
-                amount=amount,
-                currency=currency,
-                stripe_payment_intent_id=stripe_payment_intent_id,
-                status="completed"
-            )
+#         if type == "subscription":
+#             stripe_payment_intent_id = data.get("stripe_payment_intent_id")
+#             if not all([user_id, plan_id, amount, currency, stripe_payment_intent_id]):
+#                 return jsonify({"error": "Missing required fields"}), 400
+#             existing_tx = Transaction.query.filter_by(stripe_payment_intent_id=stripe_payment_intent_id).first()
+#             if existing_tx:
+#                 return jsonify({"error": "Transaction already recorded"}), 400
+#             transaction = Transaction(
+#                 user_id=user_id,
+#                 plan_id=plan_id,
+#                 amount=amount,
+#                 currency=currency,
+#                 stripe_payment_intent_id=stripe_payment_intent_id,
+#                 status="completed"
+#             )
 
-            # Update user's plan here if needed
-            user = User.query.get(user_id)
-            if user:
-                user.plan_id = plan_id
-            db.session.add(transaction)
+#             # Update user's plan here if needed
+#             user = User.query.get(user_id)
+#             if user:
+#                 user.plan_id = plan_id
+#             db.session.add(transaction)
             
-        elif type == "donation":
-            stripe_checkout_session_id = data.get("stripe_checkout_session_id")
-            if not all([user_id, amount, currency, stripe_checkout_session_id]):
-                return jsonify({"error": "Missing required fields for donation"}), 400
-            existing_tx = Transaction.query.filter_by(stripe_checkout_session_id=stripe_checkout_session_id).first()
-            if existing_tx:
-                return jsonify({"error": "Donation transaction already recorded"}), 400
-            transaction = Transaction(
-                user_id=user_id,
-                amount=amount,
-                currency=currency,
-                stripe_checkout_session_id=stripe_checkout_session_id,
-                status="completed",
-                type="donation"
-            )
-            db.session.add(transaction)
+#         elif type == "donation":
+#             stripe_checkout_session_id = data.get("stripe_checkout_session_id")
+#             if not all([user_id, amount, currency, stripe_checkout_session_id]):
+#                 return jsonify({"error": "Missing required fields for donation"}), 400
+#             existing_tx = Transaction.query.filter_by(stripe_checkout_session_id=stripe_checkout_session_id).first()
+#             if existing_tx:
+#                 return jsonify({"error": "Donation transaction already recorded"}), 400
+#             transaction = Transaction(
+#                 user_id=user_id,
+#                 amount=amount,
+#                 currency=currency,
+#                 stripe_checkout_session_id=stripe_checkout_session_id,
+#                 status="completed",
+#                 type="donation"
+#             )
+#             db.session.add(transaction)
         
-        db.session.commit()
+#         db.session.commit()
         
-        # ════════════════════════════════════════════════════════════
-        # ✨ NOTIFICATION: Payment Sent/Received (4.7)
-        # ════════════════════════════════════════════════════════════
-        try:
-            amount_str = format_amount(amount, currency)
+#         # ════════════════════════════════════════════════════════════
+#         # ✨ NOTIFICATION: Payment Sent/Received (4.7)
+#         # ════════════════════════════════════════════════════════════
+#         try:
+#             amount_str = format_amount(amount, currency)
             
-            # Notify user their payment was processed
-            notify_payment_sent(
-                user_id=user_id,
-                amount=amount_str,
-                recipient="SF Collab",
-                payment_id=transaction.id
-            )
+#             # Notify user their payment was processed
+#             notify_payment_sent(
+#                 user_id=user_id,
+#                 amount=amount_str,
+#                 recipient="SF Collab",
+#                 payment_id=transaction.id
+#             )
             
-            # If donation, also notify as contribution
-            if type == "donation":
-                notify_contribution_verified(
-                    user_id=user_id,
-                    project="SF Collab Platform",
-                    contribution_id=transaction.id
-                )
-        except Exception as e:
-            print(f"⚠️ Payment notification failed: {e}")
+#             # If donation, also notify as contribution
+#             if type == "donation":
+#                 notify_contribution_verified(
+#                     user_id=user_id,
+#                     project="SF Collab Platform",
+#                     contribution_id=transaction.id
+#                 )
+#         except Exception as e:
+#             print(f"⚠️ Payment notification failed: {e}")
         
-        return jsonify({
-            "success": True,
-            "message": "Transaction recorded successfully",
-            "transaction_id": transaction.id
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+#         return jsonify({
+#             "success": True,
+#             "message": "Transaction recorded successfully",
+#             "transaction_id": transaction.id
+#         }), 201
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({"error": str(e)}), 500
 
 
 @payment_bp.route("/webhook", methods=["POST"])
@@ -279,75 +281,174 @@ def stripe_webhook():
     endpoint_secret = current_app.config["STRIPE_WEBHOOK_SECRET"]
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-    except Exception:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+        print(f"✅ [WEBHOOK] Event verified: {event['type']}")
+    except Exception as e:
+        print(f"❌ [WEBHOOK] Signature verification failed: {e}")
         return "", 400
 
-    # ✅ Stripe Checkout completed
-    if event["type"] == "checkout.session.completed":
+    # ==========================================================
+    # ONLY process checkout.session.completed
+    # ==========================================================
+    if event["type"] != "checkout.session.completed":
+        print(f"ℹ️ [WEBHOOK] Ignored event: {event['type']}")
+        return "", 200
+
+    try:
         session = event["data"]["object"]
+        metadata = session.get("metadata") or {}
 
-        user_id = session["metadata"].get("user_id")
-        tx_type = session["metadata"].get("type", "subscription")
+        print("📦 [WEBHOOK] Checkout Session received")
+        print("📦 [WEBHOOK] Session ID:", session.get("id"))
+        print("📦 [WEBHOOK] Metadata:", metadata)
 
+        # ======================================================
+        # Extract metadata (DEFENSIVE)
+        # ======================================================
+        raw_user_id = metadata.get("user_id")
+        raw_plan_id = metadata.get("plan_id")
+
+        user_id = int(raw_user_id) if raw_user_id and str(raw_user_id).isdigit() else None
+        plan_id = raw_plan_id if raw_plan_id else None
+
+        tx_type = metadata.get("type") or "subscription"
+        donation_message = metadata.get("message") or ""
+
+        amount = session.get("amount_total") or 0
+        currency = session.get("currency") or "usd"
+
+        print(f"👤 User ID: {user_id}")
+        print(f"🧾 Type: {tx_type}")
+        print(f"💰 Amount: {amount} {currency}")
+
+        # ======================================================
         # Idempotency check
-        existing = Transaction.query.filter_by(
-            stripe_checkout_session_id=session["id"]
+        # ======================================================
+        existing_tx = Transaction.query.filter_by(
+            stripe_checkout_session_id=session.get("id")
         ).first()
-        if existing:
+
+        if existing_tx:
+            print(f"⚠️ [WEBHOOK] Transaction already exists (ID {existing_tx.id})")
             return "", 200
 
+        # ======================================================
+        # Create transaction
+        # ======================================================
         tx = Transaction(
             user_id=user_id,
-            plan_id=session["metadata"].get("plan_id"),
-            amount=session["amount_total"],
-            currency=session["currency"],
-            stripe_checkout_session_id=session["id"],
+            plan_id=plan_id,
+            amount=amount,
+            currency=currency,
+            stripe_checkout_session_id=session.get("id"),
             status="completed",
             type=tx_type,
+            donation_message=donation_message
         )
 
         db.session.add(tx)
 
-        # Update plan if subscription
-        if tx_type == "subscription":
+        # ======================================================
+        # Update user plan if needed
+        # ======================================================
+        if user_id and tx_type in ("subscription", "crowdfunding") and plan_id:
             user = User.query.get(user_id)
             if user:
-                user.plan_id = session["metadata"].get("plan_id")
+                user.plan_id = plan_id
+
+                plan_credits = 0
+                CREDITS = {
+                    "crowdfunding-founder-explorer": 1000,
+                    "crowdfunding-founder-starter-supporter": 1000,
+                    "crowdfunding-founder-pro": 2500,
+                    "crowdfunding-founder-power": 7000,
+                    "crowdfunding-founder-champion": 7000,
+                    "crowdfunding-founder-patron": 7000,
+                    "crowdfunding-founding-partner": 10000,
+                    "crowdfunding-strategic-supporter": 10000,
+                    "crowdfunding-builder-supporter": 0,
+                    "crowdfunding-builder-early": 0,
+                    "crowdfunding-builder-starter": 0,
+                    "crowdfunding-builder-pro-supporter": 0,
+                    "crowdfunding-builder-power-supporter": 0,
+                    "crowdfunding-builder-champion": 0,
+                    "crowdfunding-builder-patron": 0,
+                    "founder-starter": 1000,
+                    "founder-pro": 5000,
+                    "founder-scale": 10000,
+                    "founder-partner": 25000,
+                    "builder-pro": 0,
+                    "builder-plus": 0,
+                    "builder-elite": 0,
+                    "credits-monthly-1000": 1000,
+                    "credits-monthly-3000": 3000,
+                    "credits-monthly-7000": 7000,
+                    "credits-monthly-16000": 16000,
+                    "credits-topup-500": 500,
+                    "credits-topup-1500": 1500,
+                    "credits-topup-5000": 5000,
+                    "credits-topup-15000": 15000,
+                }
+                plan_credits = CREDITS.get(plan_id, 0)
+                
+                if plan_credits > 0:
+                    user.credits = (user.credits or 0) + plan_credits
+            else:
+                print(f"⚠️ User {user_id} not found")
 
         db.session.commit()
-        
-        # ════════════════════════════════════════════════════════════
-        # ✨ NOTIFICATION: Payment via Webhook (4.7)
-        # ════════════════════════════════════════════════════════════
+        print(f"✅ [WEBHOOK] Transaction stored (ID {tx.id})")
+
+        # ======================================================
+        # Notifications (NON-BLOCKING)
+        # ======================================================
         try:
             if user_id:
-                amount_str = format_amount(session["amount_total"], session["currency"])
-                
+                amount_str = format_amount(amount, currency)
+
                 notify_payment_sent(
-                    user_id=int(user_id),
+                    user_id=user_id,
                     amount=amount_str,
                     recipient="SF Collab",
-                    payment_id=tx.id
+                    payment_id=tx.id,
+                    transaction=tx
                 )
-                
-                # Award points for payments
-                if tx_type == "donation":
-                    notify_points_earned(
-                        user_id=int(user_id),
-                        points=100,
-                        reason="Donation to SF Collab"
-                    )
-                elif tx_type == "crowdfunding":
-                    notify_points_earned(
-                        user_id=int(user_id),
-                        points=250,
-                        reason="Crowdfunding contribution"
-                    )
-        except Exception as e:
-            print(f"⚠️ Webhook payment notification failed: {e}")
 
+                # if tx_type == "donation":
+                #     notify_points_earned(
+                #         user_id=user_id,
+                #         points=amount,
+                #         reason="Donation to SF Collab"
+                #     )
+
+                # elif tx_type == "crowdfunding":
+                #     notify_points_earned(
+                #         user_id=user_id,
+                #         points=amount,
+                #         reason="Crowdfunding contribution"
+                #     )
+
+        except Exception as e:
+            print(f"❌ [WEBHOOK] Notification error (ignored): {e}")
+
+    except Exception as e:
+        # ======================================================
+        # ABSOLUTE SAFETY NET (NO STRIPE RETRIES)
+        # ======================================================
+        import traceback
+        import re
+        traceback.print_exc()
+        db.session.rollback()
+        print(f"❌ [WEBHOOK] Fatal processing error: {e}")
+
+        # IMPORTANT: still return 200 so Stripe stops retrying
+        return "", 200
+
+    print("🎉 [WEBHOOK] Processing complete")
     return "", 200
+
 
 
 @payment_bp.route("/create-donation-session", methods=["POST", "OPTIONS"])
@@ -360,7 +461,7 @@ def create_donation_session():
     user_id = get_jwt_identity()
     email = data.get("email")
     name = data.get("name")
-    message = data.get("message")
+    message = data.get("message", "")
     if not all([amount, user_id, email]):
         return jsonify({"error": "Missing required fields"}), 400
     
@@ -383,7 +484,7 @@ def create_donation_session():
                 "name": name,
                 "type": "donation"
             },
-            success_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}?donation=true",
+            success_url=f"{current_app.config['FRONTEND_URL']}/checkout/return?session_id={{CHECKOUT_SESSION_ID}}&donation=true",
             cancel_url=f"{current_app.config['FRONTEND_URL']}/donate",
         )
     return jsonify({
@@ -407,10 +508,14 @@ def get_donations():
     per_page = request.args.get('per_page', 10, type=int)
     
     query = Transaction.query.filter_by(type="donation", status="completed")
-    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+    total_donations = 0
+    for donation in query.all():
+        total_donations += donation.amount
+    paginated = paginate(query, page=page, per_page=per_page)
     
     result = []
-    for donation in paginated.items:
+
+    for donation in paginated['items']:
         user = User.query.get(donation.user_id)
         result.append({
             "id": donation.id,
@@ -429,10 +534,11 @@ def get_donations():
     return success_response({
         "donations": result,
         "pagination": {
-            "page": paginated.page,
-            "per_page": paginated.per_page,
-            "total": paginated.total,
-            "pages": paginated.pages
+            "page": paginated['page'],
+            "per_page": paginated['per_page'],
+            "total_donations": total_donations,
+            "total": paginated['total'],
+            "pages": paginated['pages']
         }
     })
 
@@ -451,10 +557,14 @@ def get_crowdfunding_transactions():
     per_page = request.args.get('per_page', 10, type=int)
     
     query = Transaction.query.filter_by(type="crowdfunding", status="completed")
-    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+    print("QUERY:", list(map(lambda x: x.to_dict(), query.all())))
+    total_crowd = 0
+    for tx in query.all():
+        total_crowd += tx.amount
+    paginated = paginate(query, page=page, per_page=per_page)
     
     result = []
-    for tx in paginated.items:
+    for tx in paginated['items']:
         user = User.query.get(tx.user_id)
         result.append({
             "id": tx.id,
@@ -472,10 +582,11 @@ def get_crowdfunding_transactions():
     return success_response({
         "crowdfunding_transactions": result,
         "pagination": {
-            "page": paginated.page,
-            "per_page": paginated.per_page,
-            "total": paginated.total,
-            "pages": paginated.pages
+            "page": paginated['page'],
+            "per_page": paginated['per_page'],
+            "total_crowdfunding": total_crowd,
+            "total": paginated['total'],
+            "pages": paginated['pages']
         }
     })
 

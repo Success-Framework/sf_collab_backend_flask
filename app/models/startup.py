@@ -3,6 +3,7 @@ from app.extensions import db
 from sqlalchemy import Enum, JSON
 from .Enums import StartupStage
 import os
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 
 class Startup(db.Model):
     __tablename__ = 'startups'
@@ -33,10 +34,10 @@ class Startup(db.Model):
     logo_url = db.Column(db.String(500))
     banner_url = db.Column(db.String(500))
     
-    tech_stack = db.Column(db.JSON, nullable=False, default=list)
+    roles = db.Column(MutableDict.as_mutable(JSON), default=dict)
+    tech_stack = db.Column(MutableList.as_mutable(JSON), default=list)
     
     positions = db.Column(db.Integer, default=0)
-    roles = db.Column(JSON, default={})
     
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     creator_first_name = db.Column(db.String(100))

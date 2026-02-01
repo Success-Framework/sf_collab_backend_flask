@@ -6,6 +6,7 @@ Based on SF Collab Notification System Documentation
 
 from typing import Optional, Dict, Any, List
 from app.notifications.service import notification_service
+from app.models.transaction import Transaction
 import logging
 
 logger = logging.getLogger(__name__)
@@ -766,14 +767,16 @@ def notify_reward_claimed(user_id: int, reward_name: str, reward_id: int = None)
     )
 
 
-def notify_payment_sent(user_id: int, amount: str, recipient: str, payment_id: int = None):
+def notify_payment_sent(user_id: int, amount: str, recipient: str, payment_id: int = None, transaction: Transaction = None):
     """Notify user payment was sent"""
+    print("Transaction in notify_payment_sent:", transaction)
     return notification_service.create_notification(
         user_id=user_id,
         template_key="PAYMENT_SENT",
         variables={"amount": amount, "recipient": recipient},
         entity_type="payment",
-        entity_id=payment_id
+        entity_id=payment_id,
+        transaction=transaction
     )
 
 
@@ -784,7 +787,8 @@ def notify_payment_received(user_id: int, amount: str, sender_name: str, payment
         template_key="PAYMENT_RECEIVED",
         variables={"amount": amount, "sender": sender_name},
         entity_type="payment",
-        entity_id=payment_id
+        entity_id=payment_id,
+        send_email=True
     )
 
 

@@ -10,7 +10,7 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from app.models.userRole import UserRole
 from app.notifications.helpers import notify_access_request_pending
-# Notify startup owner/founders about the join request
+from app.utils.plans_utils import can_create_project, can_add_collaborator
 from app.models.startUpMember import StartupMember
 import os 
 from io import BytesIO
@@ -19,6 +19,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import uuid
 import shutil
+from sqlalchemy.orm.attributes import flag_modified
 from app.utils.startup_permissions import (
     get_current_user_startup_role,
     can_view_full_details,
@@ -51,7 +52,31 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
+def has_startup_document_visibility_access(user_id, startup_document):
+    """Check if user has visibility access to startup document based on visibility settings"""
+    # Owner always has access
+    print(startup_document.to_dict())
+    if startup_document.parent_startup and startup_document.parent_startup.creator_id == user_id:
+        return True
+    # Check visibility settings
+    if startup_document.visible_by == 'private':
+        return False
+    
+    if startup_document.visible_by == 'team' and startup_document.parent_startup.id:
+        # Check if user is part of the startup team
+        return is_user_on_startup_team(user_id, startup_document.parent_startup.id)
+    
+    if startup_document.visible_by == 'all' or startup_document.visible_by == 'public':
+        return True
+    
+    return False
+def is_user_on_startup_team(user_id, startup_id):
+    """Check if user is a member of the startup team"""
+    membership = StartupMember.query.filter_by(
+        user_id=user_id,
+        startup_id=startup_id
+    ).first()
+    return membership is not None
 def validate_file_size(file, max_size=MAX_FILE_SIZE):
     """Validate file size"""
     file.seek(0, os.SEEK_END)
@@ -74,6 +99,23 @@ def get_startup_member_ids(startup_id, exclude_user_id=None):
     if exclude_user_id:
         user_ids = [uid for uid in user_ids if uid != exclude_user_id]
     return user_ids
+def parse_json_field(value, default):
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default
+    return value if value is not None else default
+
+def calculate_total_positions(roles_data, fallback_positions=0):
+    total = 0
+    if roles_data:
+        for _, role in roles_data.items():
+            if isinstance(role, dict) and 'positionsNumber' in role:
+                total += int(role.get('positionsNumber', 0))
+            else:
+                total += 1
+    return total if total > 0 else int(fallback_positions)
 
 #! FOR EVERYONE (Public - no auth required)
 @startups_bp.route('', methods=['GET'])
@@ -162,9 +204,6 @@ def register_startup():
     
     try:
         # Check if request has form data
-        print("FORM:", request.form)
-        print("FILES:", request.files)
-
         if not request.form:
             return error_response('Form data required', 400)
         
@@ -178,7 +217,7 @@ def register_startup():
         # Check if startup name already exists
         if Startup.query.filter_by(name=data['name']).first():
             return error_response('Startup name already exists', 409)
-        
+
         # Get current user info
         current_user = User.query.get(current_user_id)
         if not current_user:
@@ -187,9 +226,9 @@ def register_startup():
             return error_response('User email not verified', 403)
         if current_user.is_banned():
             return error_response('User is banned', 403)
-        # if current_user.active_startups_count == 1 and current_user.plan_id == '':
-        #     return error_response('Startup creation limit reached for your plan', 403) For later plans
-        # Parse roles if it's a string (JSON)
+
+        # if not can_create_project(current_user):
+        #     return error_response('Startup creation limit reached for your plan', 403)
         roles_data = data.get('roles', {})
         
         if isinstance(roles_data, str):
@@ -356,88 +395,140 @@ def register_startup():
 def update_startup(startup_id):
     """Update startup"""
     current_user_id = get_jwt_identity()
+    
     startup = Startup.query.get(startup_id)
-    print("CURRENT USER ID AND STARTUP CREATOR ID:")
-    print(startup.to_dict())
-    print(current_user_id, startup.creator_id,  int(current_user_id) != int(startup.creator_id))
-    if int(current_user_id) != int(startup.creator_id):
-        return error_response('Only the startup creator can update the startup', 403)
     if not startup:
         return error_response('Startup not found', 404)
     
-    # Check if user is authorized to update this startup
-    if not can_edit_startup_core_info(startup_id):
-        return error_response("Only the startup owner can update core information", 403)
+    if int(current_user_id) != int(startup.creator_id):
+        return error_response('Only the startup creator can update the startup', 403)
     
-    data = request.get_json()
+    data = request.form
     
     try:
         # Basic startup info
         if 'name' in data:
-            # Check if name is being changed and if new name already exists
             if data['name'] != startup.name and Startup.query.filter_by(name=data['name']).first():
                 return error_response('Startup name already exists', 409)
             startup.name = data['name']
+        
         if 'industry' in data:
             startup.industry = data['industry']
+        
         if 'location' in data:
             startup.location = data['location']
+        
         if 'description' in data:
             startup.description = data['description']
+        
         if 'stage' in data:
             startup.update_stage(data['stage'])
+        
         if 'positions' in data:
             startup.positions = data['positions']
+        
         if 'roles' in data:
-            startup.roles = data['roles']
+            roles_data = json.loads(data['roles']) if isinstance(data['roles'], str) else data['roles']
+            total_positions = calculate_total_positions(roles_data)
+            startup.roles = roles_data
+            flag_modified(startup, "roles")
+            startup.positions = total_positions
         
         # Financial fields
         if 'revenue' in data:
             startup.revenue = float(data['revenue']) if data['revenue'] is not None else 0.0
+        
         if 'funding_amount' in data:
             startup.funding_amount = float(data['funding_amount']) if data['funding_amount'] is not None else 0.0
+        
         if 'funding_round' in data:
             startup.funding_round = data['funding_round']
+        
         if 'burn_rate' in data:
             startup.burn_rate = float(data['burn_rate']) if data['burn_rate'] is not None else 0.0
+        
         if 'runway_months' in data:
             startup.runway_months = int(data['runway_months']) if data['runway_months'] is not None else 0
+        
         if 'valuation' in data:
             startup.valuation = float(data['valuation']) if data['valuation'] is not None else 0.0
+        
         if 'financial_notes' in data:
             startup.financial_notes = data['financial_notes']
         
         if 'tech_stack' in data:
             startup.tech_stack = json.loads(data['tech_stack'])
-            
-        # Recalculate total positions if roles are updated
-        if 'roles' in data and data['roles']:
-            """
-            Roles
-            {
-                "developer": {"positionsNumber": 3, "roleType": "equity (full-time, part, etc)" },
-            }
-            """
-            roles_data = json.loads(data['roles'])
-            total_positions = 0
-            for role_key, role_value in roles_data.items():
-                if isinstance(role_value, dict) and 'positionsNumber' in role_value:
-                    total_positions += int(role_value.get('positionsNumber', 0))
-                else:
-                    total_positions += 1
-            startup.roles = roles_data
-            startup.positions = total_positions
+            flag_modified(startup, "tech_stack")
+
+        
+        # Handle file uploads
+        files = request.files
+        startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup.id))
+        
+        # Handle logo upload
+        if 'logo' in files:
+            logo_file = files['logo']
+            if logo_file and allowed_file(logo_file.filename):
+                if validate_file_size(logo_file):
+                    logo_path = os.path.join(startup_upload_dir, secure_filename(logo_file.filename))
+                    logo_file.save(logo_path)
+                    startup.logo_path = logo_path
+                    startup.logo_url = f"/startups/{startup.id}/logo"
+        
+        # Handle banner upload
+        if 'banner' in files:
+            banner_file = files['banner']
+            if banner_file and allowed_file(banner_file.filename):
+                if validate_file_size(banner_file):
+                    banner_path = os.path.join(startup_upload_dir, secure_filename(banner_file.filename))
+                    banner_file.save(banner_path)
+                    startup.banner_path = banner_path
+                    startup.banner_url = f"/startups/{startup.id}/banner"
+        
+        removed_docs = request.form.get("removed_documents")
+
+        if removed_docs:
+            removed_ids = json.loads(removed_docs)
+
+            for doc_id in removed_ids:
+                doc = StartupDocument.query.get(doc_id)
+                if doc and doc.startup_id == startup.id:
+                    if os.path.exists(doc.file_path):
+                        os.remove(doc.file_path)
+                    db.session.delete(doc)
+
+        document_files = files.getlist('documents')
+        
+        for doc_file in document_files:
+            if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
+                if validate_file_size(doc_file):
+                    filename = secure_filename(doc_file.filename)
+                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                    unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
+                    doc_path = os.path.join(startup_upload_dir, unique_filename)
+                    doc_file.save(doc_path)
+                    
+                    file_url = f"/startups/{startup.id}/documents/{unique_filename}"
+                    
+                    startup.add_document(
+                        filename=doc_file.filename,
+                        file_path=doc_path,
+                        file_url=file_url,
+                        content_type=doc_file.content_type,
+                        document_type=data.get('document_type', 'general')
+                    )
         
         db.session.commit()
         return success_response({'startup': startup.to_dict()}, 'Startup updated successfully')
+        
     except ValueError as e:
+        print(f"❌ [UPDATE_STARTUP] ValueError: {str(e)}")
         db.session.rollback()
         return error_response(f'Invalid data format: {str(e)}', 400)
     except Exception as e:
+        print(f"❌ [UPDATE_STARTUP] Exception: {str(e)}")
         db.session.rollback()
         return error_response(f'Failed to update startup: {str(e)}', 500)
-        
-#! GET STARTUP MEMBERS
 @startups_bp.route('/<int:startup_id>/members', methods=['GET'])
 @jwt_required()
 def get_startup_members(startup_id):
@@ -447,10 +538,6 @@ def get_startup_members(startup_id):
     startup = Startup.query.get(startup_id)
     if not startup:
         return error_response('Startup not found', 404)
-    
-    # Check if user has access to this startup
-    if not can_view_full_details(startup_id):
-        return error_response("You need to be a member to see the team", 403)
     
     members = StartupMember.query.filter_by(startup_id=startup_id).all()
     return success_response({
@@ -475,7 +562,8 @@ def add_startup_member(startup_id):
     # Check if user is authorized to add members
     if not can_manage_members(startup_id):
         return error_response("Only owner or founder can add members", 403)
-    
+    if not can_add_collaborator(current_user_id):
+        return error_response('Collaborator addition limit reached for your plan', 403)
     data = request.get_json()
     required_fields = ['user_id', 'first_name', 'last_name']
     if not all(field in data for field in required_fields):
@@ -486,15 +574,14 @@ def add_startup_member(startup_id):
             data['user_id'],
             data['first_name'],
             data['last_name'],
-            data.get('roles', 'member')
+            data.get('role', 'member')
         )
-        db.session.commit()
         
         # ════════════════════════════════════════════════════════════
         # ✨ NOTIFICATION: Added to Startup (4.4)
         # ════════════════════════════════════════════════════════════
         try:
-            role = data.get('roles', 'member')
+            role = data.get('role', 'member')
             notify_added_to_startup(
                 user_id=data['user_id'],
                 startup_name=startup.name,
@@ -503,7 +590,7 @@ def add_startup_member(startup_id):
             )
         except Exception as e:
             print(f"⚠️ Added to startup notification failed: {e}")
-        
+        db.session.commit()
         return success_response({'member': member.to_dict()}, 'Member added successfully')
     except Exception as e:
         db.session.rollback()
@@ -601,24 +688,14 @@ def get_startup_banner(startup_id):
 def get_startup_documents(startup_id):
     """Get all startup documents"""
     current_user_id = get_jwt_identity()
-    
-    startup = Startup.query.get_or_404(startup_id)
-    # Check if user has access to this startup
-    if not can_view_full_details(startup_id):
-        return error_response("You need to be a member of this startup to view documents", 403)
 
-    # Filter documents based on visibility
-    visible_by = request.args.get('visible_by', 'all')  # default: all
-    documents = startup.get_documents()
+    documents = StartupDocument.query.filter_by(startup_id=startup_id).all()
 
-    if visible_by == 'public':
-        documents = [doc for doc in documents if doc.visible_by == 'public']
-    elif visible_by == 'private':
-        documents = [doc for doc in documents if doc.visible_by == 'private']
-    elif visible_by == 'team':
-        documents = [doc for doc in documents if doc.visible_by == 'team']
-
-    return success_response({'documents': [doc.to_dict() for doc in documents]})
+    filtered_documents = []
+    for doc in documents:
+        if has_startup_document_visibility_access(current_user_id, doc):
+            filtered_documents.append(doc)
+    return success_response({'documents': [doc.to_dict() for doc in filtered_documents]})
 
 #! SERVE STARTUP FILE (Public - no auth required)
 @startups_bp.route('/uploads/<int:startup_id>/<filename>', methods=['GET'])
@@ -1194,18 +1271,16 @@ def remove_startup_member(startup_id, member_id):
     """Remove member from startup"""
     from app.models.startup import Startup
     from app.models.startUpMember import StartupMember
-    
+    import traceback
+        
     startup = Startup.query.get_or_404(startup_id)
-
     if not can_manage_members(startup_id):
         return error_response('Unauthorized', 403)
-
     # Get member info before removal for notification
     member = StartupMember.query.get(member_id)
     member_user_id = member.user_id if member else None
     
     removed = startup.remove_member_by_id(member_id)
-
     if not removed:
         return error_response('Member not found or already inactive', 404)
     
@@ -1223,6 +1298,5 @@ def remove_startup_member(startup_id, member_id):
             )
         except Exception as e:
             print(f"⚠️ Removed from startup notification failed: {e}")
-
     return success_response(message='Member removed successfully')
 

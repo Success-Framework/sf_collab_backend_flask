@@ -1,6 +1,5 @@
 from app.models.plan import Plan
 from app.extensions import db  # your SQLAlchemy instance
-import math
 PLANS = [
     {
         "category": "crowdfunding",
@@ -18,6 +17,7 @@ PLANS = [
                         "features": [
                             "Early access priority: ahead of public rollout",
                             "Access to exclusive founder community",
+                            "Early access to new features",
                             "Supporter badge",
                             "Supporter-only updates"
                         ],
@@ -41,13 +41,10 @@ PLANS = [
                         "price": 1900,
                         "badge_id": "crowdfunding-founder-starter-supporter-badge",
                         "features": [
-                            "Access to exclusive founder community",
+                            "Higher matching & discovery priority: surfaced earlier to founders",
                             "Early access to new features",
-                            "Special recognition on platform",
-                            "High priority access",
-                            "Earlier onboarding than standard founders",
                             "Supporter badge",
-                            "Supporter-only updates: roadmap, infrastructure, and platform progress"
+                            "Supporter-only updates",
                         ],
                         "options": [{
                             "title": "Founder Starter",
@@ -69,13 +66,11 @@ PLANS = [
                         "price": 4900,
                         "badge_id": "crowdfunding-founder-pro-badge",
                         "features": [
-                            "Everything in Founder Starter +",
-                            "Advanced analytics",
-                            "Very high priority access",
-                            "Advanced analytics : insights into team activity and progress",
-                            "Longer duration than standard founders",
+                            "Very high priority across SF",
                             "Priority support",
-                            "Pro supporter badge"
+                            "Pro supporter badge",
+                            "All previous benefits included",
+                            "Chose between Founder Starter and Founder Pro options"
                         ],
                         "options": [
                             {
@@ -113,12 +108,11 @@ PLANS = [
                         "price": 9900,
                         "badge_id": "crowdfunding-founder-power-badge",
                         "features": [
-                            "Top priority access",
+                            "Top priority across SF",
                             "Feature request voting",
-                            "Full founder community access",
-                            "Extended duration than standard founders",
-                            "Dedicated supporter badge",
-                            "All previous benefits included"
+                            "Power Supporter badge",
+                            "All previous benefits included",
+                            "Chose between Founder Starter, Founder Pro, and Founder Scale options"
                         ],
                         "options": [
                             {
@@ -172,10 +166,11 @@ PLANS = [
                       "price": 24900,
                       "badge_id": "crowdfunding-founder-champion-badge",
                       "features": [
-                          "Guaranteed startup registration priority",
-                          "Team collaboration tools with contributor and permission management",
-                          "Up to 3 team seats included",
-                          "All previous benefits included"
+                            "Guaranteed early access at launch",
+                            "Long-term priority status",
+                            "Champion badge",
+                            "All previous benefits included",
+                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
                       ],
                       "options": [
                           {
@@ -229,10 +224,13 @@ PLANS = [
                       "badge_id": "crowdfunding-founder-patron-badge",
                       "price": 49900,
                       "features": [
-                          "Immediate access (no waiting)",
-                          "Direct support channel: prioritized communication",
-                          "Up to 10 team seats",
-                          "Founder Patron badge: long-term supporter recognition"
+                            "Immediate access (no waiting)",
+                            "Direct support channel: prioritized communication",
+                            "Up to 10 team seats",
+                            "Founder Patron badge: long-term supporter recognition",
+                            "All previous benefits included",
+                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
+
                       ],
                       "options": [
                           {
@@ -286,11 +284,15 @@ PLANS = [
                       "price": 99900,
                       "badge_id": "crowdfunding-founding-partner-badge",
                       "features": [
-                          "Lifetime platform access",
-                          "Exclusive founding partner badge",
-                          "Permanent recognition (name or logo)",
-                          "Monthly founder Q&A calls : direct access to leadership",
-                          "Priority consideration for long-term cooperation"
+                            "Lifetime platform access",
+                            "Exclusive founding partner badge",
+                            "Permanent recognition (name or logo)",
+                            "Monthly founder Q&A calls : direct access to leadership",
+                            "Priority consideration for long-term cooperation",
+                            "Long-term priority status",
+                            "Champion badge",
+                            "All previous benefits included",
+                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
                       ],
                       "options": [
                           {
@@ -359,13 +361,14 @@ PLANS = [
                         "price": 299900,
                         "badge_id": "crowdfunding-strategic-supporter-badge",
                         "features": [
-                            "Lifetime Founder Starter - basic project creation and collaboration access",
-                            "Lifetime Founder Pro - advanced analytics and priority support",
-                            "Lifetime Founder Scale - higher limits and advanced collaboration capacity",
-                            "Highest priority across SF",
-                            "Prominent site & product recognition",
-                            "Direct leadership discussions",
-                            "Strategic collaboration opportunities"
+                            "All Founding Partner benefits included",
+                            "Personalized onboarding session",
+                            "Dedicated account manager",
+                            "Quarterly business reviews",
+                            "Customized feature requests",
+                            "Exclusive networking opportunities",
+                            "All previous benefits included",
+                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
                         ],
                         "options": [
                             {

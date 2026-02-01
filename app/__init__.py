@@ -1,4 +1,4 @@
-from flask import Flask, request, abort, request, g, send_from_directory, make_response
+from flask import Flask, request, abort, request, g, send_from_directory, make_response, session
 from flask_cors import CORS
 from .extensions import db, migrate, jwt, sess
 from app.config import Config
@@ -17,7 +17,7 @@ import time
 import json
 from app.services.email_service import EmailService
 from flask_session import Session
-
+import stripe
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
@@ -37,7 +37,7 @@ def create_app(config_name=None):
 
     app = Flask(__name__, instance_relative_config=True)
     
-    # ✅ REMOVED BROKEN PREFLIGHT HANDLER - Flask-CORS handles this automatically
+    # REMOVED BROKEN PREFLIGHT HANDLER - Flask-CORS handles this automatically
     
     config_class = get_config(config_name)
     app.config.from_object(config_class)
@@ -97,6 +97,10 @@ def create_app(config_name=None):
     app.config['HUGGINGFACE_API_KEY'] = os.getenv('HUGGINGFACE_API_KEY', '')
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
 
+    # STRIPE Configuration
+    stripe.api_key = os.getenv('STRIPE_SECRET_KEY', '')
+    app.config['STRIPE_SECRET_KEY'] = os.getenv('STRIPE_SECRET_KEY', '')
+    app.config['STRIPE_WEBHOOK_SECRET'] = os.getenv('STRIPE_WEBHOOK_SECRET', '')
     print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
     CORS(
         app,
@@ -145,7 +149,7 @@ def create_app(config_name=None):
         if response.is_json:
             try:
                 data = response.get_json()
-                response_preview = json.dumps(data)[:300]
+                response_preview = json.dumps(data)[:1000]
             except Exception:
                 response_preview = "<invalid json>"
         else:

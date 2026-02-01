@@ -11,7 +11,7 @@ class StartupMember(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     first_name = db.Column(db.String(100))
     last_name = db.Column(db.String(100))
-    role = db.Column(Enum(UserRoles), default=UserRoles.member)
+    role = db.Column(db.String(100), default=UserRoles.member)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     

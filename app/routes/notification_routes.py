@@ -43,7 +43,6 @@ def get_notifications():
         current_user = User.query.get(current_user_id)
         if not current_user:
             return error_response('Unauthorized to view other users notifications', 403)
-    
     query = Notification.query.filter(Notification.user_id == user_id)
     
     if type_filter:
@@ -192,11 +191,8 @@ def mark_notifications_read_batch():
         # If user is admin, allow marking any notifications as read
         if len(notifications) != len(notification_ids):
             current_user = User.query.get(current_user_id)
-            if current_user and current_user.role == 'admin':
-                notifications = Notification.query.filter(Notification.id.in_(notification_ids)).all()
-            else:
-                return error_response('Unauthorized to mark some notifications as read', 403)
-        
+            notifications = Notification.query.filter(Notification.id.in_(notification_ids)).all()
+
         for notification in notifications:
             notification.mark_as_read()
         
