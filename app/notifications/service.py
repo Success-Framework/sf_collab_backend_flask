@@ -11,6 +11,8 @@ from app.models.notification import Notification
 from app.models.user import User
 from app.notifications.templates import NOTIFICATION_TEMPLATES, PRIORITY_LEVELS
 import logging
+from app.models.transaction import Transaction
+from app.utils.email_templates.email_templates import transaction_bill_email_template
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,8 @@ class NotificationService:
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
         auto_send: bool = True,
-        send_email: bool = False
+        send_email: bool = False,
+        transaction=None
     ) -> Optional[Notification]:
         """
         Create a notification from a template
@@ -43,7 +46,7 @@ class NotificationService:
             entity_id: ID of the related entity
             auto_send: Whether to send via Socket.IO immediately
             send_email: Whether to send email notification
-            
+            transaction: Transaction object related to the notification
         Returns:
             Created Notification object or None if failed
         """
@@ -100,7 +103,7 @@ class NotificationService:
             
             # Send email if requested and priority is high/critical
             if send_email or template.get("priority") in ["critical", "high"]:
-                NotificationService.send_email_notification(notification)
+                NotificationService.send_email_notification(notification, transaction=transaction)
             
             logger.info(f"Created notification {notification.id} for user {user_id} (template: {template_key})")
             return notification
@@ -140,13 +143,13 @@ class NotificationService:
             return False
 
     @staticmethod
-    def send_email_notification(notification: Notification) -> bool:
+    def send_email_notification(notification: Notification, transaction: Transaction) -> bool:
         """
         Send notification via email
         
         Args:
             notification: Notification object to send
-            
+            transaction: Transaction object related to the notification
         Returns:
             True if sent successfully, False otherwise
         """
@@ -168,9 +171,9 @@ class NotificationService:
             
             # Send email
             email_service.send_email(
-                to_email=user.email,
+                recipient=user.email,
                 subject=notification.title,
-                body=notification.message
+                body=transaction_bill_email_template(transaction)
             )
             
             # Update notification

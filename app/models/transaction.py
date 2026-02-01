@@ -14,6 +14,8 @@ class Transaction(db.Model):
     status = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=db.func.now())
 
+    user = db.relationship("User", back_populates="transactions")
+    
     def to_dict(self):
         return {
             "id": self.id,

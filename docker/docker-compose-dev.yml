@@ -10,15 +10,16 @@ services:
       - ../.env.development
     environment:
       FLASK_ENV: development
-    volumes:
-      - ../:/app 
-      - ./uploads:/app/uploads
-      - ./vector_store:/app/vector_store
     command: >
       gunicorn run:app
       -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker
       -b 0.0.0.0:5000
       --reload
+    volumes:
+      - ../:/app 
+      - ./uploads:/app/uploads
+      - ./vector_store:/app/vector_store
+    
     depends_on:
       db:
         condition: service_healthy

@@ -309,7 +309,7 @@ class User(db.Model):
         cascade="all, delete-orphan",
         lazy="joined"
     )
-
+    transactions = db.relationship("Transaction", back_populates="user")
     # ========== HELPER FUNCTIONS ==========
     
     def update_last_activity(self):
@@ -478,40 +478,58 @@ class User(db.Model):
         return min(activities / 10, 100)
     
     def get_recent_activity(self, limit=10):
-        """Get user's recent activity across all platforms"""
-        from app.models.task import Task
-        from app.models.idea import Idea
-        from app.models.ideaComment import IdeaComment
-
         activities = []
-        
-        for idea in self.ideas.order_by(Idea.created_at.desc()).limit(5).all():
-            activities.append({
-                'type': 'idea_created',
-                'title': idea.title,
-                'timestamp': idea.created_at,
-                'data': idea.to_dict()
-            })
-        
-        for task in self.owned_tasks.filter_by(status='completed').order_by(Task.completed_date.desc()).limit(5).all():
-            activities.append({
-                'type': 'task_completed',
-                'title': task.title,
-                'timestamp': task.completed_date,
-                'data': task.to_dict()
-            })
-        
-        for comment in self.idea_comments.order_by(IdeaComment.created_at.desc()).limit(5).all():
-            activities.append({
-                'type': 'comment_made',
-                'title': f'Comment on idea',
-                'timestamp': comment.created_at,
-                'data': comment.to_dict()
-            })
-        
-        activities.sort(key=lambda x: x['timestamp'], reverse=True)
-        return activities[:limit]
-    
+
+        try:
+            # -------- Tasks --------
+            for task in self.owned_tasks.filter_by(status='completed').all():
+                if not task.completed_date:
+                    continue  # skip broken data safely
+
+                activities.append({
+                    "type": "task_completed",
+                    "id": task.id,
+                    "title": task.title,
+                    "timestamp": task.completed_date
+                })
+
+            # -------- Ideas --------
+            for idea in self.ideas.all():
+                if not idea.created_at:
+                    continue
+
+                activities.append({
+                    "type": "idea_created",
+                    "id": idea.id,
+                    "title": idea.title,
+                    "timestamp": idea.created_at
+                })
+
+            # -------- Comments --------
+            for comment in self.comments.all():
+                if not comment.created_at:
+                    continue
+
+                activities.append({
+                    "type": "comment_created",
+                    "id": comment.id,
+                    "content": comment.content,
+                    "timestamp": comment.created_at
+                })
+
+            # -------- Sort safely --------
+            activities.sort(
+                key=lambda x: x["timestamp"],
+                reverse=True
+            )
+
+            return activities[:limit]
+
+        except Exception as e:
+            print(
+                f"[get_recent_activity] Failed for user {getattr(self, 'id', 'unknown')}"
+            )
+            return []  # auth MUST never fail because of activity
     def _enum_to_value(self,value):
         return value.value if hasattr(value, "value") else value
     @staticmethod
@@ -595,7 +613,6 @@ class User(db.Model):
             'timezone': self.get_timezone(),
             'permissions': [perm.to_dict() for perm in self.permissions],
             'roles': [ur.role for ur in self.user_roles],
-            'planId': self.plan_id,
             'credits': self.credits,
             
             # Multi-role profile data
@@ -620,3 +637,4 @@ class User(db.Model):
             data['recentActivity'] = self.get_recent_activity()
         
         return data
+    

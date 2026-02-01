@@ -12,7 +12,7 @@ from app.models.startUpMember import StartupMember
 from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
-
+from app.utils.plans_utils import can_create_task_or_milestone
 # ===== NOTIFICATION IMPORTS =====
 from app.notifications.helpers import (
     notify_task_assigned,
@@ -39,7 +39,36 @@ def has_startup_access(user_id, startup_id):
     
     return membership is not None
 
-
+def has_task_visibility_access(user_id, task):
+    """Check if user has visibility access to task based on visibility settings"""
+    # Owner always has access
+    print("User ID:", user_id, "Task", task)
+    if task.user_id == user_id:
+        return True
+    
+    # Assigned user always has access
+    if task.assigned_to == user_id:
+        return True
+    
+    # Check visibility settings
+    if task.visible_by == 'private':
+        return False
+    
+    if task.visible_by == 'team' and task.startup_id:
+        # Check if user is part of the startup team
+        return is_user_on_startup_team(user_id, task.startup_id)
+    
+    if task.visible_by == 'all' or task.visible_by == 'public':
+        return True
+    
+    return False
+def is_user_on_startup_team(user_id, startup_id):
+    """Check if user is a member of the startup team"""
+    membership = StartupMember.query.filter_by(
+        user_id=user_id,
+        startup_id=startup_id
+    ).first()
+    return membership is not None
 def get_user_full_name(user_id):
     """Get user's full name"""
     user = User.query.get(user_id)
@@ -56,27 +85,30 @@ def get_tasks():
     
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
-    user_id = request.args.get('user_id', type=int)
+
+    user_id = request.args.get('user_id', type=int) # This can be other user's ID to check their tasks
     startup_id = request.args.get('startup_id', type=int)
     status = request.args.get('status', type=str)
+
     priority = request.args.get('priority', type=str)
+    search = request.args.get('search', type=str)
     assigned_to = request.args.get('assigned_to', type=int)
     show_overdue_only = request.args.get('show_overdue_only', 'false').lower() == 'true'
     
     if not user_id:
         user_id = current_user_id
-    
-    if user_id != int(current_user_id):
-        if startup_id:
-            if not has_startup_access(int(current_user_id), startup_id):
-                return error_response('Unauthorized to access tasks', 403)
-        else:
-            return error_response('Unauthorized to view other users tasks', 403)
-    
-    query = Task.query.filter(Task.user_id == user_id)
-    
-    if startup_id and startup_id != 'all':
-        query = query.filter(Task.startup_id == startup_id)
+
+    query = None
+    if startup_id:
+        query = Task.query.filter(
+            Task.startup_id == startup_id
+        )
+    else:
+        query = Task.query.filter(
+            (Task.user_id == user_id) | (Task.assigned_to == user_id)
+        )
+    if search:
+        query = query.filter(Task.title.ilike(f'%{search}%'))
     if status and status != 'all':
         query = query.filter(Task.status == status)
     if priority and priority != 'all':
@@ -85,18 +117,31 @@ def get_tasks():
         query = query.filter(Task.assigned_to == assigned_to)
     if show_overdue_only:
         query = query.filter(Task.due_date < datetime.utcnow(), Task.status != 'completed')
-    
-    result = paginate(query.order_by(Task.created_at.desc()), page, per_page)
-    
+    paginated = paginate(
+        query.order_by(Task.created_at.desc()),
+        page,
+        per_page
+    )
+    # visible_tasks = [
+    #     task for task in paginated['items']
+    #     if has_task_visibility_access(current_user_id, task)
+    # ]
+    print("Paginated items:", paginated['items'])
+    filtered_tasks = []
+    for task in paginated['items']:
+        if has_task_visibility_access(current_user_id, task):
+            filtered_tasks.append(task)
+
     return success_response({
-        'tasks': [task.to_dict() for task in result['items']],
+        'tasks': [task.to_dict() for task in filtered_tasks],
         'pagination': {
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'pages': result['pages']
+            'page': paginated['page'],
+            'per_page': paginated['per_page'],
+            'total': paginated['total'],
+            'pages': paginated['pages']
         }
     })
+
 
 
 @tasks_bp.route('/<int:task_id>', methods=['GET'])
@@ -139,7 +184,8 @@ def create_task():
     startup_id = data.get('startup_id')
     if startup_id and not has_startup_access(current_user_id, startup_id):
         return error_response('Unauthorized to create tasks for this startup', 403)
-    
+    if not can_create_task_or_milestone(current_user):
+        return error_response('Task creation limit reached for your plan', 403)
     try:
         due_date = None
         if data.get('due_date'):
@@ -147,7 +193,8 @@ def create_task():
             due_date = datetime.fromisoformat(due_date_str)
         
         assigned_to = data.get('assigned_to')
-        
+        if assigned_to in ("", None):
+            assigned_to = None
         task = Task(
             user_id=user_id,
             startup_id=startup_id,
@@ -156,7 +203,12 @@ def create_task():
             priority=data.get('priority', 'medium'),
             status=data.get('status', 'today'),
             due_date=due_date,
-            assigned_to=assigned_to
+            assigned_to=assigned_to,
+            visible_by=data.get('visible_by', 'all'),
+            tags= data.get('tags', []),
+            labels= data.get('labels', []),
+            estimated_hours= data.get('estimated_hours', 0),
+            created_by= data.get('created_by', current_user_id)
         )
         
         db.session.add(task)
@@ -183,6 +235,61 @@ def create_task():
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to create task: {str(e)}', 500)
+
+@tasks_bp.route('/stats', methods=['GET'])
+@jwt_required()
+def get_tasks_stats():
+    """Get task statistics for current user"""
+    current_user_id = int(get_jwt_identity())
+    
+    user_id = request.args.get('user_id', type=int)
+    startup_id = request.args.get('startup_id', type=int)
+    time_range = request.args.get('time_range', '30d')
+    
+    if not user_id:
+        user_id = current_user_id
+    
+    if user_id != current_user_id:
+        current_user = User.query.get(current_user_id)
+        if not current_user or current_user.role != 'admin':
+            return error_response('Unauthorized to view other users stats', 403)
+    
+    now = datetime.utcnow()
+    if time_range == '7d':
+        start_date = now - timedelta(days=7)
+    elif time_range == '90d':
+        start_date = now - timedelta(days=90)
+    elif time_range == 'month':
+        start_date = datetime(now.year, now.month, 1)
+    else:
+        start_date = now - timedelta(days=30)
+    
+    query = Task.query.filter(
+        (Task.user_id == user_id) | (Task.assigned_to == user_id),
+        Task.created_at >= start_date
+    )
+    
+    if startup_id:
+        query = query.filter(Task.startup_id == startup_id)
+    
+    tasks = query.all()
+    
+    total_tasks = len(tasks)
+    completed_tasks = len([t for t in tasks if t.status == 'completed'])
+    in_progress_tasks = len([t for t in tasks if t.status == 'in_progress'])
+    overdue_tasks = len([t for t in tasks if t.due_date and t.due_date < now and t.status != 'completed'])
+    
+    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+    
+    return success_response({
+        'stats': {
+            'totalTasks': total_tasks,
+            'completedTasks': completed_tasks,
+            'inProgressTasks': in_progress_tasks,
+            'overdueTasks': overdue_tasks,
+            'completionRate': round(completion_rate, 1)
+        }
+    })
 
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT', 'PATCH'])
@@ -224,7 +331,8 @@ def update_task(task_id):
                 task.due_date = None
         if 'assigned_to' in data:
             task.assigned_to = data['assigned_to']
-        
+        if 'visible_by' in data:
+            task.visible_by = data['visible_by']
         task.updated_at = datetime.utcnow()
         db.session.commit()
         

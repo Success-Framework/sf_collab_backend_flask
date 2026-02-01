@@ -4,6 +4,8 @@ from datetime import datetime
 from app.models.projectGoal import ProjectGoal
 from app.models.goalMilstone import GoalMilestone
 from app.extensions import db
+from app.models.user import User
+from app.utils.plans_utils import can_create_task_or_milestone
 from app.utils.helper import error_response, success_response, paginate
 from app.models.goalMilstone import GoalMilestone
 project_goals_bp = Blueprint('project_goals', __name__)
@@ -19,7 +21,6 @@ def get_project_goals():
     include_milestones = request.args.get('include_milestones', 'false').lower() == 'true'
     
     query = ProjectGoal.query
-    print(include_milestones, "include_milestones")
     if status:
         query = query.filter(ProjectGoal.status == status)
     if user_id:
@@ -78,7 +79,9 @@ def create_project_goal():
 
     if not title or not user_id or not target_date:
         return error_response('Title, user_id, and target_date are required', 400)
-    
+    current_user = User.query.get(user_id)
+    if not can_create_task_or_milestone(current_user):
+        return error_response('Task creation limit reached for your plan', 403)
     try:
         goal = ProjectGoal(
             startup_id=startup_id,

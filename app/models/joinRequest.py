@@ -84,7 +84,8 @@ class JoinRequest(db.Model):
             'startup': {
                 'id': startup.id,
                 'name': startup.name,
-                'industry': startup.industry
+                'industry': startup.industry,
+                'roles': startup.roles
             } if startup else None,
             'user': {
                 'id': user.id,

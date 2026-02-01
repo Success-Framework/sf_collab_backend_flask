@@ -36,7 +36,6 @@ COPY . .
 # ENVIRONMENT
 # =====================================================
 ENV PYTHONUNBUFFERED=1
-ENV FLASK_ENV=production
 ENV PORT=5000
 
 # Gunicorn config for WebSockets

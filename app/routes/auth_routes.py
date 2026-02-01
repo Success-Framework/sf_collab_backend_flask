@@ -5,6 +5,7 @@ Updated with notification triggers for account events
 
 from flask import Blueprint, request, jsonify, redirect, url_for
 from app.extensions import oauth, db
+from flask import session
 from flask_jwt_extended import (
     create_access_token, 
     create_refresh_token,
@@ -12,6 +13,7 @@ from flask_jwt_extended import (
     get_jwt_identity,
     get_jwt
 )
+import traceback
 from app.config import Config
 from app.models.user import User
 from app.models.refreshToken import RefreshToken
@@ -43,34 +45,40 @@ thank_email_template = templates.get("welcome_email")
 
 
 def init_oauth(app):
-    """Initialize OAuth with Flask app"""
+    """Initialize OAuth with Flask app (SAFE + STATELESS)"""
+
     oauth.init_app(app)
+
+    # =========================
+    # Hard config validation
+    # =========================
     if not app.config.get("GOOGLE_CLIENT_ID"):
         raise RuntimeError("GOOGLE_CLIENT_ID is not set")
 
     if not app.config.get("GOOGLE_CLIENT_SECRET"):
         raise RuntimeError("GOOGLE_CLIENT_SECRET is not set")
 
-    # Google OAuth
     oauth.register(
-        name='google',
-        client_id=app.config.get('GOOGLE_CLIENT_ID'),
-        client_secret=app.config.get('GOOGLE_CLIENT_SECRET'),
-        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-        client_kwargs={'scope': 'openid email profile'}
+        name="google",
+        client_id=app.config["GOOGLE_CLIENT_ID"],
+        client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={
+            "scope": "openid email profile",
+            "prompt": "consent",
+            "access_type": "offline",
+        }
     )
 
-    # GitHub OAuth
     oauth.register(
-        name='github',
-        client_id=app.config.get('GITHUB_CLIENT_ID'),
-        client_secret=app.config.get('GITHUB_CLIENT_SECRET'),
-        access_token_url='https://github.com/login/oauth/access_token',
-        authorize_url='https://github.com/login/oauth/authorize',
-        api_base_url='https://api.github.com/',
-        client_kwargs={'scope': 'read:user user:email'}
+        name="github",
+        client_id=app.config.get("GITHUB_CLIENT_ID"),
+        client_secret=app.config.get("GITHUB_CLIENT_SECRET"),
+        access_token_url="https://github.com/login/oauth/access_token",
+        authorize_url="https://github.com/login/oauth/authorize",
+        api_base_url="https://api.github.com/",
+        client_kwargs={"scope": "read:user user:email"}
     )
-
 
 # ========================== HELPER FUNCTIONS ==========================
 def generate_tokens(user_id):
@@ -136,27 +144,6 @@ def grant_default_permissions(user_id):
 
 
 def get_user_response_data(user):
-    notifications_count = user.notifications.filter_by(is_read=False).count()
-
-    try:
-        from app.models.startUpMember import StartupMember
-        active_startups = StartupMember.query.filter_by(
-            user_id=user.id,
-            is_active=True
-        ).count()
-    except:
-        active_startups = 0
-
-    try:
-        from app.models.task import Task
-        pending_tasks = Task.query.filter_by(
-            user_id=user.id,
-            status='in_progress'
-        ).count()
-    except:
-        pending_tasks = 0
-
-    permissions = UserPermission.query.filter_by(user_id=int(user.id)).all()
 
     return user.to_dict(include_statistics = True, include_recent_activity=True)
 
@@ -252,59 +239,88 @@ def register():
 def login():
     """Login user"""
     try:
+        print("DEBUG: Login route called")
         data = request.get_json()
+        print(f"DEBUG: Request data received: {data}")
         
         email = data.get('email')
         password = data.get('password')
+        print(f"DEBUG: Email: {email}, Password provided: {bool(password)}")
         
         if not email or not password:
+            print("DEBUG: Missing email or password")
             return error_response('Email and password are required', 400)
         
         user = User.query.filter_by(email=email.lower()).first()
+        print(f"DEBUG: User found: {bool(user)}, Email: {email.lower()}")
         
         if not user or not check_password_hash(user.password, password):
+            print("DEBUG: Invalid credentials")
             return error_response('Invalid email or password', 401)
         
+        print(f"DEBUG: User status: {user.status}")
         if user.status == 'suspended':
+            print("DEBUG: Account suspended")
             return error_response('Account is suspended', 403)
         
-        # Check for new device login (simplified - check IP or user agent)
+        # Check for new device login
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         user_agent = request.headers.get('User-Agent', '')
+        print(f"DEBUG: Client IP: {client_ip}, User Agent: {user_agent}")
         
         # Update login info
         user.last_login = datetime.utcnow()
         user.last_login_ip = client_ip
+        print(f"DEBUG: Updated last_login and last_login_ip")
+        
         if hasattr(user, 'last_activity_date'):
             user.last_activity_date = datetime.utcnow().date()
-        db.session.commit()
-
-        # ===== SEND NOTIFICATION FOR NEW DEVICE (optional) =====
-        # Uncomment below if you add last_login_ip to User model:
-        # if user.last_login_ip and user.last_login_ip != client_ip:
-        #     try:
-        #         notify_new_device_login(user.id, client_ip or "Unknown location")
-        #     except Exception as e:
-        #         print(f"Error sending new device notification: {e}")
+            print(f"DEBUG: Updated last_activity_date")
         
+        last_activity_date = user.last_activity_date
+        streak_days = user.streak_days or 0
+        print(f"DEBUG: Last activity date: {last_activity_date}, Current streak: {streak_days}")
+        
+        if last_activity_date:
+            days_diff = (datetime.utcnow().date() - last_activity_date).days
+            print(f"DEBUG: Days difference: {days_diff}")
+            if days_diff == 1:
+                streak_days += 1
+            elif days_diff > 1:
+                streak_days = 1
+        else:
+            streak_days = 1
+        
+        print(f"DEBUG: New streak days: {streak_days}")
+        db.session.commit()
+        print("DEBUG: Database committed")
+
         # Log activity
         Activity.log(
             action="user_login",
             user_id=user.id,
             details=f"User logged in at {utc_now_str()}"
         )
+        print(f"DEBUG: Activity logged for user {user.id}")
         
         # Generate tokens
         access_token, refresh_token = generate_tokens(user.id)
+        print("DEBUG: Tokens generated")
         save_refresh_token(user.id, refresh_token)
+        print("DEBUG: Refresh token saved")
+        
+        user_response = get_user_response_data(user)
+        print(f"DEBUG: User response data prepared")
         
         return success_response({
-            'user': get_user_response_data(user),
+            'user': user_response,
             'access_token': access_token,
             'refresh_token': refresh_token
         }, 'Login successful')
         
     except Exception as e:
+        print(f"DEBUG: Exception in login: {str(e)}")
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         return error_response(f'Login failed: {str(e)}', 500)
 
 
@@ -315,6 +331,7 @@ def send_verification_code():
     """Send email verification code"""
     import random
     from flask_jwt_extended import create_access_token
+
     
     try:
         user_id = get_jwt_identity()
@@ -527,7 +544,19 @@ def get_current_user():
         
         if not user:
             return error_response('User not found', 404)
-        
+        # last_activity_date = user.last_activity_date
+        # streak_days = user.streak_days or 0
+        # if last_activity_date:
+        #     days_diff = (datetime.utcnow().date() - last_activity_date).days
+        #     if days_diff == 1:
+        #         streak_days += 1
+        #     elif days_diff > 1:
+        #         streak_days = 1
+        # else:
+        #     streak_days = 1
+        # user.streak_days = streak_days
+        # user.last_activity_date = datetime.utcnow().date()
+        # db.session.commit()
         return success_response({
             'user': get_user_response_data(user)
         })
@@ -540,6 +569,9 @@ def get_current_user():
 @bp.route('/google', methods=['GET'])
 def google_login():
     """Initiate Google OAuth"""
+    session.pop('google_token', None)
+    session.pop('_oauth_token_google', None)
+    session.pop('_oauth_state_google', None)
     redirect_uri = Config.GOOGLE_REDIRECT_URI
     return oauth.google.authorize_redirect(redirect_uri)
 

@@ -537,3 +537,17 @@ def submit_contact_form():
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to submit contact form: {str(e)}', 500)
+@users_bp.route('/my-current-plan', methods=['GET'])
+@jwt_required()
+def get_plan_id():
+    """Get current plan ID for the user"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return error_response('User not found', 404)
+    
+    current_plan = user.plan_id
+    if not current_plan:
+        return success_response({'plan_id': None}, 'No active plan found')
+    
+    return success_response({'plan_id': current_plan}, 'Current plan retrieved successfully')
