@@ -314,11 +314,6 @@ class NotificationService:
                 logger.error(f"Notification {notification_id} not found")
                 return False
             
-            # Check authorization
-            if notification.user_id != user_id:
-                logger.error(f"User {user_id} not authorized to delete notification {notification_id}")
-                return False
-            
             db.session.delete(notification)
             db.session.commit()
             

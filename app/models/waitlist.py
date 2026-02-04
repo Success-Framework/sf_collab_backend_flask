@@ -203,15 +203,21 @@ class Waitlist(db.Model):
     def add_points(self, points: int, category: str):
         if category == "referral":
             self.referral_points += points
-            # (need to change information + logic; for each 5 successful referrals, they should get a bonus of 25 points)
+            # Bonus: 25 points for every 5 successful referrals
             if self.referral_points % 5 == 0:
-                self.contribution_points += 25  # bonus points for every 5 referrals
-        elif category in ["contribution", "small_contribution", "medium_contribution", "large_contribution"]:
-            self.contribution_points += points
+                self.referral_points += Waitlist.POINTS_PER_REFERRAL * 5
+        elif category == "small_contribution":
+            self.contribution_points += Waitlist.POINTS_PER_SMALL_CONTRIBUTION
+        elif category == "contribution":
+            self.contribution_points += Waitlist.POINTS_PER_CONTRIBUTION
+        elif category == "large_contribution":
+            self.contribution_points += Waitlist.POINTS_PER_LARGE_CONTRIBUTION
+        elif category == "idea":
+            self.contribution_points += Waitlist.POINTS_PER_IDEA
         elif category == "activity":
-            self.activity_points += points
+            self.activity_points += Waitlist.POINTS_PER_ACTIVITY
         elif category == "new_startup":
-            self.activity_points += points
+            self.activity_points += Waitlist.POINTS_PER_STARTUP
         elif category == "custom":
             self.contribution_points += points
         else:

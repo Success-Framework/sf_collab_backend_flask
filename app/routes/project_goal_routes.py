@@ -7,12 +7,48 @@ from app.extensions import db
 from app.models.user import User
 from app.utils.plans_utils import can_create_task_or_milestone
 from app.utils.helper import error_response, success_response, paginate
-from app.models.goalMilstone import GoalMilestone
+from app.models.startUpMember import StartupMember
 project_goals_bp = Blueprint('project_goals', __name__)
 
+def has_project_goal_visibility_access(user_id, project_goal):
+    """Check if user has visibility access to project goal based on visibility settings"""
+    # Admin always has access
+    if project_goal.parent_startup.creator_id == int(user_id):
+        return True
+    # Owner always has access
+
+    if int(project_goal.user_id) == int(user_id):
+        return True
+
+    # Assigned user always has access
+    if int(user_id) in project_goal.members_involved:
+        return True
+    
+    # Check visibility settings
+    if project_goal.visible_by == 'private':
+        return False
+    
+    if project_goal.visible_by == 'team' and project_goal.startup_id:
+        # Check if user is part of the startup team
+        return is_user_on_startup_team(user_id, project_goal.startup_id)
+    
+    if project_goal.visible_by == 'all' or project_goal.visible_by == 'public':
+        return True
+    
+    return False
+def is_user_on_startup_team(user_id, startup_id):
+    """Check if user is a member of the startup team"""
+    
+    membership = StartupMember.query.filter_by(
+        user_id=user_id,
+        startup_id=startup_id
+    ).first()
+    return membership is not None
 @project_goals_bp.route('', methods=['GET'])
+@jwt_required()
 def get_project_goals():
     """Get all project goals with filtering"""
+    current_user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     status = request.args.get('status', type=str)
@@ -29,9 +65,13 @@ def get_project_goals():
         query = query.filter(ProjectGoal.startup_id == startup_id)
     
     result = paginate(query.order_by(ProjectGoal.created_at.desc()), page, per_page)
-    
+
+    filtered_items = []
+    for goal in result['items']:
+        if has_project_goal_visibility_access(current_user_id, goal):
+            filtered_items.append(goal)
     return success_response({
-        'project_goals': [goal.to_dict(include_milestones=include_milestones) for goal in result['items']],
+        'project_goals': [goal.to_dict(include_milestones=include_milestones) for goal in filtered_items],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],

@@ -33,7 +33,36 @@ def get_user_full_name(user_id):
         return f"{user.first_name or ''} {user.last_name or ''}".strip() or "Someone"
     return "Someone"
 
+def has_calendar_event_visibility_access(user_id, event):
+    """Check if user has visibility access to task based on visibility settings"""
+    # Admin always has access
+    if event.parent_startup.creator_id == int(user_id):
+        return True
+    # Owner always has access
 
+    if int(event.user_id) == int(user_id):
+        return True
+    
+    # Check visibility settings
+    if event.visible_by == 'private':
+        return False
+    
+    if event.visible_by == 'team' and event.startup_id:
+        # Check if user is part of the startup team
+        return is_user_on_startup_team(user_id, event.startup_id)
+    
+    if event.visible_by == 'all' or event.visible_by == 'public':
+        return True
+    
+    return False
+def is_user_on_startup_team(user_id, startup_id):
+    """Check if user is a member of the startup team"""
+    
+    membership = StartupMember.query.filter_by(
+        user_id=user_id,
+        startup_id=startup_id
+    ).first()
+    return membership is not None
 def get_startup_member_ids(startup_id):
     """Get list of user IDs who are members of a startup"""
     members = StartupMember.query.filter_by(startup_id=startup_id).all()
@@ -52,6 +81,7 @@ def format_event_date(event):
 def get_calendar_events():
     """Get all calendar events with filtering"""
     current_user_id = get_jwt_identity()
+    print(f"🔍 [get_calendar_events] Starting - current_user_id: {current_user_id}")
     
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
@@ -62,34 +92,60 @@ def get_calendar_events():
     end_date = request.args.get('end_date', type=str)
     upcoming_only = request.args.get('upcoming_only', 'false').lower() == 'true'
     
-    # Default to current user's events if no user_id specified
-    if not user_id:
-        user_id = current_user_id
+    print(f"📋 [get_calendar_events] Query params - page: {page}, per_page: {per_page}, user_id: {user_id}, startup_id: {startup_id}, category: {category}, upcoming_only: {upcoming_only}")
     
-    query = CalendarEvent.query.filter(CalendarEvent.user_id == user_id)
+    # Default to current user's events if no user_id specified
+    query = CalendarEvent.query
+    if not user_id and not startup_id:
+        user_id = current_user_id
+        query = query.filter(CalendarEvent.user_id == user_id)
+    print(f"🔎 [get_calendar_events] Initial query filter applied for user_id: {user_id}, items count: {query.count()}")
     
     if startup_id:
         # Check if user has access to this startup
-        if not has_startup_access(current_user_id, startup_id):
-            return error_response('Unauthorized to access this startup calendar events', 403)
         query = query.filter(CalendarEvent.startup_id == startup_id)
+        print(f"🏢 [get_calendar_events] Startup filter applied - startup_id: {startup_id}, items count: {query.count()}")
     
     if category:
         query = query.filter(CalendarEvent.category == category)
+        print(f"🏷️ [get_calendar_events] Category filter applied - category: {category}, items count: {query.count()}")
+    
     if start_date:
         start_datetime = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
         query = query.filter(CalendarEvent.start_date >= start_datetime)
+        print(f"📅 [get_calendar_events] Start date filter applied - start_date: {start_datetime}, items count: {query.count()}")
+    
     if end_date:
         end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
         query = query.filter(CalendarEvent.start_date <= end_datetime)
+        print(f"📅 [get_calendar_events] End date filter applied - end_date: {end_datetime}, items count: {query.count()}")
+    
     if upcoming_only:
         now = datetime.utcnow()
         query = query.filter(CalendarEvent.start_date >= now)
+        print(f"⏰ [get_calendar_events] Upcoming only filter applied - current time: {now}, items count: {query.count()}")
     
     result = paginate(query.order_by(CalendarEvent.start_date.asc()), page, per_page)
+    print(f"📊 [get_calendar_events] Paginated result - total: {result['total']}, items in page: {len(result['items'])}")
+    print(f"📦 [get_calendar_events] Events data: {[event.to_dict() for event in result['items']]}")
+    
+    filtered_events = []
+    print(f"🔐 [get_calendar_events] Starting visibility check for {len(result['items'])} events")
+    
+    for idx, event in enumerate(result['items']):
+        has_access = has_calendar_event_visibility_access(current_user_id, event)
+        print(f"  ✓ Event {idx} (id: {event.id}, title: '{event.title}') - visibility: {event.visible_by}, user has access: {has_access}")
+        
+        if has_access:
+            filtered_events.append(event)
+            print(f"    ✅ Event added to filtered list")
+        else:
+            print(f"    ❌ Event filtered out - insufficient access")
+    
+    print(f"✨ [get_calendar_events] Final result - filtered_events: {len(filtered_events)} / {len(result['items'])}")
     
     return success_response({
-        'events': [event.to_dict() for event in result['items']],
+        'events': [event.to_dict() for event in filtered_events],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],
@@ -140,7 +196,6 @@ def create_calendar_event():
     startup_id = data.get('startup_id')
     if startup_id and not has_startup_access(current_user_id, startup_id):
         return error_response('Unauthorized to create events for this startup', 403)
-    
     try:
         event = CalendarEvent(
             user_id=user_id,
@@ -156,7 +211,8 @@ def create_calendar_event():
             location=data.get('location'),
             is_recurring=data.get('is_recurring', False),
             recurrence_rule=data.get('recurrence_rule'),
-            reminder_minutes=data.get('reminder_minutes', 30)
+            reminder_minutes=data.get('reminder_minutes', 30),
+            visible_by=data.get('visible_by', 'team')
         )
         
         db.session.add(event)

@@ -1,7 +1,8 @@
 from enum import Enum
 from app.extensions import db
 from app.models.user import User
-
+from sqlalchemy import func
+from app.models.startUpMember import StartupMember
 class PlanType(Enum):
   FOUNDER_FREE = "founder-free"
   FOUNDER_STARTER = "founder-starter"
@@ -117,19 +118,30 @@ def get_plan_limits(user: User) -> dict:
 def can_create_project(user: User) -> bool:
   """Check if user can create a new project"""
   plan_limits = get_plan_limits(user)
+  
   current_projects = user.startups.count()
   return current_projects < plan_limits["max_projects"]
 
+
 def can_add_collaborator(user: User) -> bool:
-  """Check if user can add more collaborators"""
-  plan_limits = get_plan_limits(user)
-  current_collaborators = user.startup_memberships.count()
-  return current_collaborators < plan_limits["max_collaborators"]
+    plan_limits = get_plan_limits(user)
+
+    current_collaborators = (
+        db.session
+        .query(func.count(StartupMember.id))
+        .filter(
+            StartupMember.user_id != user.id
+        )
+        .scalar()
+    )
+
+    return current_collaborators < plan_limits["max_collaborators"]
+
 def can_create_task_or_milestone(user: User) -> bool:
   """Check if user can create tasks or milestones based on plan"""
   plan_limits = get_plan_limits(user)
   # Assuming tasks and milestones share the same limit as projects for simplicity
-  current_tasks_milestones = user.tasks.count() + user.milestones.count()
+  current_tasks_milestones = user.created_tasks.count() + user.project_goals.count()
   return current_tasks_milestones < plan_limits["max_tasks_milestones"]
 def can_upload_file(user: User, file_size_mb: float) -> bool:
   """Check if user can upload a file of given size"""

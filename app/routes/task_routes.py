@@ -41,13 +41,16 @@ def has_startup_access(user_id, startup_id):
 
 def has_task_visibility_access(user_id, task):
     """Check if user has visibility access to task based on visibility settings"""
-    # Owner always has access
-    print("User ID:", user_id, "Task", task)
-    if task.user_id == user_id:
+    # Admin always has access
+    if task.parent_startup.creator_id == int(user_id):
         return True
-    
+    # Owner always has access
+
+    if int(task.user_id) == int(user_id):
+        return True
+
     # Assigned user always has access
-    if task.assigned_to == user_id:
+    if task.assigned_to == int(user_id):
         return True
     
     # Check visibility settings
@@ -64,6 +67,7 @@ def has_task_visibility_access(user_id, task):
     return False
 def is_user_on_startup_team(user_id, startup_id):
     """Check if user is a member of the startup team"""
+    
     membership = StartupMember.query.filter_by(
         user_id=user_id,
         startup_id=startup_id
@@ -126,7 +130,6 @@ def get_tasks():
     #     task for task in paginated['items']
     #     if has_task_visibility_access(current_user_id, task)
     # ]
-    print("Paginated items:", paginated['items'])
     filtered_tasks = []
     for task in paginated['items']:
         if has_task_visibility_access(current_user_id, task):
@@ -176,8 +179,9 @@ def create_task():
         return error_response('Missing required fields: title')
     
     user_id = data.get('user_id', current_user_id)
+    current_user = User.query.get(current_user_id)
     if user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
+        
         if not current_user or current_user.role != 'admin':
             return error_response('Unauthorized to create tasks for other users', 403)
     
@@ -533,7 +537,7 @@ def delete_task(task_id):
     
     if task.user_id != current_user_id:
         current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != 'admin':
+        if not current_user.is_admin():
             return error_response('Unauthorized to delete this task', 403)
     
     try:

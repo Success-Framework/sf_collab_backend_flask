@@ -240,6 +240,7 @@ CREATE TABLE `calendar_events` (
   `link` text,
   `category` enum('meeting','deadline','reminder','event') DEFAULT NULL,
   `color` varchar(20) DEFAULT NULL,
+  `visible_by` varchar(50) DEFAULT 'team',
   `location` varchar(255) DEFAULT NULL,
   `is_recurring` tinyint(1) DEFAULT NULL,
   `recurrence_rule` varchar(255) DEFAULT NULL,
