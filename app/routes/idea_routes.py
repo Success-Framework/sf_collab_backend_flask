@@ -128,11 +128,17 @@ def create_idea():
             idea.image_url = image_url 
         
         db.session.add(idea)
-        waitlist_user = Waitlist.query.filter_by(id=user_id).first()
+        db.session.flush()
+
+        # Award points to waitlist user if they exist
+        waitlist_user = Waitlist.query.filter_by(email=User.query.get(user_id).email).first()
         if waitlist_user:
-            today = datetime.datetime.now(datetime.timezone.utc).date()
-            if waitlist_user.last_activity_at is None or waitlist_user.last_activity_at.date() < today:
-                waitlist_user.add_points(Waitlist.POINTS_PER_IDEA, 'custom')
+            # Check if they already got points today
+            today = datetime.datetime.utcnow().date()
+            last_activity_date = waitlist_user.last_activity_at.date() if waitlist_user.last_activity_at else None
+            
+            if last_activity_date != today:
+                waitlist_user.add_points(Waitlist.POINTS_PER_IDEA, 'idea')
         db.session.commit()
         
         # ════════════════════════════════════════════════════════════

@@ -141,8 +141,11 @@ class Startup(db.Model):
         """Remove a member from the startup"""
         member = self.startup_members.filter_by(user_id=user_id, is_active=True).first()
         if member:
-            member.is_active = False
+            db.session.delete(member)
             self.update_member_count()
+            db.session.commit()
+            return True
+        return False
     def remove_member_by_id(self, member_id):
         member = self.startup_members.filter_by(
             id=member_id,

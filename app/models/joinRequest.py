@@ -35,7 +35,8 @@ class JoinRequest(db.Model):
             user_id=self.user_id,
             first_name=self.first_name,
             last_name=self.last_name,
-            role="member"
+            role=self.role,
+            joined_at=datetime.utcnow()
         )
 
         db.session.add(member)

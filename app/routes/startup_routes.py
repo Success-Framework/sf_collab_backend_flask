@@ -55,8 +55,9 @@ def allowed_file(filename):
 def has_startup_document_visibility_access(user_id, startup_document):
     """Check if user has visibility access to startup document based on visibility settings"""
     # Owner always has access
-    print(startup_document.to_dict())
-    if startup_document.parent_startup and startup_document.parent_startup.creator_id == user_id:
+    print("Has startup document visibility access check:", user_id, startup_document.parent_startup.creator_id)
+    print("Type checks:", type(user_id), type(startup_document.parent_startup.creator_id))
+    if startup_document.parent_startup and int(startup_document.parent_startup.creator_id) == int(user_id):
         return True
     # Check visibility settings
     if startup_document.visible_by == 'private':
@@ -173,7 +174,7 @@ def get_startup(startup_id):
 
     role = get_current_user_startup_role(startup_id)
 
-    if role == 'none':
+    if role == 'none' or not role:
         # Very limited view for normal logged-in users
         data = {
             'id': startup.id,
@@ -186,7 +187,9 @@ def get_startup(startup_id):
             'member_count': startup.member_count,
             'views': startup.views,
             'createdAt': startup.created_at.isoformat(),
-            'access_level': 'public_limited'
+            'access_level': 'public_limited',
+            'roles': startup.roles,
+            'tech_stack': startup.tech_stack
         }
     else:
         # Full view for anyone related to the startup
@@ -373,7 +376,21 @@ def register_startup():
             current_user.last_name,
             'founder'
         )
-        
+        # Give Startup Creation Points
+        # Give Startup Creation Points (once per day per user)
+        try:
+            waitlist_user = Waitlist.query.filter_by(email=current_user.email).first()
+            if waitlist_user:
+                # Check if user already got points today
+                today = datetime.utcnow().date()
+                last_activity_date = waitlist_user.last_activity_at.date() if waitlist_user.last_activity_at else None
+                
+                if last_activity_date != today:
+                    waitlist_user.add_points(
+                        category='new_startup'
+                    )
+        except Exception as e:
+            print(f"⚠️ Failed to award startup creation points: {e}")
         
         return success_response({
             'startup': startup.to_dict(),
@@ -549,9 +566,6 @@ def get_startup_members(startup_id):
 @jwt_required()
 def add_startup_member(startup_id):
     """Add member to startup"""
-    from flask_jwt_extended import get_jwt_identity
-    from app.models.startup import Startup
-    from app.utils.helper import error_response, success_response
     
     current_user_id = get_jwt_identity()
     
@@ -562,7 +576,8 @@ def add_startup_member(startup_id):
     # Check if user is authorized to add members
     if not can_manage_members(startup_id):
         return error_response("Only owner or founder can add members", 403)
-    if not can_add_collaborator(current_user_id):
+    current_user = User.query.get(current_user_id)
+    if not can_add_collaborator(current_user):
         return error_response('Collaborator addition limit reached for your plan', 403)
     data = request.get_json()
     required_fields = ['user_id', 'first_name', 'last_name']
@@ -946,7 +961,18 @@ def get_join_requests(startup_id):
         'current_user_role': get_current_user_startup_role(startup_id)
     })
 
-
+@startups_bp.route('/user/<int:user_id>/startup/<int:startup_id>', methods=['GET'])
+def get_join_request_by_user_and_startup(user_id, startup_id):
+    """Get join request by user ID and startup ID"""
+    join_request = JoinRequest.query.filter_by(
+        user_id=user_id,
+        startup_id=startup_id
+    ).first()
+    
+    if not join_request:
+        return error_response('Join request not found', 404)
+    
+    return success_response({'join_request': join_request.to_dict()})
 @startups_bp.route('/<int:startup_id>/join-request', methods=['OPTIONS'])
 def join_request_options(startup_id):
     """CORS preflight handler for join requests"""
@@ -1097,7 +1123,7 @@ def accept_join_request(startup_id, request_id):
                 user_id=user_id_to_notify,
                 startup_name=startup.name,
                 startup_id=startup.id,
-                role=new_member.role.value if hasattr(new_member.role, 'value') else str(new_member.role)
+                role=new_member.role
             )
             
             # Also notify as access granted
@@ -1113,7 +1139,7 @@ def accept_join_request(startup_id, request_id):
             'message': "Join request accepted. User added as team member.",
             'new_member': {
                 'userId': new_member.user_id,
-                'role': new_member.role.value,
+                'role': new_member.role,
                 'joinedAt': new_member.joined_at.isoformat() if hasattr(new_member, 'joined_at') else None
             }
         }, status=200)
@@ -1272,6 +1298,7 @@ def remove_startup_member(startup_id, member_id):
     from app.models.startup import Startup
     from app.models.startUpMember import StartupMember
     import traceback
+from app.models.waitlist import Waitlist
         
     startup = Startup.query.get_or_404(startup_id)
     if not can_manage_members(startup_id):
@@ -1280,10 +1307,7 @@ def remove_startup_member(startup_id, member_id):
     member = StartupMember.query.get(member_id)
     member_user_id = member.user_id if member else None
     
-    removed = startup.remove_member_by_id(member_id)
-    if not removed:
-        return error_response('Member not found or already inactive', 404)
-    
+    db.session.delete(member)
     db.session.commit()
     
     # ════════════════════════════════════════════════════════════
@@ -1300,3 +1324,40 @@ def remove_startup_member(startup_id, member_id):
             print(f"⚠️ Removed from startup notification failed: {e}")
     return success_response(message='Member removed successfully')
 
+@startups_bp.route('/<int:startup_id>/leave', methods=['DELETE'])
+@jwt_required()
+def leave_startup(startup_id):
+    """Allow current user to leave a startup"""
+    current_user_id = get_jwt_identity()
+    
+    membership = StartupMember.query.filter_by(
+        startup_id=startup_id,
+        user_id=current_user_id
+    ).first()
+    startup = Startup.query.get(startup_id)
+    if startup and startup.creator_id == current_user_id:
+        return error_response('Startup owner cannot leave their own startup', 403)
+    if not membership:
+        return error_response('You are not a member of this startup', 404)
+    
+    try:
+        db.session.delete(membership)
+        db.session.commit()
+        
+        try:
+            startup = Startup.query.get(startup_id)
+            notify_info(
+                user_id=current_user_id,
+                message=f"You have successfully left the startup: {startup.name}"
+            )
+            notify_info(
+                user_id=startup.creator_id,
+                message=f"{membership.first_name} {membership.last_name} has left your startup: {startup.name}"
+            )
+        except Exception as e:
+            print(f"⚠️ Left startup notification failed: {e}")
+        
+        return success_response(message='You have left the startup successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to leave startup: {str(e)}', 500)
