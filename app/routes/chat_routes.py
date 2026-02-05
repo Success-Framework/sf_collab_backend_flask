@@ -206,12 +206,13 @@ def get_conversation(conversation_id):
         return error_response(f"Failed to load conversation: {str(e)}", 500)
 
 
-@chat_bp.route("/conversations/with-user/<int:other_user_id>", methods=["GET"])
+@chat_bp.route("/conversations/with-user", methods=["POST"])
 @jwt_required()
-def get_or_create_direct_conversation(other_user_id):
+def get_or_create_direct_conversation():
     try:
         current_user_id = get_jwt_identity()
-
+        data = request.get_json() or {}
+        other_user_id = data.get("other_user_id")
         if current_user_id == other_user_id:
             return error_response("You cannot create a conversation with yourself", 400)
 
@@ -253,7 +254,53 @@ def get_or_create_direct_conversation(other_user_id):
         db.session.rollback()
         logging.error(f"Failed to get/create conversation: {str(e)}")
         return error_response(f"Failed to get or create conversation: {str(e)}", 500)
+@chat_bp.route("/conversations/group", methods=["POST"])
+@jwt_required()
+def create_group_conversation():
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json() or {}
 
+        name = data.get("name")
+        participant_ids = data.get("participant_user_ids", [])
+
+        if not name:
+            return error_response("Group name is required", 400)
+
+        if not participant_ids or not isinstance(participant_ids, list):
+            return error_response("participant_user_ids must be a non-empty list", 400)
+
+        current_user = User.query.get(current_user_id)
+        if not current_user:
+            return error_response("User not found", 404)
+
+        conversation = ChatConversation(
+            conversation_type="group",
+            name=name,
+            created_by_id=current_user_id
+        )
+        db.session.add(conversation)
+        db.session.flush()
+
+        conversation.add_participant(current_user, "admin")
+
+        for user_id in participant_ids:
+            user = User.query.get(user_id)
+            if user:
+                conversation.add_participant(user, "member")
+
+        db.session.commit()
+
+        return success_response(
+            {"conversation": conversation.to_dict(for_user=current_user)},
+            "Group conversation created",
+            201,
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Failed to create group conversation: {str(e)}")
+        return error_response(f"Failed to create group conversation: {str(e)}", 500)
 
 # ─────────────────────────────────────────────────────────────
 # GENERAL CHAT
@@ -447,7 +494,6 @@ def send_message(conversation_id):
         conversation.increment_unread_count(current_user_id)
 
         db.session.commit()
-
         # Emit new message realtime
         if SOCKET_ENABLED:
             emit_new_message(conversation_id, message.to_dict(for_user=user))
@@ -666,8 +712,7 @@ def edit_message(conversation_id, message_id):
 
         if message.conversation_id != conversation_id:
             return error_response("Message does not belong to this conversation", 400)
-
-        if message.sender_id != current_user_id:
+        if int(message.sender_id) != int(current_user_id):
             return error_response("You can only edit your own messages", 403)
 
         new_content = data.get("content")
@@ -800,7 +845,7 @@ def delete_message(conversation_id, message_id):
         if message.conversation_id != conversation_id:
             return error_response("Message does not belong to this conversation", 400)
 
-        if message.sender_id != current_user_id and conversation.created_by_id != current_user_id:
+        if int(message.sender_id) != int(current_user_id) and int(conversation.created_by_id) != int(current_user_id):
             return error_response(
                 "You can only delete your own messages or you must be the conversation creator", 403
             )
@@ -813,8 +858,7 @@ def delete_message(conversation_id, message_id):
             except Exception as e:
                 logging.error(f"Failed to delete file: {str(e)}")
 
-        db.session.delete(message)
-        db.session.commit()
+        message.delete_message()
 
         if SOCKET_ENABLED:
             emit_message_deleted(conversation_id, message_id)

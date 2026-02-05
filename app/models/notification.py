@@ -39,7 +39,7 @@ class Notification(db.Model):
     email_sent_at = db.Column(db.DateTime, nullable=True)
     push_sent = db.Column(db.Boolean, default=False)
     push_sent_at = db.Column(db.DateTime, nullable=True)
-    
+    link_url = db.Column(db.String(500), nullable=True)
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -121,6 +121,7 @@ class Notification(db.Model):
             'pushSent': self.push_sent,
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
+            'linkUrl': self.link_url,
             'isRecent': self.is_recent(),
             'priorityLevel': self.get_priority_level(),
             'user': {

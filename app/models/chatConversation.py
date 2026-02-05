@@ -99,7 +99,8 @@ class ChatConversation(db.Model):
                 'content': last_message.get_content_for_user(for_user) if for_user else last_message.prepare_for_sending(),
                 'created_at': last_message.created_at.isoformat(),
                 'sender_name': user.get_full_name() if user else 'Unknown',
-                'display_time': last_message.get_display_time_info(for_user) if for_user else None
+                'display_time': last_message.get_display_time_info(for_user) if for_user else None,
+                'is_deleted': last_message.is_deleted
             }
             return preview
         return None

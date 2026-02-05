@@ -544,19 +544,19 @@ def get_current_user():
         
         if not user:
             return error_response('User not found', 404)
-        # last_activity_date = user.last_activity_date
-        # streak_days = user.streak_days or 0
-        # if last_activity_date:
-        #     days_diff = (datetime.utcnow().date() - last_activity_date).days
-        #     if days_diff == 1:
-        #         streak_days += 1
-        #     elif days_diff > 1:
-        #         streak_days = 1
-        # else:
-        #     streak_days = 1
-        # user.streak_days = streak_days
-        # user.last_activity_date = datetime.utcnow().date()
-        # db.session.commit()
+        last_activity_date = user.last_activity_date
+        streak_days = user.streak_days or 0
+        if last_activity_date:
+            days_diff = (datetime.utcnow().date() - last_activity_date).days
+            if days_diff == 1:
+                streak_days += 1
+            elif days_diff > 1:
+                streak_days = 1
+        else:
+            streak_days = 1
+        user.streak_days = streak_days
+        user.last_activity_date = datetime.utcnow().date()
+        db.session.commit()
         return success_response({
             'user': get_user_response_data(user)
         })

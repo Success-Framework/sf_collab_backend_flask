@@ -8,7 +8,11 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from sqlalchemy import or_, and_
 from datetime import datetime
-
+from app.notifications.helpers import (
+    notify_connection_request,
+    notify_friend_request_accepted,
+    notify_error
+)
 connections_bp = Blueprint('connections', __name__)
 
 
@@ -71,89 +75,70 @@ def get_user_profile_data(user):
 @connections_bp.route('/request', methods=['POST'])
 @jwt_required()
 def send_connection_request():
-    """
-    Send a connection request to another user.
-    
-    Request Body:
-        { "receiver_id": 123 }
-    
-    Behavior:
-        - Prevents self-requests
-        - Prevents duplicate pending requests
-        - If already connected, returns error
-        - If previously declined, allows re-request
-        - If they already sent us a request, returns error (user should accept instead)
-    
-    Returns:
-        201: Request sent successfully
-        400: Invalid request
-        404: User not found
-    """
+    """Send a connection request to another user."""
     current_user_id = int(get_jwt_identity())
     data = request.get_json()
-    
-    if not data or 'receiver_id' not in data:
-        return error_response('Missing receiver_id', 400)
-    
-    receiver_id = data['receiver_id']
-    
-    # RULE: Prevent self-request
-    if current_user_id == receiver_id:
-        return error_response('Cannot send connection request to yourself', 400)
-    
-    # Check receiver exists
-    receiver = User.query.get(receiver_id)
-    if not receiver:
-        return error_response('User not found', 404)
-    
-    # Check for existing request in EITHER direction
-    existing = FriendRequest.query.filter(
-        or_(
-            and_(
-                FriendRequest.sender_id == current_user_id,
-                FriendRequest.receiver_id == receiver_id
-            ),
-            and_(
-                FriendRequest.sender_id == receiver_id,
-                FriendRequest.receiver_id == current_user_id
-            )
-        )
-    ).first()
-    
-    if existing:
-        if existing.status == 'accepted':
-            # RULE: Already connected
-            return error_response('Already connected with this user', 400)
-        
-        elif existing.status == 'pending':
-            if existing.sender_id == current_user_id:
-                # RULE: Prevent duplicate - already sent
-                return error_response('Connection request already sent', 400)
-            else:
-                # They sent us a request - tell user to accept instead
-                return error_response('This user has already sent you a connection request. Check your incoming requests.', 400)
-        
-        elif existing.status == 'rejected':
-            # RULE: Allow re-request after decline
-            # Reset the request with current user as sender
-            existing.sender_id = current_user_id
-            existing.receiver_id = receiver_id
-            existing.status = 'pending'
-            existing.created_at = datetime.utcnow()
-            existing.updated_at = datetime.utcnow()
-            db.session.commit()
-            
-            return success_response({
-                'request': {
-                    'id': existing.id,
-                    'receiver': get_user_profile_data(receiver),
-                    'status': 'pending',
-                    'created_at': existing.created_at.isoformat()
-                }
-            }, 'Connection request sent', 201)
-    
-    # Create new request
     try:
+        if not data or 'receiver_id' not in data:
+            return error_response('Missing receiver_id', 400)
+        
+        receiver_id = data['receiver_id']
+        
+        if current_user_id == receiver_id:
+            return error_response('Cannot send connection request to yourself', 400)
+        
+        receiver = User.query.get(receiver_id)
+        if not receiver:
+            return error_response('User not found', 404)
+        
+        existing = FriendRequest.query.filter(
+            or_(
+                and_(
+                    FriendRequest.sender_id == current_user_id,
+                    FriendRequest.receiver_id == receiver_id
+                ),
+                and_(
+                    FriendRequest.sender_id == receiver_id,
+                    FriendRequest.receiver_id == current_user_id
+                )
+            )
+        ).first()
+        
+        if existing:
+            if existing.status == 'accepted':
+                return error_response('Already connected with this user', 400)
+            elif existing.status == 'pending':
+                if existing.sender_id == current_user_id:
+                    return error_response('Connection request already sent', 400)
+                else:
+                    return error_response('This user has already sent you a connection request. Check your incoming requests.', 400)
+            elif existing.status == 'rejected':
+                existing.sender_id = current_user_id
+                existing.receiver_id = receiver_id
+                existing.status = 'pending'
+                existing.created_at = datetime.utcnow()
+                existing.updated_at = datetime.utcnow()
+                db.session.commit()
+                
+                # Send notification
+                sender = User.query.get(current_user_id)
+                notify_connection_request(
+                    user_id=receiver_id,
+                    requester_id=current_user_id,
+                    requester_name=f"{sender.first_name} {sender.last_name}",
+                    request_id=existing.id,
+                    link_url="/connections"
+                )
+                
+                return success_response({
+                    'request': {
+                        'id': existing.id,
+                        'receiver': get_user_profile_data(receiver),
+                        'status': 'pending',
+                        'created_at': existing.created_at.isoformat()
+                    }
+                }, 'Connection request sent', 201)
+        
         new_request = FriendRequest(
             sender_id=current_user_id,
             receiver_id=receiver_id,
@@ -161,6 +146,16 @@ def send_connection_request():
         )
         db.session.add(new_request)
         db.session.commit()
+        
+        # Send notification
+        sender = User.query.get(current_user_id)
+        notify_connection_request(
+            user_id=receiver_id,
+            requester_id=current_user_id,
+            requester_name=f"{sender.first_name} {sender.last_name}",
+            request_id=new_request.id,
+            link_url="/connections"
+        )
         
         return success_response({
             'request': {
@@ -176,44 +171,38 @@ def send_connection_request():
         return error_response(f'Failed to send request: {str(e)}', 500)
 
 
-# =============================================================================
-# ACCEPT CONNECTION REQUEST
-# =============================================================================
-
 @connections_bp.route('/request/<int:request_id>/accept', methods=['POST'])
 @jwt_required()
 def accept_connection_request(request_id):
+    """Accept a connection request."""
     current_user_id = int(get_jwt_identity())
-
     conn_request = FriendRequest.query.get(request_id)
+    
     if not conn_request:
         return error_response('Connection request not found', 404)
-
-    print("ACCEPT DEBUG:", {
-        "jwt_identity": get_jwt_identity(),
-        "jwt_type": str(type(get_jwt_identity())),
-        "current_user_id": current_user_id,
-        "receiver_id": conn_request.receiver_id,
-        "receiver_type": str(type(conn_request.receiver_id)),
-        "sender_id": conn_request.sender_id,
-        "status": conn_request.status
-    })
-
+    
     if conn_request.receiver_id != current_user_id:
         return error_response('You can only accept requests sent to you', 403)
-
+    
     if conn_request.status != 'pending':
         return error_response(f'Request is already {conn_request.status}', 400)
-
-
     
     try:
         conn_request.status = 'accepted'
         conn_request.updated_at = datetime.utcnow()
         db.session.commit()
         
-        # Get the sender info for response
         sender = User.query.get(conn_request.sender_id)
+        accepter = User.query.get(current_user_id)
+        
+        # Notify sender that request was accepted
+        notify_friend_request_accepted(
+            user_id=conn_request.sender_id,
+            accepter_id=current_user_id,
+            accepter_name=f"{accepter.first_name} {accepter.last_name}",
+            request_id=conn_request.id,
+            link_url="/connections"
+        )
         
         return success_response({
             'connection': {
@@ -226,36 +215,18 @@ def accept_connection_request(request_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to accept request: {str(e)}', 500)
-    
 
-
-# =============================================================================
-# DECLINE CONNECTION REQUEST
-# =============================================================================
 
 @connections_bp.route('/request/<int:request_id>/decline', methods=['POST'])
 @jwt_required()
 def decline_connection_request(request_id):
-    """
-    Decline an incoming connection request.
-    
-    Behavior:
-        - Only the receiver can decline
-        - Request is marked as 'rejected' (allows re-request later)
-        - No connection is created
-    
-    Returns:
-        200: Request declined
-        403: Not the receiver
-        404: Request not found
-    """
+    """Decline an incoming connection request."""
     current_user_id = int(get_jwt_identity())
-    
     conn_request = FriendRequest.query.get(request_id)
+    
     if not conn_request:
         return error_response('Connection request not found', 404)
     
-    # Only receiver can decline
     if conn_request.receiver_id != current_user_id:
         return error_response('You can only decline requests sent to you', 403)
     
@@ -263,44 +234,29 @@ def decline_connection_request(request_id):
         return error_response(f'Request is already {conn_request.status}', 400)
     
     try:
-        # Mark as rejected - this allows sender to re-request later
         conn_request.status = 'rejected'
         conn_request.updated_at = datetime.utcnow()
         db.session.commit()
-        
+        notify_error(
+            user_id=conn_request.sender_id,
+            message=f"Your connection request to {current_user_id} was declined."
+        )
         return success_response(message='Connection request declined')
-        
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to decline request: {str(e)}', 500)
 
 
-# =============================================================================
-# CANCEL SENT REQUEST
-# =============================================================================
-
 @connections_bp.route('/request/<int:request_id>/cancel', methods=['POST'])
 @jwt_required()
 def cancel_connection_request(request_id):
-    """
-    Cancel a connection request you sent.
-    
-    Behavior:
-        - Only the sender can cancel
-        - Request is deleted
-    
-    Returns:
-        200: Request cancelled
-        403: Not the sender
-        404: Request not found
-    """
+    """Cancel a connection request you sent."""
     current_user_id = int(get_jwt_identity())
-    
     conn_request = FriendRequest.query.get(request_id)
+    
     if not conn_request:
         return error_response('Connection request not found', 404)
     
-    # Only sender can cancel
     if conn_request.sender_id != current_user_id:
         return error_response('You can only cancel requests you sent', 403)
     
@@ -310,38 +266,25 @@ def cancel_connection_request(request_id):
     try:
         db.session.delete(conn_request)
         db.session.commit()
-        
+        notify_error(
+            user_id=conn_request.receiver_id,
+            message=f"The connection request from {current_user_id} was cancelled."
+        )
         return success_response(message='Connection request cancelled')
-        
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to cancel request: {str(e)}', 500)
 
 
-# =============================================================================
-# REMOVE CONNECTION
-# =============================================================================
-
 @connections_bp.route('/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 def remove_connection(user_id):
-    """
-    Remove a connection with another user.
-    
-    Behavior:
-        - Either user can remove the connection
-        - Deletes the relationship for BOTH users
-    
-    Returns:
-        200: Connection removed
-        404: Connection not found
-    """
+    """Remove a connection with another user."""
     current_user_id = int(get_jwt_identity())
     
     if current_user_id == user_id:
         return error_response('Invalid request', 400)
     
-    # Find the accepted connection (in either direction)
     connection = FriendRequest.query.filter(
         FriendRequest.status == 'accepted',
         or_(
@@ -362,13 +305,14 @@ def remove_connection(user_id):
     try:
         db.session.delete(connection)
         db.session.commit()
-        
+        notify_error(
+            user_id=user_id,
+            message=f"Connection with user {current_user_id} was removed."
+        )
         return success_response(message='Connection removed')
-        
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to remove connection: {str(e)}', 500)
-
 
 # =============================================================================
 # LIST ALL CONNECTIONS
