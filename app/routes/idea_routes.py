@@ -124,7 +124,7 @@ def create_idea():
         
         # Handle image upload if provided
         if image_file:
-            image_url = upload_file_to_s3(image_file, folder='ideas')
+            image_url = upload_file_to_s3(image_file)
             idea.image_url = image_url 
         
         db.session.add(idea)

@@ -1295,20 +1295,19 @@ def get_startup_member_ids(startup_id, exclude_user_id=None):
 @jwt_required()
 def remove_startup_member(startup_id, member_id):
     """Remove member from startup"""
-    from app.models.startup import Startup
-    from app.models.startUpMember import StartupMember
-    import traceback
-from app.models.waitlist import Waitlist
         
     startup = Startup.query.get_or_404(startup_id)
+
     if not can_manage_members(startup_id):
         return error_response('Unauthorized', 403)
+
     # Get member info before removal for notification
     member = StartupMember.query.get(member_id)
     member_user_id = member.user_id if member else None
-    
+
     db.session.delete(member)
     db.session.commit()
+
     
     # ════════════════════════════════════════════════════════════
     # ✨ NOTIFICATION: Removed from Startup (4.4)

@@ -31,7 +31,8 @@ class NotificationService:
         entity_id: Optional[int] = None,
         auto_send: bool = True,
         send_email: bool = False,
-        transaction=None
+        transaction=None,
+        link_url: Optional[str] = None
     ) -> Optional[Notification]:
         """
         Create a notification from a template
@@ -91,6 +92,7 @@ class NotificationService:
                 entity_type=entity_type,
                 entity_id=entity_id,
                 data=full_metadata,
+                link_url=link_url,
                 is_read=False
             )
             

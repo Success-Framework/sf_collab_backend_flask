@@ -1180,7 +1180,7 @@ def notify_weekly_summary(user_id: int):
 # 4.13 FRIEND & CONNECTION NOTIFICATIONS
 # ===========================================
 
-def notify_friend_request_received(user_id: int, sender_id: int, sender_name: str, request_id: int = None):
+def notify_friend_request_received(user_id: int, sender_id: int, sender_name: str, request_id: int = None, link_url: str = None):
     """Notify user of friend request"""
     return notification_service.create_notification(
         user_id=user_id,
@@ -1188,11 +1188,12 @@ def notify_friend_request_received(user_id: int, sender_id: int, sender_name: st
         variables={"actor_name": sender_name},
         actor_id=sender_id,
         entity_type="friend_request",
-        entity_id=request_id
+        entity_id=request_id,
+        link_url=link_url
     )
 
 
-def notify_friend_request_accepted(user_id: int, accepter_id: int, accepter_name: str, request_id: int = None):
+def notify_friend_request_accepted(user_id: int, accepter_id: int, accepter_name: str, request_id: int = None, link_url: str = None):
     """Notify user friend request was accepted"""
     return notification_service.create_notification(
         user_id=user_id,
@@ -1200,11 +1201,12 @@ def notify_friend_request_accepted(user_id: int, accepter_id: int, accepter_name
         variables={"actor_name": accepter_name},
         actor_id=accepter_id,
         entity_type="friend_request",
-        entity_id=request_id
+        entity_id=request_id,
+        link_url=link_url
     )
 
 
-def notify_connection_request(user_id: int, requester_id: int, requester_name: str, request_id: int = None):
+def notify_connection_request(user_id: int, requester_id: int, requester_name: str, request_id: int = None, link_url: str = None):
     """Notify user of connection request"""
     return notification_service.create_notification(
         user_id=user_id,
@@ -1212,7 +1214,8 @@ def notify_connection_request(user_id: int, requester_id: int, requester_name: s
         variables={"actor_name": requester_name},
         actor_id=requester_id,
         entity_type="connection_request",
-        entity_id=request_id
+        entity_id=request_id,
+        link_url=link_url
     )
 
 

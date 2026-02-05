@@ -41,3 +41,13 @@ if ENV == "production":
 # =====================================================
 # MAIN (Configured in Dockerfile to use gunicorn in production)
 # =====================================================
+
+if __name__ == "__main__":
+    socketio.run(
+        app,
+        host="0.0.0.0",
+        port=PORT,
+        debug=DEBUG,
+        use_reloader=False,  # important on Windows sometimes
+    )
+
