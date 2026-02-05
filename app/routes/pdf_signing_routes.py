@@ -13,6 +13,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
 from PIL import Image
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 # Create blueprint
 pdf_bp = Blueprint('pdf', __name__)
@@ -28,6 +29,18 @@ MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(SIGNED_FOLDER, exist_ok=True)
 
+def get_user_upload_folder(user_id):
+    """Get user-specific upload folder"""
+    folder = os.path.join(UPLOAD_FOLDER, str(user_id))
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+def get_user_signed_folder(user_id):
+    """Get user-specific signed documents folder"""
+    folder = os.path.join(SIGNED_FOLDER, str(user_id))
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -41,14 +54,12 @@ def validate_file_size(file, max_size=MAX_FILE_SIZE):
 def process_signature_image(base64_data):
     """Convert base64 signature to PIL Image"""
     try:
-        # Remove data:image/png;base64, prefix if present
         if 'base64,' in base64_data:
             base64_data = base64_data.split('base64,')[1]
         
         image_data = base64.b64decode(base64_data)
         image = Image.open(BytesIO(image_data))
         
-        # Convert to RGBA if not already
         if image.mode != 'RGBA':
             image = image.convert('RGBA')
         
@@ -61,20 +72,16 @@ def create_signature_overlay(signature_image, position, pdf_width, pdf_height):
     """Create a PDF overlay with the signature"""
     packet = BytesIO()
     
-    # Create canvas with page dimensions
     can = canvas.Canvas(packet, pagesize=(pdf_width, pdf_height))
     
-    # Convert position to PDF coordinates (bottom-left origin)
     x = position['x']
     y = pdf_height - position['y'] - position['height']
     width = position['width']
     height = position['height']
     
-    # Draw signature image
     img_reader = ImageReader(signature_image)
     can.drawImage(img_reader, x, y, width, height, mask='auto', preserveAspectRatio=True)
     
-    # Add timestamp (optional)
     can.setFont("Helvetica", 8)
     can.drawString(x, y - 10, f"Signed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
@@ -100,9 +107,12 @@ def health_check():
 
 #! UPLOAD PDF
 @pdf_bp.route('/upload', methods=['POST'])
+@jwt_required()
 def upload_pdf():
     """Upload PDF file"""
     try:
+        user_id = get_jwt_identity()
+        
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
         
@@ -117,21 +127,19 @@ def upload_pdf():
         if not validate_file_size(file):
             return jsonify({'error': f'File size exceeds maximum limit of {MAX_FILE_SIZE / (1024*1024)}MB'}), 400
         
-        # Generate unique filename
+        user_upload_folder = get_user_upload_folder(user_id)
+        
         original_filename = secure_filename(file.filename)
         unique_id = str(uuid.uuid4())
         filename = f"{unique_id}_{original_filename}"
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        filepath = os.path.join(user_upload_folder, filename)
         
-        # Save file
         file.save(filepath)
         
-        # Get PDF info
         with open(filepath, 'rb') as pdf_file:
             pdf_reader = PdfReader(pdf_file)
             num_pages = len(pdf_reader.pages)
             
-            # Get first page dimensions
             first_page = pdf_reader.pages[0]
             width = float(first_page.mediabox.width)
             height = float(first_page.mediabox.height)
@@ -153,12 +161,13 @@ def upload_pdf():
 
 #! SIGN PDF
 @pdf_bp.route('/sign', methods=['POST'])
+@jwt_required()
 def sign_pdf():
     """Sign the PDF with signature"""
     try:
+        user_id = get_jwt_identity()
         data = request.json
         
-        # Validate required fields
         required_fields = ['file_id', 'filename', 'signature', 'position']
         for field in required_fields:
             if field not in data:
@@ -169,34 +178,31 @@ def sign_pdf():
         signature_base64 = data['signature']
         position = data['position']
         
-        # Validate position data
         if not all(k in position for k in ['x', 'y', 'width', 'height', 'page']):
             return jsonify({'error': 'Invalid position data'}), 400
         
-        # Get original PDF path
-        original_path = os.path.join(UPLOAD_FOLDER, filename)
+        user_upload_folder = get_user_upload_folder(user_id)
+        user_signed_folder = get_user_signed_folder(user_id)
+        
+        original_path = os.path.join(user_upload_folder, filename)
         
         if not os.path.exists(original_path):
             return jsonify({'error': 'Original PDF not found'}), 404
         
-        # Process signature image
         signature_img = process_signature_image(signature_base64)
         if signature_img is None:
             return jsonify({'error': 'Invalid signature image'}), 400
         
-        # Read original PDF
         with open(original_path, 'rb') as pdf_file:
             pdf_reader = PdfReader(pdf_file)
             pdf_writer = PdfWriter()
             
-            target_page_num = position['page'] - 1  # Convert to 0-indexed
+            target_page_num = position['page'] - 1
             
-            # Get page dimensions
             target_page = pdf_reader.pages[target_page_num]
             page_width = float(target_page.mediabox.width)
             page_height = float(target_page.mediabox.height)
             
-            # Create signature overlay
             overlay_pdf = create_signature_overlay(
                 signature_img, 
                 position, 
@@ -207,25 +213,20 @@ def sign_pdf():
             overlay_reader = PdfReader(overlay_pdf)
             overlay_page = overlay_reader.pages[0]
             
-            # Process all pages
             for page_num in range(len(pdf_reader.pages)):
                 page = pdf_reader.pages[page_num]
                 
-                # Merge signature on target page
                 if page_num == target_page_num:
                     page.merge_page(overlay_page)
                 
                 pdf_writer.add_page(page)
             
-            # Generate signed filename
             signed_filename = f"signed_{file_id}_{data.get('original_filename', 'document.pdf')}"
-            signed_path = os.path.join(SIGNED_FOLDER, signed_filename)
+            signed_path = os.path.join(user_signed_folder, signed_filename)
             
-            # Write signed PDF
             with open(signed_path, 'wb') as signed_file:
                 pdf_writer.write(signed_file)
             
-            # Get file size
             file_size = os.path.getsize(signed_path)
             
             return jsonify({
@@ -242,10 +243,13 @@ def sign_pdf():
 
 #! DOWNLOAD SIGNED PDF
 @pdf_bp.route('/download/<filename>', methods=['GET'])
+@jwt_required()
 def download_signed_pdf(filename):
     """Download signed PDF"""
     try:
-        filepath = os.path.join(SIGNED_FOLDER, filename)
+        user_id = get_jwt_identity()
+        user_signed_folder = get_user_signed_folder(user_id)
+        filepath = os.path.join(user_signed_folder, filename)
         
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
@@ -263,14 +267,17 @@ def download_signed_pdf(filename):
 
 #! LIST SIGNED DOCUMENTS
 @pdf_bp.route('/documents', methods=['GET'])
+@jwt_required()
 def list_signed_documents():
-    """List all signed documents"""
+    """List all signed documents for the current user"""
     try:
+        user_id = get_jwt_identity()
+        user_signed_folder = get_user_signed_folder(user_id)
         documents = []
         
-        for filename in os.listdir(SIGNED_FOLDER):
+        for filename in os.listdir(user_signed_folder):
             if filename.endswith('.pdf'):
-                filepath = os.path.join(SIGNED_FOLDER, filename)
+                filepath = os.path.join(user_signed_folder, filename)
                 file_stat = os.stat(filepath)
                 
                 documents.append({
@@ -281,7 +288,6 @@ def list_signed_documents():
                     'download_url': f'/api/pdf/download/{filename}'
                 })
         
-        # Sort by date (newest first)
         documents.sort(key=lambda x: x['date'], reverse=True)
         
         return jsonify({
@@ -296,10 +302,13 @@ def list_signed_documents():
 
 #! DELETE DOCUMENT
 @pdf_bp.route('/delete/<filename>', methods=['DELETE'])
+@jwt_required()
 def delete_document(filename):
     """Delete a signed document"""
     try:
-        filepath = os.path.join(SIGNED_FOLDER, filename)
+        user_id = get_jwt_identity()
+        user_signed_folder = get_user_signed_folder(user_id)
+        filepath = os.path.join(user_signed_folder, filename)
         
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
@@ -317,17 +326,17 @@ def delete_document(filename):
 
 #! PREVIEW PDF
 @pdf_bp.route('/preview/<filename>', methods=['GET'])
+@jwt_required()
 def preview_pdf(filename):
     """Get PDF preview (first page as image)"""
     try:
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        user_id = get_jwt_identity()
+        user_upload_folder = get_user_upload_folder(user_id)
+        filepath = os.path.join(user_upload_folder, filename)
         
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
         
-        # For full implementation, you would use pdf2image or similar
-        # to convert the first page to an image
-        # This is a placeholder implementation
         return jsonify({
             'success': True,
             'message': 'Preview endpoint - implement with pdf2image for image conversion',
