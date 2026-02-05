@@ -145,7 +145,7 @@ def grant_default_permissions(user_id):
 
 def get_user_response_data(user):
 
-    return user.to_dict(include_statistics = True, include_recent_activity=True)
+    return user.to_dict(include_statistics=True, include_recent_activity=True)
 
 
 
