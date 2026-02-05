@@ -104,7 +104,7 @@ def get_user_by_username(username):
 # ─────────────────────────────────────────────────────────────
 # GET CONVERSATIONS
 # ─────────────────────────────────────────────────────────────
-@chat_bp.route("/conversations", methods=["GET"])
+@chat_bp.route("/conversations", methods=["GET"], strict_slashes=False)
 @jwt_required()
 def get_conversations():
     try:
@@ -134,6 +134,54 @@ def get_conversations():
     except Exception as e:
         logging.error(f"Error in get_conversations: {str(e)}")
         return error_response(f"Failed to load conversations: {str(e)}", 500)
+
+@chat_bp.route("/conversations", methods=["POST"], strict_slashes=False)
+@jwt_required()
+def create_conversation():
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json() or {}
+
+        # accept either participant_ids or participantIds (frontend sometimes differs)
+        participant_ids = data.get("participant_ids") or data.get("participantIds")
+        if not participant_ids or not isinstance(participant_ids, list):
+            return error_response("Missing required field: participant_ids (must be a list)", 400)
+
+        creator = User.query.get(current_user_id)
+        if not creator:
+            return error_response("Creator not found", 404)
+
+        conversation = ChatConversation(
+            name=data.get("name"),
+            conversation_type=data.get("conversation_type", "group"),  # group chat
+            created_by_id=creator.id,
+            description=data.get("description"),
+            avatar_url=data.get("avatar_url"),
+        )
+
+        db.session.add(conversation)
+        db.session.flush()
+
+        # creator is admin
+        conversation.add_participant(creator, "admin")
+
+        # add other participants
+        participants = User.query.filter(User.id.in_(participant_ids)).all()
+        for user in participants:
+            if user.id != creator.id:
+                conversation.add_participant(user, "member")
+
+        db.session.commit()
+
+        return success_response(
+            {"conversation": conversation.to_dict(for_user=creator)},
+            "Conversation created successfully",
+            201,
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to create conversation: {str(e)}", 500)
 
 
 @chat_bp.route("/conversations/<int:conversation_id>", methods=["GET"])
