@@ -170,6 +170,11 @@ class User(db.Model):
         lazy='dynamic', 
         cascade='all, delete-orphan',
         foreign_keys='IdeaBookmark.user_id')
+    idea_likes = db.relationship('IdeaLike',
+        back_populates='liker',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        foreign_keys='IdeaLike.user_id')
     
     # Tasks & Projects (Three different relationships - all need unique back_populatess)
     owned_tasks = db.relationship('Task', 

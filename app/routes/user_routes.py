@@ -295,10 +295,11 @@ def get_users():
 def get_user(user_id):
     """Get single user by ID"""
     user = User.query.get(user_id)
+    include_stats = request.args.get('include_stats', 'false').lower() == 'true'
     if not user:
         return error_response('User not found', 404)
     
-    return success_response({'user': user.to_dict()})
+    return success_response({'user': user.to_dict(include_statistics=include_stats)}, 'User retrieved successfully')
 
 #! CREATE NEW USER
 @users_bp.route('', methods=['POST'])
