@@ -1,9 +1,3 @@
-"""
-SF Collab Notification Service
-Core service for creating and managing notifications
-Enhanced with email and real-time support
-"""
-
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
 from app.extensions import db
@@ -11,8 +5,6 @@ from app.models.notification import Notification
 from app.models.user import User
 from app.notifications.templates import NOTIFICATION_TEMPLATES, PRIORITY_LEVELS
 import logging
-from app.models.transaction import Transaction
-from app.utils.email_templates.email_templates import transaction_bill_email_template
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +40,7 @@ class NotificationService:
             auto_send: Whether to send via Socket.IO immediately
             send_email: Whether to send email notification
             transaction: Transaction object related to the notification
+            link_url: URL to navigate to when notification is clicked
         Returns:
             Created Notification object or None if failed
         """
@@ -116,6 +109,72 @@ class NotificationService:
             return None
 
     @staticmethod
+    def create_simple_notification(
+        user_id: int,
+        title: str,
+        message: str,
+        notification_type: str = "info",
+        category: str = "system",
+        priority: str = "medium",
+        actor_id: Optional[int] = None,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[int] = None,
+        link_url: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        auto_send: bool = True
+    ) -> Optional[Notification]:
+        """
+        Create a simple notification without a template
+        
+        Args:
+            user_id: ID of the user to receive the notification
+            title: Notification title
+            message: Notification message
+            notification_type: Type (success, info, warning, error)
+            category: Category (account, social, task, etc.)
+            priority: Priority level (low, medium, high, critical)
+            actor_id: ID of the user who triggered this
+            entity_type: Type of related entity
+            entity_id: ID of related entity
+            link_url: URL to navigate to
+            metadata: Additional data
+            auto_send: Whether to send via Socket.IO immediately
+        """
+        try:
+            # Don't notify yourself
+            if actor_id and actor_id == user_id:
+                return None
+            
+            notification = Notification(
+                user_id=user_id,
+                actor_id=actor_id,
+                notification_type=notification_type,
+                category=category,
+                priority=priority,
+                title=title,
+                message=message,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                data=metadata or {},
+                link_url=link_url,
+                is_read=False
+            )
+            
+            db.session.add(notification)
+            db.session.commit()
+            
+            if auto_send:
+                NotificationService.send_realtime_notification(notification)
+            
+            logger.info(f"Created simple notification {notification.id} for user {user_id}")
+            return notification
+            
+        except Exception as e:
+            logger.error(f"Error creating simple notification: {e}")
+            db.session.rollback()
+            return None
+
+    @staticmethod
     def send_realtime_notification(notification: Notification) -> bool:
         """
         Send notification via Socket.IO
@@ -127,14 +186,15 @@ class NotificationService:
             True if sent successfully, False otherwise
         """
         try:
-            from app.socket_events import emit_to_user
+            from app.extensions import socketio
             
-            emit_to_user(
-                user_id=notification.user_id,
-                event='new_notification',
-                data={
+            # Emit to the user's room
+            socketio.emit(
+                'new_notification',
+                {
                     'notification': notification.to_dict()
-                }
+                },
+                room=f'user_{notification.user_id}'
             )
             
             logger.info(f"Sent real-time notification {notification.id} to user {notification.user_id}")
@@ -145,7 +205,7 @@ class NotificationService:
             return False
 
     @staticmethod
-    def send_email_notification(notification: Notification, transaction: Transaction) -> bool:
+    def send_email_notification(notification: Notification, transaction=None) -> bool:
         """
         Send notification via email
         
@@ -164,18 +224,21 @@ class NotificationService:
             if not user or not user.email:
                 return False
             
-            # Check user preferences (TODO: implement preferences)
-            # if not user.notification_preferences.email_enabled:
-            #     return False
-            
             from app.services.email_service import EmailService
             email_service = EmailService()
+            
+            # Build email body
+            email_body = f"""
+            <h2>{notification.title}</h2>
+            <p>{notification.message}</p>
+            <p><a href="{notification.link_url or '#'}">View Details</a></p>
+            """
             
             # Send email
             email_service.send_email(
                 recipient=user.email,
                 subject=notification.title,
-                body=transaction_bill_email_template(transaction)
+                body=email_body
             )
             
             # Update notification
@@ -189,6 +252,108 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Error sending email notification: {e}")
             return False
+
+    @staticmethod
+    def mark_as_read(notification_id: int, user_id: int) -> bool:
+        """
+        Mark a single notification as read
+        
+        Args:
+            notification_id: ID of notification
+            user_id: ID of user (for authorization check)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            notification = Notification.query.filter_by(
+                id=notification_id,
+                user_id=user_id
+            ).first()
+            
+            if not notification:
+                return False
+            
+            notification.is_read = True
+            notification.read_at = datetime.utcnow()
+            db.session.commit()
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error marking notification as read: {e}")
+            db.session.rollback()
+            return False
+
+    @staticmethod
+    def mark_as_unread(notification_id: int, user_id: int) -> bool:
+        """
+        Mark a single notification as unread
+        
+        Args:
+            notification_id: ID of notification
+            user_id: ID of user (for authorization check)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            notification = Notification.query.filter_by(
+                id=notification_id,
+                user_id=user_id
+            ).first()
+            
+            if not notification:
+                return False
+            
+            notification.is_read = False
+            notification.read_at = None
+            db.session.commit()
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error marking notification as unread: {e}")
+            db.session.rollback()
+            return False
+
+    @staticmethod
+    def mark_all_as_read(user_id: int, category: Optional[str] = None) -> int:
+        """
+        Mark all notifications as read for a user
+        
+        Args:
+            user_id: ID of user
+            category: Optional category filter
+            
+        Returns:
+            Number of notifications marked as read
+        """
+        try:
+            query = Notification.query.filter_by(
+                user_id=user_id,
+                is_read=False
+            )
+            
+            if category:
+                query = query.filter_by(category=category)
+            
+            notifications = query.all()
+            count = len(notifications)
+            
+            for notification in notifications:
+                notification.is_read = True
+                notification.read_at = datetime.utcnow()
+            
+            db.session.commit()
+            
+            logger.info(f"Marked {count} notifications as read for user {user_id}")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error marking all notifications as read: {e}")
+            db.session.rollback()
+            return 0
 
     @staticmethod
     def bulk_create_notifications(
@@ -226,76 +391,14 @@ class NotificationService:
                 metadata=metadata,
                 actor_id=actor_id,
                 entity_type=entity_type,
-                entity_id=entity_id
+                entity_id=entity_id,
+                auto_send=True,
+                send_email=False
             )
             if notification:
                 notifications.append(notification)
         
-        logger.info(f"Created {len(notifications)} bulk notifications")
         return notifications
-
-    @staticmethod
-    def mark_as_read(notification_id: int, user_id: int) -> bool:
-        """
-        Mark a notification as read
-        
-        Args:
-            notification_id: ID of notification
-            user_id: ID of user (for authorization check)
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            notification = Notification.query.get(notification_id)
-            
-            if not notification:
-                logger.error(f"Notification {notification_id} not found")
-                return False
-            
-            # Check authorization
-            if notification.user_id != user_id:
-                logger.error(f"User {user_id} not authorized to mark notification {notification_id}")
-                return False
-            
-            notification.mark_as_read()
-            logger.info(f"Marked notification {notification_id} as read")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error marking notification as read: {e}")
-            return False
-
-    @staticmethod
-    def mark_all_as_read(user_id: int) -> int:
-        """
-        Mark all notifications for a user as read
-        
-        Args:
-            user_id: ID of user
-            
-        Returns:
-            Number of notifications marked as read
-        """
-        try:
-            now = datetime.utcnow()
-            count = Notification.query.filter_by(
-                user_id=user_id,
-                is_read=False
-            ).update({
-                'is_read': True,
-                'read_at': now
-            })
-            
-            db.session.commit()
-            
-            logger.info(f"Marked {count} notifications as read for user {user_id}")
-            return count
-            
-        except Exception as e:
-            logger.error(f"Error marking all notifications as read: {e}")
-            db.session.rollback()
-            return 0
 
     @staticmethod
     def delete_notification(notification_id: int, user_id: int) -> bool:
@@ -310,10 +413,13 @@ class NotificationService:
             True if successful, False otherwise
         """
         try:
-            notification = Notification.query.get(notification_id)
+            notification = Notification.query.filter_by(
+                id=notification_id,
+                user_id=user_id
+            ).first()
             
             if not notification:
-                logger.error(f"Notification {notification_id} not found")
+                logger.error(f"Notification {notification_id} not found for user {user_id}")
                 return False
             
             db.session.delete(notification)
@@ -360,22 +466,21 @@ class NotificationService:
                 if 'is_read' in filters:
                     query = query.filter_by(is_read=filters['is_read'])
             
-            # Order by priority then created_at
-            query = query.order_by(
-                Notification.created_at.desc()
-            )
+            # Order by created_at (newest first)
+            query = query.order_by(Notification.created_at.desc())
             
             # Paginate
-            from app.utils.helper import paginate
-            result = paginate(query, page, per_page)
+            total = query.count()
+            pages = (total + per_page - 1) // per_page
+            items = query.offset((page - 1) * per_page).limit(per_page).all()
             
             return {
-                'notifications': [n.to_dict() for n in result['items']],
+                'notifications': [n.to_dict() for n in items],
                 'pagination': {
-                    'page': result['page'],
-                    'per_page': result['per_page'],
-                    'total': result['total'],
-                    'pages': result['pages']
+                    'page': page,
+                    'per_page': per_page,
+                    'total': total,
+                    'pages': pages
                 }
             }
             

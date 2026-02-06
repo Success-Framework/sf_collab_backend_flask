@@ -196,6 +196,7 @@ def create_app(config_name=None):
     with app.app_context():
         try:
             # Try to create the sessions table
+            from app.models.notification import Notification 
             db.create_all()
             print("✓ Sessions table ready")
         except Exception as e:
