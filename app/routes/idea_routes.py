@@ -5,11 +5,12 @@ from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.models.ideaLike import IdeaLike
 from app.models.waitlist import Waitlist
 import datetime
 import json
 from app.utils.upload_to_s3 import upload_file_to_s3
-
+from app.models.notification import Notification
 # Import notification helpers
 from app.notifications.helpers import (
     notify_idea_submitted,
@@ -33,6 +34,7 @@ def get_user_full_name(user_id):
 @jwt_required()
 def get_ideas():
     """Get all ideas with filtering"""
+    current_user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     industry = request.args.get('industry', type=str)
@@ -58,7 +60,7 @@ def get_ideas():
     result = paginate(query, page, per_page)
     
     return success_response({
-        'ideas': [idea.to_dict() for idea in result['items']],
+        'ideas': [idea.to_dict(current_user_id) for idea in result['items']],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],
@@ -69,8 +71,10 @@ def get_ideas():
 
 
 @ideas_bp.route('/<int:idea_id>', methods=['GET'])
+@jwt_required()
 def get_idea(idea_id):
     """Get single idea by ID"""
+    current_user_id = get_jwt_identity()
     idea = Idea.query.get(idea_id)
     if not idea:
         return error_response('Idea not found', 404)
@@ -81,7 +85,7 @@ def get_idea(idea_id):
     include_comments = request.args.get('include_comments', 'false').lower() == 'true'
     
     return success_response({
-        'idea': idea.to_dict(include_comments=include_comments)
+        'idea': idea.to_dict(user_id=current_user_id, include_comments=include_comments)
     })
 
 
@@ -225,9 +229,18 @@ def like_idea(idea_id):
     idea = Idea.query.get(idea_id)
     if not idea:
         return error_response('Idea not found', 404)
-    
+    liked = False
     try:
-        idea.increment_likes()
+        ideas = IdeaLike.query.filter_by(user_id=current_user_id).all()
+        if any(like.idea_id == idea_id for like in ideas):
+            IdeaLike.query.filter_by(user_id=current_user_id, idea_id=idea_id).delete()
+            idea.likes = IdeaLike.query.filter_by(idea_id=idea_id).count()
+            liked = False
+        else:
+            new_like = IdeaLike(user_id=current_user_id, idea_id=idea_id)
+            db.session.add(new_like)
+            idea.likes = IdeaLike.query.filter_by(idea_id=idea_id).count()
+            liked = True
         db.session.commit()
         
         # ════════════════════════════════════════════════════════════
@@ -237,13 +250,23 @@ def like_idea(idea_id):
         if idea.creator_id != current_user_id:
             try:
                 voter_name = get_user_full_name(current_user_id)
-                notify_idea_voted(
-                    user_id=idea.creator_id,
-                    voter_id=current_user_id,
-                    voter_name=voter_name,
-                    idea_title=idea.title,
-                    idea_id=idea.id
-                )
+                if liked:
+                    notify_idea_voted(
+                        user_id=idea.creator_id,
+                        voter_id=current_user_id,
+                        voter_name=voter_name,
+                        idea_title=idea.title,
+                        idea_id=idea.id
+                    )
+                else:
+                    # Remove notification
+                    Notification.query.filter_by(
+                        user_id=idea.creator_id,
+                        actor_id=current_user_id,
+                        verb='liked',
+                        target_id=idea.id
+                    ).delete()
+                    db.session.commit()
             except Exception as e:
                 print(f"⚠️ Idea vote notification failed: {e}")
         

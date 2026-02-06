@@ -58,7 +58,11 @@ class Idea(db.Model):
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='IdeaBookmark.idea_id')
-    
+    idea_likes = db.relationship('IdeaLike',
+        back_populates='liked_idea',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        foreign_keys='IdeaLike.idea_id')
     # HELPER FUNCTIONS
     def increment_views(self):
         """Increment view count"""
@@ -122,7 +126,7 @@ class Idea(db.Model):
         """Save image URL to idea (if applicable)"""
         self.image_url = image_url
         db.session.commit()
-    def to_dict(self, include_comments=False, include_team=True):
+    def to_dict(self, user_id=None, include_comments=False, include_team=True):
         data = {
             'id': self.id,
             'title': self.title,
@@ -135,23 +139,32 @@ class Idea(db.Model):
             'creator': {
                 'id': self.creator_id,
                 'firstName': self.creator_first_name,
-                'lastName': self.creator_last_name
+                'lastName': self.creator_last_name, 
+                'profilePicture': self.idea_creator.profile_picture
             },
             'status': self.status.value,
             'likes': self.likes,
+            'bookmarks': self.idea_bookmarks.count(),
             'views': self.views,
             'commentsCount': self.get_comments_count(),
             'teamSize': self.get_team_size(),
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
-            'imageUrl': self.image_url
+            'imageUrl': self.image_url,
+            
+            # 'ideaLikes': [like.to_dict() for like in self.idea_likes.all()]
         }
-        
+
         if include_team:
             data['teamMembers'] = [{'name': tm.name, 'position': tm.position, 'skills': tm.skills} 
-                                   for tm in self.team_members.all()]
-        
+                         for tm in self.team_members.all()]
+        if user_id:
+            data['hasLiked'] = self.idea_likes.filter_by(user_id=user_id).count() > 0
+            data['hasBookmarked'] = self.idea_bookmarks.filter_by(user_id=user_id).count() > 0
         if include_comments:
             data['comments'] = [comment.to_dict() for comment in self.idea_comments.order_by(IdeaComment.created_at.desc()).all()]
+            data['commentsCount'] = self.idea_comments.count()
+            data['collaborators'] = self.get_team_size()
+            
         
         return data

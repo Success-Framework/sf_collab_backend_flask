@@ -1,14 +1,17 @@
 from flask import Blueprint, request, jsonify
 from app.models.ideaBookmark import IdeaBookmark
+from app.models.idea import Idea
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from datetime import datetime, timedelta
-
+from flask_jwt_extended import jwt_required, get_jwt_identity
 idea_bookmarks_bp = Blueprint('idea_bookmarks', __name__)
 
 @idea_bookmarks_bp.route('', methods=['GET'])
+@jwt_required()
 def get_idea_bookmarks():
     """Get all idea bookmarks with filtering"""
+    current_user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     user_id = request.args.get('user_id', type=int)
@@ -28,7 +31,7 @@ def get_idea_bookmarks():
     result = paginate(query.order_by(IdeaBookmark.created_at.desc()), page, per_page)
     
     return success_response({
-        'bookmarks': [bookmark.to_dict() for bookmark in result['items']],
+        'bookmarks': [bookmark.bookmarked_idea.to_dict(user_id=current_user_id) for bookmark in result['items']],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],
@@ -46,73 +49,59 @@ def get_idea_bookmark(bookmark_id):
     
     return success_response({'bookmark': bookmark.to_dict()})
 
-@idea_bookmarks_bp.route('', methods=['POST'])
-def create_idea_bookmark():
-    """Create new idea bookmark"""
+@idea_bookmarks_bp.route('/toggle', methods=['POST'])
+@jwt_required()
+def toggle_idea_bookmark():
+    """Toggle idea bookmark (create if not exists, delete if exists)"""
     data = request.get_json()
-    
+    current_user_id = get_jwt_identity()
     required_fields = ['user_id', 'idea_id']
     if not all(field in data for field in required_fields):
         return error_response('Missing required fields: user_id, idea_id')
     
-    # Check if bookmark already exists
-    existing = IdeaBookmark.query.filter_by(
-        user_id=data['user_id'],
-        idea_id=data['idea_id']
-    ).first()
-    
-    if existing:
-        return error_response('Bookmark already exists', 409)
-    
     try:
-        # Get idea details
-        from app.models.idea import Idea
-        idea = Idea.query.get(data['idea_id'])
-        if not idea:
-            return error_response('Idea not found', 404)
-        
-        bookmark = IdeaBookmark(
+        idea_bookmark = IdeaBookmark.query.filter_by(
             user_id=data['user_id'],
-            idea_id=data['idea_id'],
-            title=data.get('title', idea.title),
-            content_preview=data.get('content_preview', idea.description[:200] if idea.description else ''),
-            url=data.get('url')
-        )
+            idea_id=data['idea_id']
+        ).first()
         
-        db.session.add(bookmark)
-        db.session.commit()
-        
-        return success_response({
-            'bookmark': bookmark.to_dict()
-        }, 'Idea bookmark created successfully', 201)
+        if idea_bookmark:
+            db.session.delete(idea_bookmark)
+            db.session.commit()
+            return success_response({
+                'isBookmarked': False,
+                'message': 'Idea bookmark removed successfully'
+            })
+        else:
+            idea = Idea.query.get(data['idea_id'])
+            if not idea:
+                return error_response('Idea not found', 404)
+            
+            idea_bookmark = IdeaBookmark(
+                user_id=data['user_id'],
+                idea_id=data['idea_id'],
+                title=data.get('title', idea.title),
+                content_preview=data.get('content_preview', idea.description[:200] if idea.description else ''),
+                url=data.get('url')
+            )
+            
+            db.session.add(idea_bookmark)
+            db.session.commit()
+            
+            return success_response({
+                'isBookmarked': True,
+                'bookmark': idea_bookmark.bookmarked_idea.to_dict(user_id=current_user_id),
+                'message': 'Idea bookmark created successfully'
+            }, 201)
     except Exception as e:
         db.session.rollback()
-        return error_response(f'Failed to create idea bookmark: {str(e)}', 500)
-
-@idea_bookmarks_bp.route('/<int:bookmark_id>', methods=['PUT'])
-def update_idea_bookmark(bookmark_id):
-    """Update idea bookmark"""
-    bookmark = IdeaBookmark.query.get(bookmark_id)
-    if not bookmark:
-        return error_response('Idea bookmark not found', 404)
-    
-    data = request.get_json()
-    
-    try:
-        bookmark.update_content(
-            title=data.get('title'),
-            content_preview=data.get('content_preview'),
-            url=data.get('url')
-        )
-        return success_response({
-            'bookmark': bookmark.to_dict()
-        }, 'Idea bookmark updated successfully')
-    except Exception as e:
-        return error_response(f'Failed to update idea bookmark: {str(e)}', 500)
+        return error_response(f'Failed to toggle idea bookmark: {str(e)}', 500)
 
 @idea_bookmarks_bp.route('/user/<int:user_id>/idea/<int:idea_id>', methods=['GET'])
+@jwt_required()
 def check_idea_bookmark(user_id, idea_id):
     """Check if user has bookmarked an idea"""
+    current_user_id = get_jwt_identity()
     bookmark = IdeaBookmark.query.filter_by(
         user_id=user_id,
         idea_id=idea_id
@@ -120,27 +109,8 @@ def check_idea_bookmark(user_id, idea_id):
     
     return success_response({
         'is_bookmarked': bookmark is not None,
-        'bookmark': bookmark.to_dict() if bookmark else None
+        'bookmark': bookmark.to_dict(user_id=current_user_id) if bookmark else None
     })
-
-@idea_bookmarks_bp.route('/user/<int:user_id>/idea/<int:idea_id>', methods=['DELETE'])
-def remove_idea_bookmark(user_id, idea_id):
-    """Remove idea bookmark by user and idea"""
-    bookmark = IdeaBookmark.query.filter_by(
-        user_id=user_id,
-        idea_id=idea_id
-    ).first()
-    
-    if not bookmark:
-        return error_response('Idea bookmark not found', 404)
-    
-    try:
-        db.session.delete(bookmark)
-        db.session.commit()
-        return success_response(message='Idea bookmark removed successfully')
-    except Exception as e:
-        db.session.rollback()
-        return error_response(f'Failed to remove idea bookmark: {str(e)}', 500)
 
 @idea_bookmarks_bp.route('/<int:bookmark_id>', methods=['DELETE'])
 def delete_idea_bookmark(bookmark_id):

@@ -9,9 +9,9 @@ from app.utils.helper import error_response, success_response, paginate
 
 # Import notification helpers
 from app.notifications.helpers import (
-    notify_new_comment,
     notify_comment_reply,
-    notify_idea_feedback
+    notify_idea_feedback,
+    notify_info
 )
 
 idea_comments_bp = Blueprint('idea_comments', __name__)
@@ -90,12 +90,11 @@ def create_comment():
                 commenter_name = f"{data['author_first_name']} {data['author_last_name']}".strip()
                 
                 # Notify about new comment
-                notify_new_comment(
-                    user_id=idea.creator_id,
-                    commenter_id=data['author_id'],
-                    commenter_name=commenter_name,
+                notify_info(
+                    user_id=idea.creator.id,
+                    message=f"{commenter_name} commented on your idea '{idea.title}'.",
                     entity_type='idea',
-                    entity_id=idea.id
+                    link_url=f"/ideation-details?id={idea.id}"
                 )
                 
                 # Also notify as feedback on the idea
