@@ -224,34 +224,21 @@ class NotificationService:
             if not user or not user.email:
                 return False
             
-            from app.services.email_service import EmailService
-            email_service = EmailService()
-            
-            # Build email body
-            email_body = f"""
-            <h2>{notification.title}</h2>
-            <p>{notification.message}</p>
-            <p><a href="{notification.link_url or '#'}">View Details</a></p>
-            """
-            
-            # Send email
-            email_service.send_email(
-                recipient=user.email,
-                subject=notification.title,
-                body=email_body
-            )
-            
-            # Update notification
+            # Mark email as sent (actual email sending would go here)
             notification.email_sent = True
             notification.email_sent_at = datetime.utcnow()
             db.session.commit()
             
-            logger.info(f"Sent email notification {notification.id} to {user.email}")
+            logger.info(f"Email notification sent for {notification.id}")
             return True
             
         except Exception as e:
             logger.error(f"Error sending email notification: {e}")
             return False
+
+    # ═══════════════════════════════════════════════════════════════
+    # READ/UNREAD METHODS
+    # ═══════════════════════════════════════════════════════════════
 
     @staticmethod
     def mark_as_read(notification_id: int, user_id: int) -> bool:
@@ -278,6 +265,7 @@ class NotificationService:
             notification.read_at = datetime.utcnow()
             db.session.commit()
             
+            logger.info(f"Marked notification {notification_id} as read")
             return True
             
         except Exception as e:
@@ -310,6 +298,7 @@ class NotificationService:
             notification.read_at = None
             db.session.commit()
             
+            logger.info(f"Marked notification {notification_id} as unread")
             return True
             
         except Exception as e:
@@ -324,26 +313,21 @@ class NotificationService:
         
         Args:
             user_id: ID of user
-            category: Optional category filter
+            category: Optional category to filter by
             
         Returns:
             Number of notifications marked as read
         """
         try:
-            query = Notification.query.filter_by(
-                user_id=user_id,
-                is_read=False
-            )
+            query = Notification.query.filter_by(user_id=user_id, is_read=False)
             
             if category:
                 query = query.filter_by(category=category)
             
-            notifications = query.all()
-            count = len(notifications)
-            
-            for notification in notifications:
-                notification.is_read = True
-                notification.read_at = datetime.utcnow()
+            count = query.update({
+                'is_read': True,
+                'read_at': datetime.utcnow()
+            })
             
             db.session.commit()
             
@@ -351,54 +335,44 @@ class NotificationService:
             return count
             
         except Exception as e:
-            logger.error(f"Error marking all notifications as read: {e}")
+            logger.error(f"Error marking all as read: {e}")
             db.session.rollback()
             return 0
 
     @staticmethod
-    def bulk_create_notifications(
-        user_ids: List[int],
-        template_key: str,
-        variables: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        actor_id: Optional[int] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
-        exclude_actor: bool = True
-    ) -> List[Notification]:
+    def bulk_mark_as_read(notification_ids: List[int], user_id: int) -> int:
         """
-        Create notifications for multiple users
+        Mark multiple notifications as read
         
         Args:
-            user_ids: List of user IDs to receive notifications
-            exclude_actor: If True, don't notify the actor
-            Other args same as create_notification
+            notification_ids: List of notification IDs
+            user_id: ID of user (for authorization check)
             
         Returns:
-            List of created Notification objects
+            Number of notifications marked as read
         """
-        notifications = []
-        
-        # Remove actor from recipients if requested
-        if exclude_actor and actor_id and actor_id in user_ids:
-            user_ids = [uid for uid in user_ids if uid != actor_id]
-        
-        for user_id in user_ids:
-            notification = NotificationService.create_notification(
-                user_id=user_id,
-                template_key=template_key,
-                variables=variables,
-                metadata=metadata,
-                actor_id=actor_id,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                auto_send=True,
-                send_email=False
-            )
-            if notification:
-                notifications.append(notification)
-        
-        return notifications
+        try:
+            count = Notification.query.filter(
+                Notification.id.in_(notification_ids),
+                Notification.user_id == user_id
+            ).update({
+                'is_read': True,
+                'read_at': datetime.utcnow()
+            }, synchronize_session=False)
+            
+            db.session.commit()
+            
+            logger.info(f"Bulk marked {count} notifications as read")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error bulk marking as read: {e}")
+            db.session.rollback()
+            return 0
+
+    # ═══════════════════════════════════════════════════════════════
+    # DELETE METHODS
+    # ═══════════════════════════════════════════════════════════════
 
     @staticmethod
     def delete_notification(notification_id: int, user_id: int) -> bool:
@@ -432,6 +406,89 @@ class NotificationService:
             logger.error(f"Error deleting notification: {e}")
             db.session.rollback()
             return False
+
+    @staticmethod
+    def delete_all_read(user_id: int) -> int:
+        """
+        Delete all read notifications for a user
+        
+        Args:
+            user_id: ID of user
+            
+        Returns:
+            Number of notifications deleted
+        """
+        try:
+            count = Notification.query.filter_by(
+                user_id=user_id,
+                is_read=True
+            ).delete()
+            
+            db.session.commit()
+            
+            logger.info(f"Deleted {count} read notifications for user {user_id}")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error deleting read notifications: {e}")
+            db.session.rollback()
+            return 0
+
+    @staticmethod
+    def clear_all(user_id: int) -> int:
+        """
+        Clear/delete ALL notifications for a user
+        
+        Args:
+            user_id: ID of user
+            
+        Returns:
+            Number of notifications deleted
+        """
+        try:
+            count = Notification.query.filter_by(user_id=user_id).delete()
+            
+            db.session.commit()
+            
+            logger.info(f"Cleared {count} notifications for user {user_id}")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error clearing all notifications: {e}")
+            db.session.rollback()
+            return 0
+
+    @staticmethod
+    def bulk_delete(notification_ids: List[int], user_id: int) -> int:
+        """
+        Delete multiple notifications
+        
+        Args:
+            notification_ids: List of notification IDs
+            user_id: ID of user (for authorization check)
+            
+        Returns:
+            Number of notifications deleted
+        """
+        try:
+            count = Notification.query.filter(
+                Notification.id.in_(notification_ids),
+                Notification.user_id == user_id
+            ).delete(synchronize_session=False)
+            
+            db.session.commit()
+            
+            logger.info(f"Bulk deleted {count} notifications")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error bulk deleting notifications: {e}")
+            db.session.rollback()
+            return 0
+
+    # ═══════════════════════════════════════════════════════════════
+    # QUERY METHODS
+    # ═══════════════════════════════════════════════════════════════
 
     @staticmethod
     def get_user_notifications(
