@@ -98,7 +98,7 @@ blueprints = [
 { "blueprint": join_request_routes.join_requests_bp, "url_prefix": '/api/join-requests'},
 { "blueprint": knowledge_bookmark_routes.knowledge_bookmarks_bp, "url_prefix": '/api/knowledge-bookmarks'},
 { "blueprint": knowledge_comment_routes.knowledge_comments_bp, "url_prefix": '/api/knowledge-comments'},
-{ "blueprint": notification_routes.notifications_bp, "url_prefix": '/api/notifications'},
+{ "blueprint": notification_routes.notification_bp, "url_prefix": '/api/notifications'},
 { "blueprint": post_routes.posts_bp, "url_prefix": '/api/posts'},
 { "blueprint": post_comment_routes.post_comments_bp, "url_prefix": '/api/post-comments'},
 { "blueprint": post_like_routes.post_likes_bp, "url_prefix": '/api/post-likes'},
