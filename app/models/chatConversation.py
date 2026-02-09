@@ -88,23 +88,27 @@ class ChatConversation(db.Model):
     def get_last_message_preview(self, for_user=None):
         """Get last message preview with timezone conversion"""
         from app.models.user import User
+        
         last_message = self.messages.order_by(ChatMessage.created_at.desc()).first()
-        # FIXED: Check if last_message exists before accessing its properties
+        
+        # Check if there's a last message
         if not last_message:
             return None
-            
-        user=User.query.get(last_message.sender_id)
-        if last_message:
-            preview = {
-                'content': last_message.get_content_for_user(for_user) if for_user else last_message.prepare_for_sending(),
-                'created_at': last_message.created_at.isoformat(),
-                'sender_name': user.get_full_name() if user else 'Unknown',
-                'display_time': last_message.get_display_time_info(for_user) if for_user else None,
-                'is_deleted': last_message.is_deleted
-            }
-            return preview
-        return None
-    
+        
+        # Get the sender
+        user = User.query.get(last_message.sender_id)
+        
+        # Build preview (even if user not found, show message)
+        preview = {
+            'content': last_message.get_content_for_user(for_user) if for_user else last_message.prepare_for_sending(),
+            'created_at': last_message.created_at.isoformat(),
+            'sender_name': user.get_full_name() if user else 'Unknown',
+            'display_time': last_message.get_display_time_info(for_user) if for_user else None,
+            'is_deleted': last_message.is_deleted
+        }
+        
+        return preview
+        
     def add_message(self, sender, content, message_type='text', metadata_data=None, reply_to_id=None):
         """Add new message to conversation with timezone handling"""
         message = ChatMessage(

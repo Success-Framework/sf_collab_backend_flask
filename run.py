@@ -27,6 +27,7 @@ print("=" * 60)
 # CREATE APP
 # =====================================================
 app = create_app(ENV)
+print("DB URI:", app.config["SQLALCHEMY_DATABASE_URI"])
 # =====================================================
 # PROXY FIX (PRODUCTION ONLY)
 # =====================================================
