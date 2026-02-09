@@ -320,7 +320,8 @@ def notify_idea_voted(user_id: int, voter_id: int, voter_name: str, idea_title: 
         variables={"actor_name": voter_name, "title": idea_title},
         actor_id=voter_id,
         entity_type="idea",
-        entity_id=idea_id
+        entity_id=idea_id,
+        link_url=f"/ideation-details?id={idea_id}"
     )
 
 
