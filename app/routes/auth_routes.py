@@ -172,7 +172,9 @@ def register():
             email=data['email'].lower(),
             password=generate_password_hash(data['password']),
             role=data.get('role', 'member'),
-            status='active'
+            status='active',
+            founder_plan_id="crowdfunding-founder-explorer", # Temporary default plan for new users
+            builder_plan_id="crowdfunding-builder-supporter" # Temporary default plan for new users
         )
         
         db.session.add(user)
@@ -606,7 +608,9 @@ def google_callback():
                 is_email_verified=True,
                 status='active',
                 role='member',
-                profile_picture=user_info.get('picture')
+                profile_picture=user_info.get('picture'),
+                founder_plan_id="crowdfunding-founder-explorer", # Temporary default plan for OAuth users
+                builder_plan_id="crowdfunding-builder-supporter" # Temporary default plan for OAuth users
             )
             db.session.add(user)
             db.session.commit()
@@ -742,7 +746,9 @@ def github_callback():
                 is_email_verified=('@github.oauth' not in primary_email),
                 status='active',
                 role='member',
-                profile_picture=user_info.get('avatar_url')
+                profile_picture=user_info.get('avatar_url'),
+                founder_plan_id="crowdfunding-founder-explorer", # Temporary default plan for OAuth users
+                builder_plan_id="crowdfunding-builder-supporter" # Temporary default plan for OAuth users
             )
             db.session.add(user)
             db.session.commit()

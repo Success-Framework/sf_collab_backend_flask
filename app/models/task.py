@@ -25,7 +25,7 @@ class Task(db.Model):
     
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
+    urgent = db.Column(db.Boolean, default=False)
     is_on_time = db.Column(db.Boolean, default=True)
     progress_percentage = db.Column(db.Integer, default=0)
     
@@ -149,6 +149,7 @@ class Task(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
             'visible_by': self.visible_by,
+            'urgent': self.urgent,
             'assigned_user': {
                 'id': self.task_assignee.id,
                 'firstName': self.task_assignee.first_name,

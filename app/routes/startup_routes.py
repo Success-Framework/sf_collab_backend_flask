@@ -12,6 +12,7 @@ from app.models.userRole import UserRole
 from app.notifications.helpers import notify_access_request_pending
 from app.utils.plans_utils import can_create_project, can_add_collaborator
 from app.models.startUpMember import StartupMember
+from app.models.waitlist import Waitlist
 import os 
 from io import BytesIO
 import json

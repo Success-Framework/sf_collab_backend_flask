@@ -106,11 +106,13 @@ def health_check():
         return jsonify({'error': str(e)}), 500
 
 #! UPLOAD PDF
-@pdf_bp.route('/upload', methods=['POST'])
+@pdf_bp.route('/upload', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def upload_pdf():
     """Upload PDF file"""
     try:
+        if request.method == 'OPTIONS':
+            return '', 204
         user_id = get_jwt_identity()
         
         if 'file' not in request.files:

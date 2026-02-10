@@ -20,7 +20,8 @@ class User(db.Model):
     xp_points = db.Column(db.Integer, default=0)
     streak_days = db.Column(db.Integer, default=0)
     last_activity_date = db.Column(db.Date)
-    plan_id = db.Column(db.String(255), nullable=True) # Subscription plan
+    builder_plan_id = db.Column(db.String(255), nullable=True) # Subscription plan
+    founder_plan_id = db.Column(db.String(255), nullable=True) # Subscription plan
     credits = db.Column(db.Integer, default=0)  # For tracking user credits
     last_login_ip = db.Column(db.String(45), nullable=True)  # IPv4/IPv6
 
