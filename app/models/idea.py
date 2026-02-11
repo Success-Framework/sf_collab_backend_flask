@@ -3,6 +3,7 @@ from app.extensions import db
 from sqlalchemy import Enum, JSON
 from .Enums import ResourceStatus, Privacy
 from .ideaComment import IdeaComment
+from app.models.teamMember import TeamMember
 
 class Idea(db.Model):
     __tablename__ = 'ideas'
@@ -82,7 +83,6 @@ class Idea(db.Model):
     
     def add_team_member(self, name, position, skills=None):
         """Add team member to idea"""
-        from models.teamMember import TeamMember
         member = TeamMember(
             idea_id=self.id,
             name=name,
