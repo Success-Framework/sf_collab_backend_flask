@@ -222,6 +222,7 @@ class Waitlist(db.Model):
             self.contribution_points += points
         else:
             raise ValueError("Invalid point category")
+        self.last_activity_at = datetime.utcnow()
 
         db.session.commit()
     @staticmethod

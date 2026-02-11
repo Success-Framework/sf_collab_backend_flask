@@ -199,6 +199,7 @@ def create_task():
         assigned_to = data.get('assigned_to')
         if assigned_to in ("", None):
             assigned_to = None
+        print("Creating task with data:", data)
         task = Task(
             user_id=user_id,
             startup_id=startup_id,
@@ -212,7 +213,8 @@ def create_task():
             tags= data.get('tags', []),
             labels= data.get('labels', []),
             estimated_hours= data.get('estimated_hours', 0),
-            created_by= data.get('created_by', current_user_id)
+            created_by= data.get('created_by', current_user_id),
+            urgent= data.get('urgent', False)
         )
         
         db.session.add(task)
@@ -337,6 +339,10 @@ def update_task(task_id):
             task.assigned_to = data['assigned_to']
         if 'visible_by' in data:
             task.visible_by = data['visible_by']
+        if 'urgent' in data:
+            task.urgent = data['urgent']
+        if 'tags' in data:
+            task.tags = data['tags']
         task.updated_at = datetime.utcnow()
         db.session.commit()
         

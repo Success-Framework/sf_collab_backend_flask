@@ -547,8 +547,9 @@ def get_plan_id():
     if not user:
         return error_response('User not found', 404)
     
-    current_plan = user.plan_id
-    if not current_plan:
-        return success_response({'plan_id': None}, 'No active plan found')
+    current_founder_plan = user.founder_plan_id
+    current_builder_plan = user.builder_plan_id
+    if not current_founder_plan:
+        return success_response({'founder_plan': None, 'builder_plan': None}, 'No active plan found')
     
-    return success_response({'plan_id': current_plan}, 'Current plan retrieved successfully')
+    return success_response({'founder_plan': current_founder_plan, 'builder_plan': current_builder_plan}, 'Current plan retrieved successfully')
