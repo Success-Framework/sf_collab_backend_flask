@@ -44,8 +44,19 @@ def create_app(config_name=None):
 
     
     # JWT Configuration
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY") or app.config.get("SECRET_KEY")
+    # JWT Cookie Configuration
+    app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
+    app.config["JWT_COOKIE_SECURE"] = True
+    app.config["JWT_COOKIE_SAMESITE"] = "None"
+    app.config["JWT_COOKIE_CSRF_PROTECT"] = True
+    app.config["JWT_ACCESS_COOKIE_PATH"] = "/"
+    app.config["JWT_REFRESH_COOKIE_PATH"] = "/api/auth/refresh"
+    app.config["JWT_COOKIE_DOMAIN"] = ".sfcollab.com"
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=15)
+    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=7)
+
+
 
     
     # Session configuration
@@ -108,7 +119,8 @@ def create_app(config_name=None):
         allow_headers=[
             "Content-Type",
             "Authorization",
-            "X-Requested-With"
+            "X-Requested-With",
+            "X-CSRF-TOKEN",
         ],
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     )
