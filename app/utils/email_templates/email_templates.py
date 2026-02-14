@@ -164,7 +164,7 @@ def thank_email_template(data: DataType, see_email_template: bool = False) -> st
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Thank You for Joining {brand_name}!</h1>
   <p>Hello <strong>{data['user'].get('name', 'startup enthusiast')}</strong>,</p>
@@ -191,7 +191,7 @@ def verification_code_email_template(data: DataType, see_email_template: bool = 
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Verify Your Email</h1>
   <p>Hello <strong>{data['user'].get('name', 'user')}</strong>,</p>
@@ -215,7 +215,7 @@ def password_reset_email_template(data: DataType, see_email_template: bool = Fal
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@meridian" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@meridian" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Password Reset Request</h1>
   <p>Hello <strong>{data['user'].get('name', 'user')}</strong>,</p>
@@ -240,7 +240,7 @@ def welcome_email_template(data: DataType, see_email_template: bool = False) -> 
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Welcome to {brand_name}!</h1>
   <p>Hello <strong>{data.get('name', 'user')}</strong>,</p>
@@ -267,7 +267,7 @@ def contact_form_email_template(data: DataType, see_email_template: bool = False
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>New Contact Form Submission</h1>
   <p>You have received a new message from the contact form on your website.</p>
@@ -307,7 +307,7 @@ def transaction_bill_email_template(transaction, see_email_template: bool = Fals
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}' style="height: 50px;"/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}' style="height: 50px;"/>
   </div>
   <h1>{title}</h1>
   <p>Hello <strong>{f'{transaction.user.first_name} {transaction.user.last_name}' if transaction.user else 'Supporter'}</strong>,</p>

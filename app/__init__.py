@@ -11,7 +11,6 @@ import warnings
 import hmac
 import hashlib
 from app.extensions import socketio
-import app.socket_events
 from app.blueprints import blueprints
 import time
 import json
