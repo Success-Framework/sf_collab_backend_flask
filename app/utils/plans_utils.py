@@ -94,7 +94,7 @@ PLAN_LIMITS = {
 
 def get_user_plan_type(user: User) -> PlanType:
   """Get the plan type for a user based on plan_id"""
-  if not user.plan_id:
+  if not user.founder_plan_id and not user.builder_plan_id:
     return PlanType.FOUNDER_FREE
   
   plan_mapping = {
@@ -108,7 +108,13 @@ def get_user_plan_type(user: User) -> PlanType:
     "builder-plus": PlanType.BUILDER_PLUS,
     "builder-elite": PlanType.BUILDER_ELITE,
   }
-  return plan_mapping.get(user.plan_id.lower(), PlanType.FOUNDER_FREE)
+  if user.founder_plan_id:
+    plan_id = user.founder_plan_id
+  elif user.builder_plan_id:
+    plan_id = user.builder_plan_id
+  else:
+    plan_id = "founder-free"
+  return plan_mapping.get(plan_id.lower(), PlanType.FOUNDER_FREE)
 
 def get_plan_limits(user: User) -> dict:
   """Get plan limits for a user"""

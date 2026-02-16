@@ -70,7 +70,7 @@ def get_plan_by_id(plan_id):
                         return jsonify(result)
 
         # 2️⃣ Check ai-tools -> tools
-        if 'tools' in category:
+        if 'ai-tools' in category:
             for tool in category['tools']:
                 if tool.get('id') == plan_id:
                     result = tool.copy()
@@ -599,3 +599,12 @@ def get_credits():
     if not user:
         return error_response("User not found", 404)
     return success_response({"credits": user.credits})
+
+@payment_bp.route("/ai-tools", methods=["GET"])
+@jwt_required()
+def get_ai_tools():
+    ai_plans = [plan for plan in PLANS if plan['category'] == 'ai-tools']
+    if not ai_plans:
+        return success_response({"tools": []})
+    tools = ai_plans[0].get('tools', [])
+    return success_response({"tools": tools})

@@ -4,14 +4,15 @@ Updated with notification triggers for account events
 """
 
 from flask import Blueprint, request, jsonify, redirect, url_for
-from app.extensions import oauth, db
+from app.extensions import oauth, db, limiter
 from flask import session
 from flask_jwt_extended import (
     create_access_token, 
     create_refresh_token,
     jwt_required, 
     get_jwt_identity,
-    get_jwt
+    get_jwt,
+    decode_token
 )
 import traceback
 from app.config import Config
@@ -238,6 +239,7 @@ def register():
 
 # ========================== LOGIN ==========================
 @bp.route('/login', methods=['POST'])
+@limiter.limit("10 per minute")  # Rate limit to prevent brute force
 def login():
     """Login user"""
     try:
@@ -329,6 +331,7 @@ def login():
 # ========================== VERIFY EMAIL ==========================
 @bp.route('/send-verification-code', methods=['POST'])
 @jwt_required()
+@limiter.limit("10 per minute")
 def send_verification_code():
     """Send email verification code"""
     import random
@@ -346,31 +349,36 @@ def send_verification_code():
         verification_token = create_access_token(
             identity=str(user.id),
             expires_delta=timedelta(minutes=10),
+            fresh=True,
             additional_claims={'code': code}
         )
-        
+        print(f"DEBUG: Generated verification code: {code} for user_id: {user.id}")
         email_service.send_email_verification_code(user, code)
-        
+        decoded_verification = decode_token(verification_token)
+        print("DEBUG: Verification token claims:", decoded_verification)     
         return success_response({
             'message': 'Verification code sent to email',
             'verification_token': verification_token
         })
         
     except Exception as e:
+        print(f"DEBUG: Exception in send_verification_code: {str(e)}")
         return error_response(str(e), 500)
 
 
 @bp.route('/verify-code', methods=['POST'])
-@jwt_required()
+@limiter.limit("10 per minute")
 def verify_code():
-    """Verify email code"""
-    user_id = get_jwt_identity()
-    claims = get_jwt()
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    claims = decode_token(token)
+
+    parsed_token = claims.get("code")
+    user_id = claims.get("sub")
     data = request.get_json()
-    
+    print(f"DEBUG: Verifying code for user_id: {user_id}, Claims: {claims}, Data: {data}")
     parsed_token = claims.get("code")
     submitted_code = data.get("code")
-
+    print(f"DEBUG: Parsed token code: {parsed_token}, Submitted code: {submitted_code}")
     if str(parsed_token) != str(submitted_code):
         return error_response("Invalid code", 400)
     
@@ -391,6 +399,7 @@ def verify_code():
 
 # ========================== PASSWORD RESET ==========================
 @bp.route('/forgot-password', methods=['POST'])
+@limiter.limit("5 per hour")  # Limit to prevent abuse
 def forgot_password():
     """Request password reset"""
     try:
@@ -421,6 +430,7 @@ def forgot_password():
 
 
 @bp.route('/reset-password', methods=['POST'])
+@limiter.limit("5 per hour")  # Limit to prevent abuse
 def reset_password():
     """Reset password with token"""
     try:
@@ -442,6 +452,7 @@ def reset_password():
 
 @bp.route('/change-password', methods=['POST'])
 @jwt_required()
+@limiter.limit("10 per hour")
 def change_password():
     """Change password for logged in user"""
     try:
@@ -486,6 +497,7 @@ def change_password():
 # ========================== REFRESH TOKEN ==========================
 @bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
+@limiter.limit("10 per hour")
 def refresh():
     """Refresh access token"""
     try:
@@ -510,6 +522,7 @@ def refresh():
 
 # ========================== LOGOUT ==========================
 @bp.route('/logout', methods=['POST'])
+@limiter.limit("10 per hour")
 @jwt_required()
 def logout():
     """Logout user"""
@@ -521,11 +534,11 @@ def logout():
         db.session.commit()
         
         # Log activity
-        Activity.log(
-            action="user_logout",
-            user_id=int(user_id),
-            details=f"User logged out at {utc_now_str()}"
-        )
+        # Activity.log(
+        #     action="user_logout",
+        #     user_id=int(user_id),
+        #     details=f"User logged out at {utc_now_str()}"
+        # )
         
         return success_response({
             'message': 'Logged out successfully'
@@ -569,6 +582,7 @@ def get_current_user():
 
 # ========================== GOOGLE OAUTH ==========================
 @bp.route('/google', methods=['GET'])
+@limiter.limit("10 per hour")
 def google_login():
     """Initiate Google OAuth"""
     session.pop('google_token', None)
@@ -579,6 +593,7 @@ def google_login():
 
 
 @bp.route('/google/callback', methods=['GET'])
+@limiter.limit("10 per hour")
 def google_callback():
     """Handle Google OAuth callback"""
     try:
@@ -656,11 +671,11 @@ def google_callback():
                 pass
         
         # Log activity
-        Activity.log(
-            action="user_registered" if is_new_user else "user_login",
-            user_id=user.id,
-            details=f"OAuth login via Google at {utc_now_str()}"
-        )
+        # Activity.log(
+        #     action="user_registered" if is_new_user else "user_login",
+        #     user_id=user.id,
+        #     details=f"OAuth login via Google at {utc_now_str()}"
+        # )
         
         # Generate tokens
         access_token, refresh_token = generate_tokens(user.id)
@@ -690,6 +705,7 @@ def google_callback():
 
 # ========================== GITHUB OAUTH ==========================
 @bp.route('/github', methods=['GET'])
+@limiter.limit("10 per hour")
 def github_login():
     """Initiate GitHub OAuth"""
     redirect_uri = Config.GITHUB_REDIRECT_URI
@@ -697,6 +713,7 @@ def github_login():
 
 
 @bp.route('/github/callback', methods=['GET'])
+@limiter.limit("10 per hour")
 def github_callback():
     """Handle GitHub OAuth callback"""
     try:
@@ -794,11 +811,11 @@ def github_callback():
                 pass
         
         # Log activity
-        Activity.log(
-            action="user_registered" if is_new_user else "user_login",
-            user_id=user.id,
-            details=f"OAuth login via GitHub at {utc_now_str()}"
-        )
+        # Activity.log(
+        #     action="user_registered" if is_new_user else "user_login",
+        #     user_id=user.id,
+        #     details=f"OAuth login via GitHub at {utc_now_str()}"
+        # )
         
         # Generate tokens
         access_token, refresh_token = generate_tokens(user.id)
