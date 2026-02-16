@@ -11,7 +11,7 @@ from app.utils.helper import success_response, error_response
 import logging
 import json
 from datetime import datetime
-
+from app.models.notification import Notification
 logger = logging.getLogger(__name__)
 
 notification_bp = Blueprint('notifications', __name__)
@@ -546,3 +546,86 @@ def update_preferences():
     except Exception as e:
         logger.error(f"Error updating preferences: {e}", exc_info=True)
         return error_response(f"Failed to update preferences: {str(e)}", 500)
+    
+@notification_bp.route('/broadcasts', methods=['GET'])
+def get_announcements():
+    """Get global announcements (for dashboard)"""
+    try:
+        announcements = notification_service.get_announcements()
+        return success_response({'announcements': announcements})
+    except Exception as e:
+        logger.error(f"Error getting announcements: {e}", exc_info=True)
+        return error_response(f"Failed to get announcements: {str(e)}", 500)
+
+@notification_bp.route('/broadcasts', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def create_announcement():
+    """Create a global announcement (admin only)"""
+    try:
+        if request.method == "OPTIONS":
+            return '', 200
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+
+        required_fields = ['title', 'message']
+        if not all(field in data for field in required_fields):
+            return error_response("Missing required fields: title, message", 400)
+
+        announcement = notification_service.create_announcement(
+            title=data['title'],
+            user_id=user_id,
+            message=data['message'],
+            priority=data.get('priority', 'medium'),
+            actor_id=user_id,
+            link_url=data.get('link_url'),
+            metadata=data.get('data', {})
+        )
+        
+        if announcement:
+            return success_response({"announcement": announcement.to_dict()}, "Announcement created successfully", 201)
+        return error_response("Failed to create announcement", 500)
+
+    except Exception as e:
+        logger.error(f"Error creating announcement: {e}", exc_info=True)
+        return error_response(f"Failed to create announcement: {str(e)}", 500)
+    
+@notification_bp.route('/bulletins', methods=['GET'])
+def get_newsletter():
+    """Get latest newsletter content"""
+    try:
+        newsletter = notification_service.get_newsletter()
+        return success_response({'newsletter': newsletter})
+    except Exception as e:
+        logger.error(f"Error getting newsletter: {e}", exc_info=True)
+        return error_response(f"Failed to get newsletter: {str(e)}", 500)
+
+@notification_bp.route('/bulletins', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def create_newsletter():
+    """Create a new newsletter (admin only)"""
+    try:
+        if request.method == "OPTIONS":
+            return '', 200
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+
+        required_fields = ['title', 'content']
+        if not all(field in data for field in required_fields):
+            return error_response("Missing required fields: title, content", 400)
+
+        newsletter = notification_service.create_newsletter(
+            title=data['title'],
+            content=data['content'],
+            user_id=user_id,
+            actor_id=user_id,
+            link_url=data.get('link_url'),
+            metadata=data.get('data', {})
+        )
+        
+        if newsletter:
+            return success_response({"newsletter": newsletter.to_dict()}, "Newsletter created successfully", 201)
+        return error_response("Failed to create newsletter", 500)
+
+    except Exception as e:
+        logger.error(f"Error creating newsletter: {e}", exc_info=True)
+        return error_response(f"Failed to create newsletter: {str(e)}", 500)
