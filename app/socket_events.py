@@ -311,3 +311,15 @@ def emit_user_status_update(user_id, status):
         }, room=f"user_{user_id}")
     except Exception as e:
         logging.error(f"Error emitting status: {e}")
+        
+def emit_user_left_conversation(conversation_id, user_id, user_name):
+    """Emit when a user leaves a conversation."""
+    socketio.emit(
+        "user_left_conversation",
+        {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "user_name": user_name,
+        },
+        room=f"conversation_{conversation_id}",
+    )

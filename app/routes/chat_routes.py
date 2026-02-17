@@ -109,17 +109,18 @@ def get_user_by_username(username):
 def get_conversations():
     try:
         current_user_id = get_jwt_identity()
+        data = request.get_json(silent=True) or {}
+        delete_type = data.get('delete_type', 'everyone')
 
         user = User.query.get(current_user_id)
         if not user:
             return error_response("User not found", 404)
 
-        conversations = (
+        query = (
             ChatConversation.query.join(conversation_participants)
             .filter(conversation_participants.c.user_id == current_user_id)
-            .order_by(ChatConversation.updated_at.desc())
-            .all()
         )
+        conversations = query.order_by(ChatConversation.updated_at.desc()).all()
 
         conversations_data = []
         for conv in conversations:
@@ -828,7 +829,7 @@ def react_to_message(conversation_id, message_id):
 
 
 # ─────────────────────────────────────────────────────────────
-# DELETE MESSAGE
+# DELETE MESSAGE (with delete for everyone / delete for me)
 # ─────────────────────────────────────────────────────────────
 @chat_bp.route("/conversations/<int:conversation_id>/messages/<int:message_id>", methods=["DELETE"])
 @jwt_required()
@@ -836,6 +837,10 @@ def delete_message(conversation_id, message_id):
     current_user_id = get_jwt_identity()
 
     try:
+        # Get delete_type from request body
+        data = request.get_json(silent=True) or {}
+        delete_type = data.get('delete_type', 'everyone')  # 'everyone' or 'me'
+        
         message = ChatMessage.query.get(message_id)
         conversation = ChatConversation.query.get(conversation_id)
 
@@ -845,11 +850,28 @@ def delete_message(conversation_id, message_id):
         if message.conversation_id != conversation_id:
             return error_response("Message does not belong to this conversation", 400)
 
-        if int(message.sender_id) != int(current_user_id) and int(conversation.created_by_id) != int(current_user_id):
+        # Only message sender can delete
+        if int(message.sender_id) != int(current_user_id):
+            return error_response("You can only delete your own messages", 403)
+
+        # For "delete for me" - just return success, frontend handles hiding locally
+        if delete_type == 'me':
+            return success_response({
+                "message_id": message_id, 
+                "delete_type": "me"
+            }, "Message hidden for you")
+
+        # For "delete for everyone" - check 1-hour limit
+        from datetime import timedelta
+        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        
+        if message.created_at < one_hour_ago:
             return error_response(
-                "You can only delete your own messages or you must be the conversation creator", 403
+                "Messages can only be deleted for everyone within 1 hour of sending. You can still delete for yourself.", 
+                400
             )
 
+        # Delete attached file if exists
         if message.file_url:
             try:
                 file_path = os.path.join(UPLOAD_FOLDER, os.path.basename(message.file_url))
@@ -858,12 +880,19 @@ def delete_message(conversation_id, message_id):
             except Exception as e:
                 logging.error(f"Failed to delete file: {str(e)}")
 
-        message.delete_message()
+        # Mark message as deleted (soft delete)
+        message.is_deleted = True
+        message.original_content = "This message was deleted"
+        db.session.commit()
 
+        # Emit socket event for real-time update
         if SOCKET_ENABLED:
             emit_message_deleted(conversation_id, message_id)
 
-        return success_response({"message_id": message_id}, "Message deleted successfully")
+        return success_response({
+            "message_id": message_id,
+            "delete_type": "everyone"
+        }, "Message deleted successfully")
 
     except Exception as e:
         db.session.rollback()
@@ -1094,10 +1123,166 @@ def remove_participant(conversation_id, user_id):
         db.session.rollback()
         logging.error(f"Failed to remove participant: {str(e)}")
         return error_response(f"Failed to remove participant: {str(e)}", 500)
+    
+# ─────────────────────────────────────────────────────────────
+# LEAVE GROUP CHAT (user removes themselves)
+# ─────────────────────────────────────────────────────────────
+@chat_bp.route("/conversations/<int:conversation_id>/leave", methods=["POST"])
+@jwt_required()
+def leave_conversation(conversation_id):
+    """Allow a user to leave a group conversation."""
+    try:
+        current_user_id = get_jwt_identity()
+
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation:
+            return error_response("Conversation not found", 404)
+
+        # Can't leave direct conversations
+        if conversation.conversation_type == "direct":
+            return error_response("Cannot leave a direct conversation. Use delete instead.", 400)
+
+        # Can't leave general chat
+        if conversation.conversation_type == "general":
+            return error_response("Cannot leave the general chat", 400)
+
+        if not conversation.is_user_participant(current_user_id):
+            return error_response("You are not a participant in this conversation", 400)
+
+        user = User.query.get(current_user_id)
+        if not user:
+            return error_response("User not found", 404)
+
+        # If user is the creator and there are other participants, transfer ownership
+        if conversation.created_by_id == current_user_id:
+            other_participants = [p for p in conversation.participants if p.id != current_user_id]
+            if other_participants:
+                # Transfer ownership to the first other participant
+                new_owner = other_participants[0]
+                conversation.created_by_id = new_owner.id
+                
+                # Update their role to admin
+                stmt = (
+                    conversation_participants.update()
+                    .where(
+                        (conversation_participants.c.conversation_id == conversation_id)
+                        & (conversation_participants.c.user_id == new_owner.id)
+                    )
+                    .values(role="admin")
+                )
+                db.session.execute(stmt)
+
+        # Remove the user from participants (simple delete, no left_at column needed)
+        stmt = conversation_participants.delete().where(
+            (conversation_participants.c.conversation_id == conversation_id)
+            & (conversation_participants.c.user_id == current_user_id)
+        )
+        db.session.execute(stmt)
+
+        # Add system message about leaving
+        notif_content = f"👋 {user.get_full_name()} left the conversation"
+        notif_message = ChatMessage(
+            conversation_id=conversation_id,
+            sender_id=current_user_id,
+            original_content=notif_content,
+            message_type="system",
+            metadata_data={"action": "participant_left", "user_id": current_user_id},
+            sender_timezone="UTC",
+        )
+        db.session.add(notif_message)
+        conversation.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        # Emit socket events
+        if SOCKET_ENABLED:
+            emit_new_message(conversation_id, notif_message.to_dict())
+            emit_to_user(current_user_id, "left_conversation", {"conversation_id": conversation_id})
+
+        return success_response(
+            {"message": "You have left the conversation"},
+            "Left conversation successfully"
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Failed to leave conversation: {str(e)}")
+        return error_response(f"Failed to leave conversation: {str(e)}", 500)
 
 
 # ─────────────────────────────────────────────────────────────
-# DELETE CONVERSATION (soft delete via left_at for current user)
+# ARCHIVE/HIDE CONVERSATION (for current user only)
+# ─────────────────────────────────────────────────────────────
+@chat_bp.route("/conversations/<int:conversation_id>/archive", methods=["POST"])
+@jwt_required()
+def archive_conversation(conversation_id):
+    """Archive/hide a conversation for the current user only."""
+    try:
+        current_user_id = get_jwt_identity()
+
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation:
+            return error_response("Conversation not found", 404)
+
+        if not conversation.is_user_participant(current_user_id):
+            return error_response("Access denied", 403)
+
+        # Update the participant record to mark as archived
+        stmt = (
+            conversation_participants.update()
+            .where(
+                (conversation_participants.c.conversation_id == conversation_id)
+                & (conversation_participants.c.user_id == current_user_id)
+            )
+            .values(is_archived=True, archived_at=datetime.utcnow())
+        )
+        db.session.execute(stmt)
+        db.session.commit()
+
+        return success_response(
+            {"message": "Conversation archived"},
+            "Conversation archived successfully"
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Failed to archive conversation: {str(e)}")
+        return error_response(f"Failed to archive conversation: {str(e)}", 500)
+
+
+@chat_bp.route("/conversations/<int:conversation_id>/unarchive", methods=["POST"])
+@jwt_required()
+def unarchive_conversation(conversation_id):
+    """Unarchive a conversation for the current user."""
+    try:
+        current_user_id = get_jwt_identity()
+
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation:
+            return error_response("Conversation not found", 404)
+
+        stmt = (
+            conversation_participants.update()
+            .where(
+                (conversation_participants.c.conversation_id == conversation_id)
+                & (conversation_participants.c.user_id == current_user_id)
+            )
+            .values(is_archived=False, archived_at=None)
+        )
+        db.session.execute(stmt)
+        db.session.commit()
+
+        return success_response(
+            {"message": "Conversation unarchived"},
+            "Conversation unarchived successfully"
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Failed to unarchive conversation: {str(e)}")
+        return error_response(f"Failed to unarchive conversation: {str(e)}", 500)
+
+# ─────────────────────────────────────────────────────────────
+# DELETE CONVERSATION (removes user from conversation)
 # ─────────────────────────────────────────────────────────────
 @chat_bp.route("/conversations/<int:conversation_id>", methods=["DELETE"])
 @jwt_required()
@@ -1109,40 +1294,28 @@ def delete_conversation(conversation_id):
         if not conversation:
             return error_response("Conversation not found", 404)
 
-        if conversation.created_by_id != current_user_id:
-            return error_response("Only conversation creator can delete conversation", 403)
+        # Check if user is a participant
+        if not conversation.is_user_participant(current_user_id):
+            return error_response("You are not a participant in this conversation", 403)
 
+        # Can't delete general chat
         if conversation.conversation_type == "general":
             return error_response("Cannot delete the general chat", 403)
 
-        if conversation.avatar_url:
-            try:
-                file_path = os.path.join(AVATAR_UPLOAD_FOLDER, os.path.basename(conversation.avatar_url))
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except Exception as e:
-                logging.error(f"Failed to delete avatar: {str(e)}")
-
-        participant_ids = [p.id for p in conversation.participants]
-
-        stmt = (
-            conversation_participants.update()
-            .where(
-                (conversation_participants.c.conversation_id == conversation_id)
-                & (conversation_participants.c.user_id == current_user_id)
-            )
-            .values(left_at=datetime.utcnow())
+        # For direct conversations, just remove the user from participants
+        # The conversation stays for the other person
+        stmt = conversation_participants.delete().where(
+            (conversation_participants.c.conversation_id == conversation_id)
+            & (conversation_participants.c.user_id == current_user_id)
         )
-
         db.session.execute(stmt)
-        conversation.updated_at = datetime.utcnow()
         db.session.commit()
 
+        # Emit socket event
         if SOCKET_ENABLED:
-            for uid in participant_ids:
-                emit_to_user(uid, "conversation_deleted", {"conversation_id": conversation_id})
+            emit_to_user(current_user_id, "conversation_deleted", {"conversation_id": conversation_id})
 
-        return success_response({"message": "Conversation deleted successfully"})
+        return success_response({"message": "Conversation removed from your list"})
 
     except Exception as e:
         db.session.rollback()
