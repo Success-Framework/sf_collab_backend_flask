@@ -180,6 +180,7 @@ def create_app(config_name=None):
         
     # Initialize extensions
     db.init_app(app)
+    from app import models # Ensure models are loaded for migration
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)

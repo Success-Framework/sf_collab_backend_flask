@@ -184,6 +184,10 @@ def register():
         # Grant default permissions
         grant_default_permissions(user.id)
         
+        # Create wallet for new user
+        from app.services.wallet_service import WalletService
+        WalletService.get_wallet(user.id)
+        
         # Add to general chat
         try:
             ChatConversation.add_to_general_chat(user)
@@ -275,29 +279,11 @@ def login():
         # Update login info
         user.last_login = datetime.utcnow()
         user.last_login_ip = client_ip
-        print(f"DEBUG: Updated last_login and last_login_ip")
         
-        if hasattr(user, 'last_activity_date'):
-            user.last_activity_date = datetime.utcnow().date()
-            print(f"DEBUG: Updated last_activity_date")
-        
-        last_activity_date = user.last_activity_date
-        streak_days = user.streak_days or 0
-        print(f"DEBUG: Last activity date: {last_activity_date}, Current streak: {streak_days}")
-        
-        if last_activity_date:
-            days_diff = (datetime.utcnow().date() - last_activity_date).days
-            print(f"DEBUG: Days difference: {days_diff}")
-            if days_diff == 1:
-                streak_days += 1
-            elif days_diff > 1:
-                streak_days = 1
-        else:
-            streak_days = 1
-        
-        print(f"DEBUG: New streak days: {streak_days}")
-        db.session.commit()
-        print("DEBUG: Database committed")
+        # Update streak via centralized service
+        from app.services.streak_service import StreakService
+        streak_result = StreakService.update_streak(user.id)
+        print(f"DEBUG: Streak updated to {streak_result}")
 
         # Log activity
         Activity.log(
@@ -559,19 +545,9 @@ def get_current_user():
         
         if not user:
             return error_response('User not found', 404)
-        last_activity_date = user.last_activity_date
-        streak_days = user.streak_days or 0
-        if last_activity_date:
-            days_diff = (datetime.utcnow().date() - last_activity_date).days
-            if days_diff == 1:
-                streak_days += 1
-            elif days_diff > 1:
-                streak_days = 1
-        else:
-            streak_days = 1
-        user.streak_days = streak_days
-        user.last_activity_date = datetime.utcnow().date()
-        db.session.commit()
+        # Update streak via centralized service
+        from app.services.streak_service import StreakService
+        StreakService.update_streak(user.id)
         return success_response({
             'user': get_user_response_data(user)
         })

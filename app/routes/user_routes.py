@@ -288,7 +288,7 @@ def get_users():
     result = paginate(query, page, per_page)
     
     return success_response({
-        'users': [user.to_dict() for user in result['items']],
+        'users': [user.to_dict(public=True) for user in result['items']],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],
@@ -307,7 +307,11 @@ def get_user(user_id):
     if not user:
         return error_response('User not found', 404)
     
-    return success_response({'user': user.to_dict(include_statistics=include_stats)}, 'User retrieved successfully')
+    # Check if the requesting user is viewing their own profile
+    current_user_id = get_jwt_identity()
+    is_own_profile = int(current_user_id) == int(user_id)
+    
+    return success_response({'user': user.to_dict(include_statistics=include_stats, public=not is_own_profile)}, 'User retrieved successfully')
 
 #! CREATE NEW USER
 @users_bp.route('', methods=['POST'])
