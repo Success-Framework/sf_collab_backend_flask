@@ -1059,16 +1059,16 @@ def send_join_request(startup_id):
 
             managers = StartupMember.query.filter(
                 StartupMember.startup_id == startup_id,
-                StartupMember.role.in_([UserRoles.owner, UserRoles.founder]),
+                (StartupMember.role.in_(['owner', 'founder'])) | (StartupMember.admin == True),
                 StartupMember.is_active == True
             ).all()
-            
+            print(f"Notifying {len(managers)} managers about new join request:", [f"{m.first_name} {m.last_name}" for m in managers])
             requester_name = f"{current_user.first_name} {current_user.last_name}"
             for manager in managers:
-                notify_access_request_pending(
+                notify_info(
                     user_id=manager.user_id,
-                    resource=f"Join request from {requester_name} for {startup.name}",
-                    request_id=join_request.id
+                    message=f"{requester_name} has requested to join {startup.name} as a {role}.",
+                    link_url=f"/startup-details/{startup.id}"
                 )
         except Exception as e:
             print(f"⚠️ Join request notification failed: {e}")
@@ -1255,7 +1255,6 @@ def has_startup_management_access(user_id, startup_id):
     current_user = User.query.get(user_id)
     if current_user and current_user.role == 'admin':
         return True
-    
     # Check if user is the creator or has admin/manager role in the startup
     startup = Startup.query.get(startup_id)
     if startup and startup.creator_id == user_id:
@@ -1269,7 +1268,6 @@ def has_startup_management_access(user_id, startup_id):
     
     if not membership or not membership.role:
         return False
-
     membership_role_value = membership.role.value if hasattr(membership.role, 'value') else membership.role
 
     allowed_roles = {
@@ -1324,6 +1322,71 @@ def remove_startup_member(startup_id, member_id):
             print(f"⚠️ Removed from startup notification failed: {e}")
     return success_response(message='Member removed successfully')
 
+@startups_bp.route('/<int:startup_id>/members/<int:member_id>/promote', methods=['POST'])
+@jwt_required()
+def promote_member_to_admin(startup_id, member_id):
+    """Promote a member to admin role"""
+    current_user_id = get_jwt_identity()
+    
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized', 403)
+    
+    member = StartupMember.query.get(member_id)
+    if not member:
+        return error_response('Member not found', 404)
+    
+    if member.startup_id != startup_id:
+        return error_response('Member does not belong to this startup', 400)
+    
+    try:
+        member.admin = True
+        db.session.commit()
+        
+        try:
+            notify_info(
+                user_id=member.user_id,
+                message=f"You have been promoted to admin of the startup: {member.startup.name}"
+            )
+        except Exception as e:
+            print(f"⚠️ Promoted to admin notification failed: {e}")
+        
+        return success_response(message='Member promoted to admin successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to promote member: {str(e)}', 500)
+
+@startups_bp.route('/<int:startup_id>/members/<int:member_id>/demote', methods=['POST'])
+@jwt_required()
+def demote_member_from_admin(startup_id, member_id):
+    """Demote an admin member back to regular member role"""
+    current_user_id = get_jwt_identity()
+    
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized', 403)
+    
+    member = StartupMember.query.get(member_id)
+    if not member:
+        return error_response('Member not found', 404)
+    
+    if member.startup_id != startup_id:
+        return error_response('Member does not belong to this startup', 400)
+    
+    try:
+        member.admin = False
+        db.session.commit()
+        
+        try:
+            notify_info(
+                user_id=member.user_id,
+                message=f"You have been demoted from admin of the startup: {member.startup.name}"
+            )
+        except Exception as e:
+            print(f"⚠️ Demoted from admin notification failed: {e}")
+        
+        return success_response(message='Member demoted from admin successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to demote member: {str(e)}', 500)
 @startups_bp.route('/<int:startup_id>/leave', methods=['DELETE'])
 @jwt_required()
 def leave_startup(startup_id):
