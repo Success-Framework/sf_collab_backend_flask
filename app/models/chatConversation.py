@@ -324,7 +324,7 @@ conversation_participants = db.Table('conversation_participants',
     db.Column('conversation_id', db.Integer, db.ForeignKey('chat_conversations.id'), primary_key=True),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('joined_at', db.DateTime, default=datetime.utcnow),
-    db.Column('role', db.String(20), default='member')  # member, admin
+    db.Column('role', db.String(20), default='member')
 )
 
 conversation_user_reads = db.Table('conversation_user_reads',

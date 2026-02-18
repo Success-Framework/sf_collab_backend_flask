@@ -86,12 +86,12 @@ def generate_tokens(user_id):
     """Generate access and refresh tokens"""
     access_token = create_access_token(
         identity=str(user_id),
-        expires_delta=timedelta(hours=6),
+        expires_delta=timedelta(hours=72), # Provisional, in the future we may want to shorten this and rely more on refresh tokens for security
         fresh=True
     )
     refresh_token_str = create_refresh_token(
         identity=str(user_id),
-        expires_delta=timedelta(days=30)
+        expires_delta=timedelta(days=30) # This is not actually used for validation in the current implementation, but we set it for potential future use and to have a clear expiration time for refresh tokens
     )
     return access_token, refresh_token_str
 

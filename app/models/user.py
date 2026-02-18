@@ -79,6 +79,39 @@ class User(db.Model):
     
     # ========== RELATIONSHIPS ==========
     
+    # =========================================================================
+    # WALLET & STORE RELATIONSHIPS - ADD THESE TO YOUR USER MODEL
+    # =========================================================================
+
+    # Wallet (one-to-one relationship)
+    wallet = db.relationship("UserWallet", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan")
+
+    # Wallet transactions
+    wallet_transactions = db.relationship("WalletTransaction", 
+        back_populates="user", 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # Store purchases
+    purchases = db.relationship('ProductPurchase', 
+        back_populates='user', 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # User inventory (owned items)
+    inventory = db.relationship('UserInventory', 
+        back_populates='user', 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # Event token balances
+    event_token_balances = db.relationship("EventTokenBalance", 
+        back_populates="user",
+        lazy='dynamic')
+    
     # Core Authentication & Profile
     refresh_tokens = db.relationship('RefreshToken', 
         back_populates='token_owner', 
@@ -316,8 +349,42 @@ class User(db.Model):
         lazy="joined"
     )
     transactions = db.relationship("Transaction", back_populates="user")
-    wallet = db.relationship("UserWallet", uselist=False, back_populates="user", cascade="all, delete-orphan")
+    
+    wallet = db.relationship(
+        "UserWallet",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    
+    # Wallet/shop relationships (needed by WalletTransaction/ProductPurchase/UserInventory/EventTokenBalance)
+    wallet_transactions = db.relationship(
+        "WalletTransaction",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    purchases = db.relationship(
+        "ProductPurchase",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    inventory = db.relationship(
+        "UserInventory",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    event_token_balances = db.relationship(
+        "EventTokenBalance",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+
     # ========== HELPER FUNCTIONS ==========
+    
     
     def update_last_activity(self):
         """Update last activity date and maintain streak"""
