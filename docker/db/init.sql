@@ -1990,3 +1990,94 @@ LOCK TABLES `idea_likes` WRITE;
 /*!40000 ALTER TABLE `idea_likes` DISABLE KEYS */;
 /*!40000 ALTER TABLE `idea_likes` ENABLE KEYS */;
 UNLOCK TABLES;
+
+-- Table structure for table `user_wallets`
+
+DROP TABLE IF EXISTS `user_wallets`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_wallets` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `sf_coins` int DEFAULT 0,
+  `premium_gems` int DEFAULT 0,
+  `event_tokens` int DEFAULT 0,
+  `total_coins_earned` int DEFAULT 0,
+  `total_coins_spent` int DEFAULT 0,
+  `daily_earnings` int DEFAULT 0,
+  `daily_earning_limit` int DEFAULT 1000,
+  `last_earning_reset` datetime DEFAULT CURRENT_TIMESTAMP,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_user_wallet` (`user_id`),
+  KEY `idx_user_wallets_user_id` (`user_id`),
+  CONSTRAINT `fk_user_wallets_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `user_wallets` WRITE;
+/*!40000 ALTER TABLE `user_wallets` DISABLE KEYS */;
+/*!40000 ALTER TABLE `user_wallets` ENABLE KEYS */;
+UNLOCK TABLES;
+
+-- Table structure for table `wallet_transactions`
+
+DROP TABLE IF EXISTS `wallet_transactions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wallet_transactions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `wallet_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `transaction_type` varchar(20) NOT NULL,
+  `currency_type` varchar(20) NOT NULL,
+  `amount` int NOT NULL,
+  `balance_before` int NOT NULL,
+  `balance_after` int NOT NULL,
+  `xp_amount` int DEFAULT 0,
+  `exchange_rate` float DEFAULT 0,
+  `reference_type` text,
+  `reference_id` varchar(255),
+  `description` text,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_wallet_transactions_wallet_id` (`wallet_id`),
+  KEY `idx_wallet_transactions_user_id` (`user_id`),
+  KEY `idx_wallet_transactions_created_at` (`created_at`),
+  CONSTRAINT `fk_wallet_transactions_wallet_id` FOREIGN KEY (`wallet_id`) REFERENCES `user_wallets` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_wallet_transactions_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `wallet_transactions` WRITE;
+/*!40000 ALTER TABLE `wallet_transactions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `wallet_transactions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+-- Table structure for table `event_token_balances`
+
+DROP TABLE IF EXISTS `event_token_balances`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `event_token_balances` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `wallet_id` int NOT NULL,
+  `event_key` varchar(255) NOT NULL,
+  `balance` int DEFAULT 0,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_event_token_balances_user_id` (`user_id`),
+  KEY `idx_event_token_balances_wallet_id` (`wallet_id`),
+  KEY `idx_event_token_balances_event_key` (`event_key`),
+  CONSTRAINT `fk_event_token_balances_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_event_token_balances_wallet_id` FOREIGN KEY (`wallet_id`) REFERENCES `user_wallets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `event_token_balances` WRITE;
+/*!40000 ALTER TABLE `event_token_balances` DISABLE KEYS */;
+/*!40000 ALTER TABLE `event_token_balances` ENABLE KEYS */;
+UNLOCK TABLES;
