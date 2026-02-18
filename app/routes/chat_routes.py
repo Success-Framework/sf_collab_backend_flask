@@ -1,5 +1,6 @@
-from flask import Blueprint, request, send_from_directory
+from flask import Blueprint, jsonify, request, send_from_directory
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sympy import content
 from werkzeug.utils import secure_filename
 
 from app.models.chatConversation import ChatConversation, conversation_participants
@@ -394,6 +395,9 @@ def get_messages(conversation_id):
 @jwt_required()
 def send_message(conversation_id):
     current_user_id = get_jwt_identity()
+    
+    file_url = None
+    
     is_file_upload = "file" in request.files
 
     if is_file_upload:
@@ -425,7 +429,7 @@ def send_message(conversation_id):
         reply_to_id = data.get("reply_to_id")
         file = None
 
-    if not content:
+    if not content and not file_url:
         return error_response("Missing required field: content", 400)
 
     user = User.query.get(current_user_id)
@@ -703,8 +707,12 @@ def edit_message(conversation_id, message_id):
     current_user_id = get_jwt_identity()
     data = request.get_json() or {}
 
-    if not data.get("content"):
-        return error_response("Content is required", 400)
+    content = data.get('content', '').strip()
+    file_url = data.get('file_url')
+
+    # Only error if BOTH are missing
+    if not content and not file_url:
+        return jsonify({"error": "Message must contain text or a file", "success": False}), 400
 
     try:
         message = ChatMessage.query.get(message_id)
