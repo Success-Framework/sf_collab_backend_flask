@@ -11,6 +11,7 @@ class StartupMember(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     first_name = db.Column(db.String(100))
     last_name = db.Column(db.String(100))
+    admin = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(100), default=UserRoles.member)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
@@ -60,4 +61,5 @@ class StartupMember(db.Model):
             'updatedAt': self.updated_at.isoformat(),
             'fullName': self.get_full_name(),
             'profilePicture': self.member_user.profile_picture if self.member_user else None,
+            'admin': self.admin
         }

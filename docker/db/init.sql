@@ -1147,7 +1147,6 @@ UNLOCK TABLES;
 --
 -- Table structure for table `startup_members`
 --
-
 DROP TABLE IF EXISTS `startup_members`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1158,6 +1157,7 @@ CREATE TABLE `startup_members` (
   `first_name` varchar(100) DEFAULT NULL,
   `last_name` varchar(100) DEFAULT NULL,
   `role` varchar(100) DEFAULT NULL,
+  `admin` tinyint(1) DEFAULT NULL,
   `joined_at` datetime DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
