@@ -1,6 +1,11 @@
 """
-Wallet Routes - SF Collab Virtual Economy API
-Handles wallet balance, transactions, earnings, spending, and transfers
+Wallet Routes - Manage virtual currency
+
+Endpoints:
+- POST /api/wallet/add     - Add funds (earning)
+- POST /api/wallet/deduct  - Deduct funds (spending)
+- GET  /api/wallet         - Get wallet info
+- GET  /api/wallet/transactions - Get transaction history
 """
 
 from flask import Blueprint, request, jsonify
