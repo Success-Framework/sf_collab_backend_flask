@@ -5,6 +5,7 @@ import json
 from openai import OpenAI
 from weasyprint import HTML
 import markdown
+import base64
 def get_groq_client():
     key = current_app.config.get("GROQ_API_KEY")
     return Groq(api_key=key) if key else None
@@ -133,4 +134,57 @@ def get_response(model, system_prompt, user_prompt, temperature=0.7, max_tokens=
 
     else:
         raise ValueError(f"Unsupported model: {model}")
+    return response_text, tokens_used
+
+def get_vision_response(model, system_prompt, user_prompt, image_file, temperature=0.7, max_tokens=2048):
+    # =========================
+    # OPENAI (IMAGE READABLE RESPONSES API)
+    # =========================
+    image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
+    mime_type = image_file.mimetype or "image/jpeg"
+    if model == 'openai/gpt-oss-20b':
+        client = get_openai_client()
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=[
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": system_prompt,
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": user_prompt,
+                        },
+                        {
+                            "type": "input_image",
+                            "image_url": f"data:{mime_type};base64,{image_base64}",
+                        },
+                    ],
+                },
+            ],
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
+
+        response_text = extract_text_from_response(
+            response, expect_json=False
+        )
+        tokens_used = getattr(response.usage, "output_tokens", None)
+
+    # =========================
+    # UNSUPPORTED MODELS
+    # =========================
+    else:
+        raise ValueError(
+            f"Model '{model}' does not support vision inputs"
+        )
+
     return response_text, tokens_used

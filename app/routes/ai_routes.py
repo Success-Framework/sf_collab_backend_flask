@@ -21,7 +21,7 @@ from app.models.user import User
 from app.services.ai_assistant.ingest import ingest_document
 from app.services.ai_assistant.rag import ask_assistant
 from app.services.ai_image_gen import generate_image
-from app.utils.ai_helpers import get_groq_client, get_openai_client, extract_text_from_response, get_response, generate_pdf_from_markdown
+from app.utils.ai_helpers import get_groq_client, get_openai_client, extract_text_from_response, get_response, generate_pdf_from_markdown, get_vision_response
 # Load environment variables
 load_dotenv()
 
@@ -1112,6 +1112,129 @@ def text_to_image():
             "base64": image_base64
         }
     })
+
+# ==================================
+# Generates social media captions using AI from text input or image + text input. Captions are optimized per platform and tone and
+# return only caption text.
+#
+# Supported platforms: Instagram, LinkedIn, Twitter/X, Facebook, YouTube (community posts), TikTok
+#
+# Supported tones: casual, professional, inspiring, promotional, educational, storytelling, humorous, minimalist
+# ==================================
+@ai_bp.route('/generate/caption', methods=['POST'])
+def generate_caption():
+    try:
+        if request.method == 'OPTIONS':
+            return standard_response(True, {}, code=200)
+
+        data = request.get_json()
+        if not data:
+            return standard_response(False, None, 'Missing data in request', 400)
+
+        model = data.get('model', AVAILABLE_MODELS[0])
+        content_type = data.get('content_type', 'text')
+        platform = data.get('platform', 'Instagram')
+        tone = data.get('tone', 'casual')
+        temperature = data.get('temperature', 0.7)
+        max_tokens = data.get('max_tokens', 200)
+
+        prompt = data.get('prompt')
+
+        if isinstance(prompt, list):
+            prompt = "\n".join(map(str, prompt))
+        elif not isinstance(prompt, str):
+            prompt = str(prompt)
+
+        if model not in AVAILABLE_MODELS:
+            return standard_response(
+                False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400
+            )
+        
+        # ==================================
+        # CAPTION-BASED SYSTEM PROMPTS
+        # ==================================
+
+        CAPTION_SYSTEM_PROMPTS = {
+            "text": (
+                "You are a professional social media copywriter.\n"
+                "Generate short, catchy, platform-optimized captions.\n"
+                "Rules:\n"
+                "- Output only caption text\n"
+                "- No explanations\n"
+                "- Include emojis and hashtags where appropriate\n"
+                "- Generate 3 variations\n"
+            ),
+            "image": (
+                "You are a professional social media copywriter.\n"
+                "Generate short, catchy, platform-optimized captions from the given image and optional context.\n"
+                "Generate captions that visually match the image.\n"
+                "Rules:\n"
+                "- Do not mention the image explicitly\n"
+                "- No analysis or explanations\n"
+                "- Include emojis and hashtags\n"
+                "- Generate 3 variations\n"
+            )
+        }
+
+        system_prompt = CAPTION_SYSTEM_PROMPTS[content_type]
+        response_text = ""
+        tokens_used = 0
+
+        # =========================
+        # TEXT-ONLY CAPTION
+        # =========================
+        if content_type == 'text':
+
+            user_prompt = (
+                f"Platform: {platform}\n"
+                f"Tone: {tone}\n"
+                f"Input: {prompt}"
+            )
+
+            response_text, tokens_used = get_response(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        # =========================
+        # IMAGE-BASED CAPTION
+        # =========================
+        if content_type == 'image':
+            image_file = data.get('image')
+            if not image_file:
+                return standard_response(False, None, 'Image file required', 400)
+
+            response_text, tokens_used = get_vision_response(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_file=image_file,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        # =========================
+        # RESPONSE
+        # =========================
+        return standard_response(True, {
+            "response": response_text,
+            "model": model,
+            "tokens_used": tokens_used,
+            "content_type": content_type,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+    except Exception as e:
+        logging.exception("Generation error")
+        return standard_response(False, None, str(e), 500)
+
+    except Exception as e:
+        logging.exception("Caption generation failed")
+        return standard_response(False, None, str(e), 500)
+
 
 # @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
 # @jwt_required()
