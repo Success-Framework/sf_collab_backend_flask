@@ -124,13 +124,18 @@ def handle_send_message(data):
     
     user_id = socket_sessions[sid]['user_id']
     conversation_id = data.get('conversation_id')
-    content = data.get('content')
+    content = data.get('content', '').strip()
+    file_url = data.get('file_url')
+    file_name = data.get('file_name')
+    file_type = data.get('file_type')
+    is_image = data.get('is_image', False)
     message_type = data.get('message_type', 'text')
     reply_to_id = data.get('reply_to_id')
     
-    if not content or not conversation_id:
-        emit('error', {'message': 'Missing content or conversation_id'})
+    if not content and not file_url:
+        emit('error', {'message': 'Message content or file URL is required'})
         return
+        
     
     try:
         user = User.query.get(user_id)
@@ -144,13 +149,17 @@ def handle_send_message(data):
             emit('error', {'message': 'Not a participant'})
             return
         
-        # Create message
+        # Create message - Now including file fields
         message = ChatMessage(
             conversation_id=conversation_id,
             sender_id=user_id,
             original_content=content,
             message_type=message_type,
             reply_to_id=reply_to_id,
+            file_url=file_url,
+            file_name=file_name,
+            file_type=file_type,
+            is_image=is_image,
             sender_timezone=user.get_timezone() if hasattr(user, 'get_timezone') else 'UTC'
         )
         
