@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from app.models.story import Story
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
-
+from app.utils.upload_to_s3 import upload_file_to_s3
 stories_bp = Blueprint('stories', __name__)
 
 @stories_bp.route('', methods=['GET'])
@@ -66,27 +66,33 @@ def get_story(story_id):
 @stories_bp.route('', methods=['POST'])
 def create_story():
     """Create new story"""
-    data = request.get_json()
     
-    required_fields = ['user_id', 'author_id', 'author_first_name', 'author_last_name', 'media_url', 'expires_at']
-    if not all(field in data for field in required_fields):
-        return error_response('Missing required fields')
+    # Check if multipart form data
+    if 'media' not in request.files:
+        return error_response('Media file is required', 400)
+    
+    media_file = request.files['media']
+    if media_file.filename == '':
+        return error_response('No file selected', 400)
+    
+    required_fields = ['user_id', 'author_id', 'author_first_name', 'author_last_name', 'type', 'expires_at']
+    if not all(field in request.form for field in required_fields):
+        return error_response('Missing required fields', 400)
     
     try:
-        # Set expiry to 24 hours from now if not provided
-        expires_at = data.get('expires_at')
-        if not expires_at:
-            expires_at = (datetime.utcnow() + timedelta(hours=24)).isoformat()
+        # TODO: Upload file to storage service and get media_url
+        # For now, using filename as placeholder
+        media_url = upload_file_to_s3(media_file)
         
         story = Story(
-            user_id=data['user_id'],
-            author_id=data['author_id'],
-            author_first_name=data['author_first_name'],
-            author_last_name=data['author_last_name'],
-            media_url=data['media_url'],
-            caption=data.get('caption'),
-            type=data.get('type', 'image'),
-            expires_at=datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+            user_id=int(request.form['user_id']),
+            author_id=int(request.form['author_id']),
+            author_first_name=request.form['author_first_name'],
+            author_last_name=request.form['author_last_name'],
+            media_url=media_url,
+            caption=request.form.get('caption'),
+            type=request.form['type'],
+            expires_at=datetime.fromisoformat(request.form['expires_at'].replace('Z', '+00:00'))
         )
         
         db.session.add(story)

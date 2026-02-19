@@ -30,7 +30,7 @@ class ChatConversation(db.Model):
 
     # HELPER FUNCTIONS
     
-    def add_participant(self, user, role='member'):
+    def add_participant(self, user_id, role='member', id=None):
         """Add participant to conversation"""
         from sqlalchemy import insert
         
@@ -38,24 +38,29 @@ class ChatConversation(db.Model):
         existing = db.session.execute(
             conversation_participants.select().where(
                 conversation_participants.c.conversation_id == self.id,
-                conversation_participants.c.user_id == user.id
+                conversation_participants.c.user_id == user_id
             )
         ).first()
         
         if not existing:
             stmt = conversation_participants.insert().values(
-                conversation_id=self.id,
-                user_id=user.id,
+                conversation_id=id or self.id or self._get_next_id(),
+                user_id=user_id,
                 role=role
             )
             db.session.execute(stmt)
             db.session.commit()
-    
-    def remove_participant(self, user):
+    def _get_next_id(self):
+        """Get next ID for conversation (used when creating new conversation)"""
+        result = db.session.execute(
+            db.select(db.func.max(ChatConversation.id))
+        ).scalar()
+        return (result or 0) + 1
+    def remove_participant(self, user_id):
         """Remove participant from conversation"""
         stmt = conversation_participants.delete().where(
             conversation_participants.c.conversation_id == self.id,
-            conversation_participants.c.user_id == user.id
+            conversation_participants.c.user_id == user_id
         )
         db.session.execute(stmt)
         db.session.commit()

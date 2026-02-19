@@ -38,7 +38,10 @@ class JoinRequest(db.Model):
             role=self.role,
             joined_at=datetime.utcnow()
         )
-
+        from app.models.chatConversation import ChatConversation
+        chat_conversation = ChatConversation.query.filter_by(startup_id=self.startup_id).first()
+        if chat_conversation:
+            chat_conversation.add_participant(self.user_id)
         db.session.add(member)
         return member
     
@@ -47,6 +50,7 @@ class JoinRequest(db.Model):
         self.status = JoinRequestStatus.rejected
         self.updated_at = datetime.utcnow()
         db.session.delete(self)
+        db.session.commit()
     
     def cancel(self):
         """Cancel join request (by user)"""

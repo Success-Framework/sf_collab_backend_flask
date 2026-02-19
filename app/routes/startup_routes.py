@@ -12,8 +12,11 @@ from app.models.userRole import UserRole
 from app.notifications.helpers import notify_access_request_pending
 from app.utils.plans_utils import can_create_project, can_add_collaborator
 from app.models.startUpMember import StartupMember
+from app.models.chatConversation import ChatConversation
+
 from app.models.waitlist import Waitlist
 import os 
+from sqlalchemy import func
 from io import BytesIO
 import json
 from datetime import datetime
@@ -137,6 +140,15 @@ def get_startups():
     
 
     
+
+    if page == 1:
+        query = query.order_by(Startup.created_at.desc())
+    else:
+        query = query.order_by(
+            Startup.created_at.desc(),
+            func.random()
+        )
+
     # Apply filters
     if industry:
         query = query.filter(Startup.industry.ilike(f'%{industry}%'))
@@ -165,7 +177,29 @@ def get_startups():
             'pages': result['pages']
         }
     })
-
+@startups_bp.route('/top', methods=['GET'])
+@jwt_required()
+def get_top_startups():
+    """Get top startups by views"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 3, type=int)
+    
+    query = Startup.query.filter(Startup.views > 0)
+    
+    # Order by views descending
+    query = query.order_by(Startup.views.desc())
+    
+    result = paginate(query, page, per_page)
+    
+    return success_response({
+        'startups': [startup.to_dict() for startup in result['items']],
+        'pagination': {
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'pages': result['pages']
+        }
+    })
 #! GET SINGLE STARTUP (Public - no auth required)
 @startups_bp.route('/<int:startup_id>', methods=['GET'])
 @jwt_required()
@@ -288,6 +322,17 @@ def register_startup():
         )
         
         db.session.add(startup)
+        
+        # Create startup Chatroom
+        # chat_conversation = ChatConversation(
+        #     id=startup.id,  # Use same ID as startup for easy reference
+        #     name=f"{startup.name} Team Chat",
+        #     conversation_type='group',
+        #     created_by_id=current_user_id
+        # )
+        # db.session.add(chat_conversation)
+        # chat_conversation.add_participant(current_user_id, id=startup.id)  # Add creator as participant
+        
         db.session.commit()
         
         # ════════════════════════════════════════════════════════════
@@ -1294,7 +1339,6 @@ def get_startup_member_ids(startup_id, exclude_user_id=None):
 @jwt_required()
 def remove_startup_member(startup_id, member_id):
     """Remove member from startup"""
-        
     startup = Startup.query.get_or_404(startup_id)
 
     if not can_manage_members(startup_id):
@@ -1305,6 +1349,10 @@ def remove_startup_member(startup_id, member_id):
     member_user_id = member.user_id if member else None
 
     db.session.delete(member)
+    # chat_conversation = ChatConversation.query.filter_by(startup_id=startup_id).first()
+    # if chat_conversation and member_user_id:
+    #     chat_conversation.remove_participant(member_user_id)
+
     db.session.commit()
 
     
@@ -1405,6 +1453,9 @@ def leave_startup(startup_id):
     
     try:
         db.session.delete(membership)
+        # chat_conversation = ChatConversation.query.filter_by(startup_id=startup_id).first()
+        # if chat_conversation:
+        #     chat_conversation.remove_participant(current_user_id)
         db.session.commit()
         
         try:
