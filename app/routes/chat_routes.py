@@ -117,11 +117,22 @@ def get_conversations():
         if not user:
             return error_response("User not found", 404)
 
-        query = (
-            ChatConversation.query.join(conversation_participants)
-            .filter(conversation_participants.c.user_id == current_user_id)
-        )
-        conversations = query.order_by(ChatConversation.updated_at.desc()).all()
+        try:
+            query = (
+                ChatConversation.query.join(conversation_participants)
+                .filter(conversation_participants.c.user_id == current_user_id)
+                .filter(
+                    (conversation_participants.c.is_hidden == False) |
+                    (conversation_participants.c.is_hidden == None)
+                )
+            )
+            conversations = query.order_by(ChatConversation.updated_at.desc()).all()
+        except Exception:
+            query = (
+                ChatConversation.query.join(conversation_participants)
+                .filter(conversation_participants.c.user_id == current_user_id)
+            )
+            conversations = query.order_by(ChatConversation.updated_at.desc()).all()
 
         conversations_data = []
         for conv in conversations:
@@ -234,6 +245,7 @@ def get_or_create_direct_conversation():
         )
 
         if conversation:
+            conversation.unhide_for_user(current_user_id)
             return success_response(
                 {"conversation": conversation.to_dict(for_user=current_user), "created": False}
             )
@@ -378,6 +390,70 @@ def get_messages(conversation_id):
             return error_response("Access denied", 403)
 
         messages = conversation.get_messages_for_user(user, limit, offset)
+
+        # ── Enrich messages with persistent read/delivered status ──────────────
+        # For each message sent by the current user, check if other participants
+        # have read past it using conversation_user_reads.last_read_at
+        try:
+            from app.models.chatConversation import conversation_user_reads
+            from sqlalchemy import and_
+
+            # Get last_read_at for every OTHER participant in this conversation
+            other_read_times = {}
+            for participant in conversation.participants:
+                if str(participant.id) == str(current_user_id):
+                    continue
+                row = db.session.execute(
+                    db.text(
+                        "SELECT last_read_at FROM conversation_user_reads "
+                        "WHERE conversation_id = :cid AND user_id = :uid"
+                    ),
+                    {"cid": conversation_id, "uid": participant.id}
+                ).first()
+                if row and row.last_read_at:
+                    other_read_times[participant.id] = row.last_read_at
+
+            # Enrich each message
+            for msg in messages:
+                # Only add status for messages sent by the current user
+                if str(msg.get("sender_id")) != str(current_user_id):
+                    continue
+
+                msg_time_str = msg.get("created_at") or msg.get("createdAt")
+                if not msg_time_str:
+                    continue
+
+                # Parse message time
+                from datetime import datetime
+                try:
+                    if isinstance(msg_time_str, str):
+                        msg_time = datetime.fromisoformat(msg_time_str.replace("Z", "+00:00").replace("+00:00", ""))
+                    else:
+                        msg_time = msg_time_str
+                except Exception:
+                    continue
+
+                # Check if any recipient has read at or after this message
+                is_read = any(
+                    read_time >= msg_time
+                    for read_time in other_read_times.values()
+                )
+
+                if is_read:
+                    msg["status"] = "read"
+                    msg["delivery_status"] = "read"
+                    # Find the latest read_at among recipients who have read it
+                    read_ats = [t for t in other_read_times.values() if t >= msg_time]
+                    msg["read_at"] = max(read_ats).isoformat() if read_ats else None
+                else:
+                    # Mark as delivered if the message was sent (it reached the server)
+                    msg["status"] = "delivered"
+                    msg["delivery_status"] = "delivered"
+                    msg["delivered_at"] = msg_time_str
+
+        except Exception as e:
+            logging.warning(f"Could not enrich message statuses: {e}")
+        # ── End status enrichment ───────────────────────────────────────────────
 
         return success_response(
             {"conversation": conversation.to_dict(for_user=user), "messages": messages}
@@ -1310,14 +1386,13 @@ def delete_conversation(conversation_id):
         if conversation.conversation_type == "general":
             return error_response("Cannot delete the general chat", 403)
 
-        # For direct conversations, just remove the user from participants
-        # The conversation stays for the other person
-        stmt = conversation_participants.delete().where(
-            (conversation_participants.c.conversation_id == conversation_id)
-            & (conversation_participants.c.user_id == current_user_id)
-        )
-        db.session.execute(stmt)
-        db.session.commit()
+        # Can't delete a group — must leave first
+        if conversation.conversation_type == "group":
+            return error_response("You must leave this group before deleting it. Use Leave Group first.", 403)
+
+        # Soft-hide only — stay participant so history is preserved and
+        # the conversation reappears when a new message arrives
+        conversation.hide_for_user(current_user_id)
 
         # Emit socket event
         if SOCKET_ENABLED:

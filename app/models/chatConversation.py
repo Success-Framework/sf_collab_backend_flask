@@ -32,20 +32,18 @@ class ChatConversation(db.Model):
     
     def add_participant(self, user_id, role='member', id=None):
         """Add participant to conversation"""
-        from sqlalchemy import insert
+        # Accept User objects or plain IDs
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
         
-        # Check if user is already a participant
         existing = db.session.execute(
-            conversation_participants.select().where(
-                conversation_participants.c.conversation_id == self.id,
-                conversation_participants.c.user_id == user_id
-            )
+            db.text('SELECT 1 FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+            {'cid': self.id, 'uid': uid}
         ).first()
         
         if not existing:
             stmt = conversation_participants.insert().values(
                 conversation_id=id or self.id or self._get_next_id(),
-                user_id=user_id,
+                user_id=uid,
                 role=role
             )
             db.session.execute(stmt)
@@ -56,24 +54,59 @@ class ChatConversation(db.Model):
             db.select(db.func.max(ChatConversation.id))
         ).scalar()
         return (result or 0) + 1
+    def is_hidden_for_user(self, user_id):
+        """Check if this conversation is soft-hidden for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT is_hidden FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return bool(result.is_hidden) if result else False
+        except Exception:
+            return False
+
+    def hide_for_user(self, user_id):
+        """Soft-hide conversation for a user (stays participant, just hidden from their list)"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            db.session.execute(
+                db.text('UPDATE conversation_participants SET is_hidden = 1 WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def unhide_for_user(self, user_id):
+        """Un-hide conversation for a user (e.g. when they receive a new message)"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            db.session.execute(
+                db.text('UPDATE conversation_participants SET is_hidden = 0 WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     def remove_participant(self, user_id):
         """Remove participant from conversation"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
         stmt = conversation_participants.delete().where(
             conversation_participants.c.conversation_id == self.id,
-            conversation_participants.c.user_id == user_id
+            conversation_participants.c.user_id == uid
         )
         db.session.execute(stmt)
         db.session.commit()
     
     def get_participant_role(self, user):
         """Get participant role in conversation"""
+        uid = user.id if hasattr(user, 'id') else int(user)
         result = db.session.execute(
-            conversation_participants.select().where(
-                conversation_participants.c.conversation_id == self.id,
-                conversation_participants.c.user_id == user.id
-            )
+            db.text('SELECT role FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+            {'cid': self.id, 'uid': uid}
         ).first()
-        
         return result.role if result else None
     
     def get_messages_for_user(self, user, limit=50, offset=0):
@@ -329,7 +362,8 @@ conversation_participants = db.Table('conversation_participants',
     db.Column('conversation_id', db.Integer, db.ForeignKey('chat_conversations.id'), primary_key=True),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('joined_at', db.DateTime, default=datetime.utcnow),
-    db.Column('role', db.String(20), default='member')
+    db.Column('role', db.String(20), default='member'),
+    db.Column('is_hidden', db.Boolean, default=False)
 )
 
 conversation_user_reads = db.Table('conversation_user_reads',

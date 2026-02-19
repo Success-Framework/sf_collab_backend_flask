@@ -36,8 +36,11 @@ def user_or_ip():
         pass
     return request.remote_addr
 
+
 limiter = Limiter(
     key_func=user_or_ip,
     default_limits=["1000 per day"],
-    storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379"),
+    storage_uri=os.getenv("REDIS_URL", "memory://"), # Changed default to memory://
+    storage_options={"socket_connect_timeout": 1},
+    strategy="fixed-window",
 )
