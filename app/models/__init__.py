@@ -39,7 +39,7 @@ from .outreach_campaign import OutreachCampaign
 from .outreach_contact import OutreachContact
 from .outreach_sendjobs import OutreachSendJob
 from .outreach_draft import OutreachDraft
-from .wallet import UserWallet, WalletTransaction, ExchangeRate
+# from .wallet import UserWallet, WalletTransaction, ExchangeRate
 from .UserWallet import UserWallet
 from .WalletTransaction import WalletTransaction
 from .virtual_product import VirtualProduct

@@ -4,6 +4,7 @@ from app.models.userRole import UserRole
 from app.models.Enums import UserStatus, Privacy, Theme, EmailDigest
 from app.utils.upload_to_s3 import upload_file_to_s3, get_public_url, generate_presigned_url
 from app.extensions import db
+from sqlalchemy import func
 from app.utils.helper import error_response, success_response, paginate
 from flask_jwt_extended import (
     create_access_token, 
@@ -273,6 +274,13 @@ def get_users():
     role = request.args.get('role', type=str)
     search = request.args.get('search', type=str)
     query = User.query
+    if page == 1:
+        query = query.order_by(User.created_at.desc())
+    else:
+        query = query.order_by(
+            User.created_at.desc(),
+            func.random()
+        )
     # Apply filters
     if status:
         query = query.filter(User.status == UserStatus(status))
