@@ -824,7 +824,7 @@ PLANS = [
         "category": "credits",
         "currency": "usd",
         "description": "Usage-based credits for AI, automation, and processing.",
-        "credit_packs": [
+        "data": [
             {
                 "type": "monthly",
                 "title": "Monthly Credit Pack - 1,000",
@@ -890,6 +890,7 @@ PLANS = [
         ],
         "description_details": "Credits are used for AI (text, image, video, voice), automation, heavy processing, and external APIs. Core collaboration never uses credits."
     },
+    
 ]
 
 def insert_default_plans():

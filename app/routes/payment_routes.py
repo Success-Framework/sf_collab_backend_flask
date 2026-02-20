@@ -51,6 +51,7 @@ def get_plans():
             "title": plan['category'],
             "currency": plan.get('currency', 'usd'),
             "description": plan.get('description', ''),
+            "data": plan.get('data', []),
             "roles": plan.get('roles', []),
         } for plan in plans])
 

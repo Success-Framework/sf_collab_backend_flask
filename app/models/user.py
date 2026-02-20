@@ -639,6 +639,8 @@ class User(db.Model):
                 'country': self.profile_country,
                 'city': self.profile_city,
             },
+            'builder_plan_id': self.builder_plan_id,
+            'founder_plan_id': self.founder_plan_id,
             'createdAt': self.created_at.isoformat(),
             'roles': [ur.role for ur in self.user_roles],
         }
