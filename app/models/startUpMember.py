@@ -61,5 +61,6 @@ class StartupMember(db.Model):
             'updatedAt': self.updated_at.isoformat(),
             'fullName': self.get_full_name(),
             'profilePicture': self.member_user.profile_picture if self.member_user else None,
-            'admin': self.admin
+            'admin': self.admin,
+            'startup': self.member_startup.to_dict() if self.member_startup else None
         }
