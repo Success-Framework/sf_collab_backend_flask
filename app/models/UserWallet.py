@@ -17,6 +17,7 @@ class UserWallet(db.Model):
     sf_coins = db.Column(Integer, default=0)
     premium_gems = db.Column(Integer, default=0)
     event_tokens = db.Column(Integer, default=0)
+    credits = db.Column(Integer, default=0)
     total_coins_earned = db.Column(Integer, default=0)
     total_coins_spent = db.Column(Integer, default=0)
     daily_earnings = db.Column(Integer, default=0)
@@ -251,6 +252,10 @@ class UserWallet(db.Model):
             balance_before = self.event_tokens
             self.event_tokens += amount
             balance_after = self.event_tokens
+        elif currency_type == "credits":
+            balance_before = self.credits
+            self.credits += amount
+            balance_after = self.credits
         else:
             raise ValueError(f"Invalid currency type: {currency_type}")
         
@@ -267,6 +272,52 @@ class UserWallet(db.Model):
         
         return balance_after
     
+    def add_credits(self, amount, description="Purchased Credits"):
+        """Add Real Money Credits (purchased currency from Stripe)"""
+        from app.models.WalletTransaction import WalletTransaction
+        
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+        
+        balance_before = self.credits or 0
+        self.credits = balance_before + amount
+        
+        WalletTransaction.record_transaction(
+            wallet_id=self.id,
+            user_id=self.user_id,
+            transaction_type="earn",
+            currency_type="credits",
+            amount=amount,
+            balance_before=balance_before,
+            balance_after=self.credits,
+            description=description
+        )
+        
+        return self.credits
+
+    def spend_credits(self, amount, description="Spent Credits"):
+        """Spend Real Money Credits"""
+        from app.models.WalletTransaction import WalletTransaction
+        
+        if amount > (self.credits or 0):
+            raise ValueError("Insufficient Credits")
+            
+        balance_before = self.credits or 0
+        self.credits = balance_before - amount
+        
+        WalletTransaction.record_transaction(
+            wallet_id=self.id,
+            user_id=self.user_id,
+            transaction_type="spend",
+            currency_type="credits",
+            amount=amount,
+            balance_before=balance_before,
+            balance_after=self.credits,
+            description=description
+        )
+        
+        return self.credits
+
     def to_dict(self):
         return {
             'id': str(self.id),
@@ -274,6 +325,7 @@ class UserWallet(db.Model):
             'sf_coins': self.sf_coins,
             'premium_gems': self.premium_gems,
             'event_tokens': self.event_tokens,
+            'credits': self.credits,
             'total_coins_earned': self.total_coins_earned,
             'total_coins_spent': self.total_coins_spent,
             'daily_earnings': self.daily_earnings,
@@ -283,4 +335,4 @@ class UserWallet(db.Model):
         }
     
     def __repr__(self):
-        return f'<UserWallet user_id={self.user_id} sf_coins={self.sf_coins} premium_gems={self.premium_gems}>'
+        return f'<UserWallet user_id={self.user_id} sf_coins={self.sf_coins} premium_gems={self.premium_gems} credits={self.credits}>'
