@@ -50,6 +50,7 @@ def create_app(config_name=None):
     
     # Session configuration
     print(f"SESSION_TYPE from config: {app.config.get('SESSION_TYPE')}")
+    
 
     
     app.config['SESSION_PERMANENT'] = True
