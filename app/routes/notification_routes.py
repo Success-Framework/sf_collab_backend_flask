@@ -1,305 +1,631 @@
-from flask import Blueprint, request, jsonify
+"""
+Notification Routes
+
+API endpoints for notification management.
+FIXED VERSION - Correct method signatures to match service.py
+"""
+
+from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.utils.helper import success_response, error_response
+import logging
+import json
+from datetime import datetime
 from app.models.notification import Notification
-from app.models.user import User
-from app.extensions import db
-from app.utils.helper import error_response, success_response, paginate
+logger = logging.getLogger(__name__)
 
-notifications_bp = Blueprint('notifications', __name__)
+notification_bp = Blueprint('notifications', __name__)
 
-@notifications_bp.route('', methods=['GET'])
+# ============================================
+# SAFE IMPORT - Won't break routes if service is missing
+# ============================================
+try:
+    from app.notifications.service import NotificationService
+    notification_service = NotificationService()
+    HAS_NOTIFICATION_SERVICE = True
+except Exception as e:
+    logger.warning(f"Notification service not available: {e}")
+    notification_service = None
+    HAS_NOTIFICATION_SERVICE = False
+
+
+# ─────────────────────────────────────────────────────────────
+# GET ALL NOTIFICATIONS - FIXED
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('', methods=['GET'])
+@notification_bp.route('/', methods=['GET'])
 @jwt_required()
-def get_notifications():
-    """Get all notifications with filtering"""
-    current_user_id = get_jwt_identity()
-    
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    user_id = request.args.get('user_id', type=int)
-    type_filter = request.args.get('type', type=str)
-    is_read = request.args.get('is_read', type=bool)
-    
-    # Default to current user's notifications if no user_id specified
-    if not user_id:
-        user_id = current_user_id
-    
-    # Check if user is authorized to view other users' notifications
-    if user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
-        if not current_user:
-            return error_response('Unauthorized to view other users notifications', 403)
-    
-    query = Notification.query.filter(Notification.user_id == user_id)
-    
-    if type_filter:
-        query = query.filter(Notification.notification_type == type_filter)
-    if is_read is not None:
-        query = query.filter(Notification.is_read == is_read)
-    
-    result = paginate(query.order_by(Notification.created_at.desc()), page, per_page)
-    
-    return success_response({
-        'notifications': [notification.to_dict() for notification in result['items']],
-        'pagination': {
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'pages': result['pages']
-        }
-    })
+def get_user_notifications():
+    """Get paginated notifications for current user (supports filters)"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
 
-@notifications_bp.route('/<int:notification_id>', methods=['GET'])
+    try:
+        user_id = get_jwt_identity()
+
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        category = request.args.get('category')
+        notification_type = request.args.get('type')
+        priority = request.args.get('priority')
+        is_read = request.args.get('is_read')
+
+        # Convert is_read to boolean if provided
+        if is_read is not None:
+            is_read = str(is_read).lower() in ('true', '1', 'yes')
+
+        # Build filters dict - THIS IS THE FIX
+        filters = {}
+        if category:
+            filters['category'] = category
+        if notification_type:
+            filters['type'] = notification_type
+        if priority:
+            filters['priority'] = priority
+        if is_read is not None:
+            filters['is_read'] = is_read
+
+        # Call service with correct signature
+        result = notification_service.get_user_notifications(
+            user_id=user_id,
+            page=page,
+            per_page=per_page,
+            filters=filters if filters else None
+        )
+
+        return success_response(result)
+
+    except Exception as e:
+        logger.error(f"Error getting notifications: {e}", exc_info=True)
+        return error_response(f"Failed to get notifications: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# GET SINGLE NOTIFICATION
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/<int:notification_id>', methods=['GET'])
 @jwt_required()
 def get_notification(notification_id):
-    """Get single notification by ID"""
-    current_user_id = get_jwt_identity()
-    
-    notification = Notification.query.get(notification_id)
-    if not notification:
-        return error_response('Notification not found', 404)
-    
-    # Check if user is authorized to view this notification
-    if notification.user_id != current_user_id:
-        return error_response('Unauthorized to view this notification', 403)
-    
-    return success_response({'notification': notification.to_dict()})
+    """Get a single notification by ID for current user"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
 
-@notifications_bp.route('', methods=['POST'])
+    try:
+        user_id = get_jwt_identity()
+
+        # Use get_by_id if available
+        if hasattr(notification_service, "get_by_id"):
+            notif = notification_service.get_by_id(notification_id, user_id)
+            if not notif:
+                return error_response("Notification not found", 404)
+            return success_response({"notification": notif})
+
+        return error_response("get_by_id not implemented in NotificationService", 501)
+
+    except Exception as e:
+        logger.error(f"Error getting notification: {e}", exc_info=True)
+        return error_response(f"Failed to get notification: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# CREATE NOTIFICATION
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('', methods=['POST'])
 @jwt_required()
 def create_notification():
-    """Create new notification"""
-    import json
+    """Create a new notification (admin/service usage)"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
 
-    current_user_id = get_jwt_identity()
-    data = request.get_json()
-    
-    required_fields = ['user_id', 'title', 'message']
-    if not all(field in data for field in required_fields):
-        return error_response('Missing required fields: user_id, title, message')
-    
-    target_user_id = data['user_id']
-    safe_data = data.get('data', {})
-
-    if not isinstance(safe_data, (dict, list)):
-        safe_data = {}
-    
     try:
-        notification = Notification(
-            user_id=target_user_id,
-            notification_type=data.get('type', 'system'),
+        actor_id = int(get_jwt_identity())
+        data = request.get_json() or {}
+
+        required_fields = ['user_id', 'title', 'message']
+        if not all(field in data for field in required_fields):
+            return error_response("Missing required fields: user_id, title, message", 400)
+
+        # Use create_simple_notification which exists in service
+        created = notification_service.create_simple_notification(
+            user_id=data['user_id'],
             title=data['title'],
             message=data['message'],
-            data=json.loads(json.dumps(safe_data)),
-            is_read=data.get('isRead', False)
+            notification_type=data.get('type', 'info'),
+            category=data.get('category', 'system'),
+            priority=data.get('priority', 'medium'),
+            actor_id=actor_id,
+            entity_type=data.get('entity_type'),
+            entity_id=data.get('entity_id'),
+            link_url=data.get('link_url'),
+            metadata=data.get('data', {}),
         )
         
-        db.session.add(notification)
-        db.session.commit()
-        
-        return success_response({
-            'notification': notification.to_dict()
-        }, 'Notification created successfully', 201)
-    except Exception as e:
-        db.session.rollback()
-        return error_response(f'Failed to create notification: {str(e)}', 500)
+        if created:
+            return success_response({"notification": created.to_dict()}, "Notification created successfully", 201)
+        return error_response("Failed to create notification", 500)
 
-@notifications_bp.route('/<int:notification_id>/read', methods=['POST'])
+    except Exception as e:
+        logger.error(f"Error creating notification: {e}", exc_info=True)
+        return error_response(f"Failed to create notification: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# GET UNREAD COUNT
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/unread-count', methods=['GET'])
 @jwt_required()
-def mark_notification_read(notification_id):
-    """Mark notification as read"""
-    current_user_id = get_jwt_identity()
-    
-    notification = Notification.query.get(notification_id)
-    if not notification:
-        return error_response('Notification not found', 404)
-    
-    # Check if user is authorized to mark this notification as read
-    if notification.user_id != current_user_id:
-        return error_response('Unauthorized to mark this notification as read', 403)
-    
+def get_unread_count():
+    """Get unread notification count for current user"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
     try:
-        notification.mark_as_read()
-        return success_response({
-            'notification': notification.to_dict()
-        }, 'Notification marked as read')
-    except Exception as e:
-        return error_response(f'Failed to mark notification as read: {str(e)}', 500)
+        user_id = get_jwt_identity()
+        count = notification_service.get_unread_count(user_id)
 
-@notifications_bp.route('/<int:notification_id>/unread', methods=['POST'])
+        return success_response({
+            'unread_count': count,
+            'unreadCount': count
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting unread count: {e}", exc_info=True)
+        return error_response(f"Failed to get unread count: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# GET HIGH PRIORITY
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/high-priority', methods=['GET'])
 @jwt_required()
-def mark_notification_unread(notification_id):
-    """Mark notification as unread"""
-    current_user_id = get_jwt_identity()
-    
-    notification = Notification.query.get(notification_id)
-    if not notification:
-        return error_response('Notification not found', 404)
-    
-    # Check if user is authorized to mark this notification as unread
-    if notification.user_id != current_user_id:
-        return error_response('Unauthorized to mark this notification as unread', 403)
-    
+def get_high_priority():
+    """Get high priority unread notifications"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
     try:
-        notification.mark_as_unread()
-        return success_response({
-            'notification': notification.to_dict()
-        }, 'Notification marked as unread')
-    except Exception as e:
-        return error_response(f'Failed to mark notification as unread: {str(e)}', 500)
+        user_id = get_jwt_identity()
+        limit = request.args.get('limit', 5, type=int)
 
-@notifications_bp.route('/batch/read', methods=['POST'])
+        # Use get_user_notifications with priority filter
+        result = notification_service.get_user_notifications(
+            user_id=user_id,
+            page=1,
+            per_page=limit,
+            filters={'priority': 'high', 'is_read': False}
+        )
+        return success_response({'notifications': result.get('notifications', [])})
+
+    except Exception as e:
+        logger.error(f"Error getting high priority notifications: {e}", exc_info=True)
+        return error_response(f"Failed to get high priority notifications: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# GET STATS
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/stats', methods=['GET'])
 @jwt_required()
-def mark_notifications_read_batch():
+def get_stats():
+    """Get notification statistics for current user"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+        stats = notification_service.get_notification_stats(user_id)
+        return success_response(stats)
+
+    except Exception as e:
+        logger.error(f"Error getting notification stats: {e}", exc_info=True)
+        return error_response(f"Failed to get stats: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# MARK AS READ
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/<int:notification_id>/read', methods=['PUT', 'POST'])
+@jwt_required()
+def mark_as_read(notification_id):
+    """Mark a single notification as read"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+        success = notification_service.mark_as_read(notification_id, user_id)
+
+        if success:
+            unread_count = notification_service.get_unread_count(user_id)
+            return success_response({
+                'message': 'Notification marked as read',
+                'unread_count': unread_count,
+                'unreadCount': unread_count
+            })
+        return error_response('Notification not found', 404)
+
+    except Exception as e:
+        logger.error(f"Error marking notification as read: {e}", exc_info=True)
+        return error_response(f"Failed to mark as read: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# MARK AS UNREAD
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/<int:notification_id>/unread', methods=['PUT', 'POST'])
+@jwt_required()
+def mark_as_unread(notification_id):
+    """Mark a single notification as unread"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+        success = notification_service.mark_as_unread(notification_id, user_id)
+
+        if success:
+            unread_count = notification_service.get_unread_count(user_id)
+            return success_response({
+                'message': 'Notification marked as unread',
+                'unread_count': unread_count,
+                'unreadCount': unread_count
+            })
+        return error_response('Notification not found', 404)
+
+    except Exception as e:
+        logger.error(f"Error marking notification as unread: {e}", exc_info=True)
+        return error_response(f"Failed to mark as unread: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# MARK ALL AS READ
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/mark-all-read', methods=['PUT', 'POST'])
+@jwt_required()
+def mark_all_as_read():
+    """Mark all notifications as read for current user (optional category)"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+
+        # Accept category from query param OR JSON body
+        category = request.args.get('category')
+        data = request.get_json(silent=True) or {}
+        category = category or data.get('category')
+
+        count = notification_service.mark_all_as_read(user_id, category)
+
+        return success_response({
+            'message': f'Marked {count} notifications as read',
+            'count': count,
+            'unread_count': 0,
+            'unreadCount': 0
+        })
+
+    except Exception as e:
+        logger.error(f"Error marking all as read: {e}", exc_info=True)
+        return error_response(f"Failed to mark all as read: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# BATCH READ
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/batch/read', methods=['POST'])
+@jwt_required()
+def batch_mark_read():
+    """Mark multiple notifications as read (batch)"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        notification_ids = data.get('notification_ids', data.get('notificationIds', []))
+
+        if not notification_ids:
+            return error_response('Notification IDs are required', 400)
+
+        count = notification_service.bulk_mark_as_read(notification_ids, user_id)
+        unread_count = notification_service.get_unread_count(user_id)
+
+        return success_response({
+            'message': f'{count} notifications marked as read',
+            'count': count,
+            'unread_count': unread_count,
+            'unreadCount': unread_count
+        })
+
+    except Exception as e:
+        logger.error(f"Error batch marking as read: {e}", exc_info=True)
+        return error_response(f"Failed to mark notifications as read: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# BULK MARK AS READ
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/bulk/mark-read', methods=['PUT', 'POST'])
+@jwt_required()
+def bulk_mark_as_read():
     """Mark multiple notifications as read"""
-    current_user_id = get_jwt_identity()
-    data = request.get_json()
-    notification_ids = data.get('notification_ids', [])
-    
-    if not notification_ids:
-        return error_response('Notification IDs are required', 400)
-    
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
     try:
-        # Get notifications that belong to the current user
-        notifications = Notification.query.filter(
-            Notification.id.in_(notification_ids),
-            Notification.user_id == current_user_id
-        ).all()
-        
-        # If user is admin, allow marking any notifications as read
-        if len(notifications) != len(notification_ids):
-            current_user = User.query.get(current_user_id)
-            if current_user and current_user.role == 'admin':
-                notifications = Notification.query.filter(Notification.id.in_(notification_ids)).all()
-            else:
-                return error_response('Unauthorized to mark some notifications as read', 403)
-        
-        for notification in notifications:
-            notification.mark_as_read()
-        
-        return success_response(message=f'{len(notifications)} notifications marked as read')
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        notification_ids = data.get('notificationIds', data.get('notification_ids', []))
+
+        if not notification_ids:
+            return error_response('No notification IDs provided', 400)
+
+        count = notification_service.bulk_mark_as_read(notification_ids, user_id)
+        unread_count = notification_service.get_unread_count(user_id)
+
+        return success_response({
+            'message': f'Marked {count} notifications as read',
+            'count': count,
+            'unread_count': unread_count,
+            'unreadCount': unread_count
+        })
+
     except Exception as e:
-        return error_response(f'Failed to mark notifications as read: {str(e)}', 500)
+        logger.error(f"Error bulk marking as read: {e}", exc_info=True)
+        return error_response(f"Failed to bulk mark as read: {str(e)}", 500)
 
-@notifications_bp.route('/user/<int:user_id>/unread-count', methods=['GET'])
-@jwt_required()
-def get_unread_notifications_count(user_id):
-    """Get count of unread notifications for user"""
-    current_user_id = get_jwt_identity()
-    
-    # Check if user is authorized to view other users' notification counts
-    if user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != 'admin':
-            return error_response('Unauthorized to view other users notification counts', 403)
-    
-    count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
-    
-    return success_response({
-        'user_id': user_id,
-        'unread_count': count
-    })
 
-@notifications_bp.route('/my-unread-count', methods=['GET'])
-@jwt_required()
-def get_my_unread_notifications_count():
-    """Get count of unread notifications for current user (convenience endpoint)"""
-    current_user_id = get_jwt_identity()
-    
-    count = Notification.query.filter_by(user_id=current_user_id, is_read=False).count()
-    
-    return success_response({
-        'user_id': current_user_id,
-        'unread_count': count
-    })
-
-@notifications_bp.route('/<int:notification_id>', methods=['DELETE'])
+# ─────────────────────────────────────────────────────────────
+# DELETE NOTIFICATION
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/<int:notification_id>', methods=['DELETE'])
 @jwt_required()
 def delete_notification(notification_id):
-    """Delete notification"""
-    current_user_id = get_jwt_identity()
-    
-    notification = Notification.query.get(notification_id)
-    if not notification:
+    """Delete a single notification"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+        success = notification_service.delete_notification(notification_id, user_id)
+
+        if success:
+            unread_count = notification_service.get_unread_count(user_id)
+            return success_response({
+                'message': 'Notification deleted',
+                'unread_count': unread_count,
+                'unreadCount': unread_count
+            })
         return error_response('Notification not found', 404)
-    
-    # Check if user is authorized to delete this notification
-    if notification.user_id != current_user_id:
-        current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != 'admin':
-            return error_response('Unauthorized to delete this notification', 403)
-    
-    try:
-        db.session.delete(notification)
-        db.session.commit()
-        return success_response(message='Notification deleted successfully')
+
     except Exception as e:
-        db.session.rollback()
-        return error_response(f'Failed to delete notification: {str(e)}', 500)
+        logger.error(f"Error deleting notification: {e}", exc_info=True)
+        return error_response(f"Failed to delete notification: {str(e)}", 500)
 
-@notifications_bp.route('/my-notifications', methods=['GET'])
-@jwt_required()
-def get_my_notifications():
-    """Get current user's notifications (convenience endpoint)"""
-    current_user_id = get_jwt_identity()
-    
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    type_filter = request.args.get('type', type=str)
-    is_read = request.args.get('is_read', type=bool)
-    
-    query = Notification.query.filter(Notification.user_id == current_user_id)
-    
-    if type_filter:
-        query = query.filter(Notification.notification_type == type_filter)
-    if is_read is not None:
-        query = query.filter(Notification.is_read == is_read)
-    
-    result = paginate(query.order_by(Notification.created_at.desc()), page, per_page)
-    
-    return success_response({
-        'notifications': [notification.to_dict() for notification in result['items']],
-        'pagination': {
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'pages': result['pages']
-        }
-    })
 
-@notifications_bp.route('/mark-all-read', methods=['POST'])
+# ─────────────────────────────────────────────────────────────
+# DELETE ALL READ NOTIFICATIONS
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/read', methods=['DELETE'])
+@notification_bp.route('/delete-all-read', methods=['DELETE'])
 @jwt_required()
-def mark_all_notifications_read():
-    """Mark all current user's notifications as read"""
-    current_user_id = get_jwt_identity()
-    
-    try:
-        notifications = Notification.query.filter_by(
-            user_id=current_user_id, 
-            is_read=False
-        ).all()
-        
-        for notification in notifications:
-            notification.mark_as_read()
-        
-        return success_response(message=f'{len(notifications)} notifications marked as read')
-    except Exception as e:
-        return error_response(f'Failed to mark notifications as read: {str(e)}', 500)
-
-@notifications_bp.route('/clear-read', methods=['DELETE'])
-@jwt_required()
-def clear_read_notifications():
+def delete_all_read():
     """Delete all read notifications for current user"""
-    current_user_id = get_jwt_identity()
-    
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
     try:
-        deleted_count = Notification.query.filter_by(
-            user_id=current_user_id, 
-            is_read=True
-        ).delete()
-        
-        db.session.commit()
-        
-        return success_response(message=f'{deleted_count} read notifications cleared')
+        user_id = get_jwt_identity()
+        count = notification_service.delete_all_read(user_id)
+
+        return success_response({
+            'message': f'Deleted {count} read notifications',
+            'count': count
+        })
+
     except Exception as e:
-        db.session.rollback()
-        return error_response(f'Failed to clear read notifications: {str(e)}', 500)
+        logger.error(f"Error deleting read notifications: {e}", exc_info=True)
+        return error_response(f"Failed to delete read notifications: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# CLEAR ALL NOTIFICATIONS
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/all', methods=['DELETE'])
+@jwt_required()
+def clear_all_notifications():
+    """Clear/delete ALL notifications for current user"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+        count = notification_service.clear_all(user_id)
+
+        return success_response({
+            'message': f'Cleared {count} notifications',
+            'count': count,
+            'unread_count': 0,
+            'unreadCount': 0
+        })
+
+    except Exception as e:
+        logger.error(f"Error clearing all notifications: {e}", exc_info=True)
+        return error_response(f"Failed to clear notifications: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# BULK DELETE
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/bulk', methods=['DELETE'])
+@notification_bp.route('/bulk/delete', methods=['POST'])
+@jwt_required()
+def bulk_delete():
+    """Delete multiple notifications"""
+    if not HAS_NOTIFICATION_SERVICE:
+        return error_response("Notification service not available", 500)
+
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        notification_ids = data.get('notificationIds', data.get('notification_ids', []))
+
+        if not notification_ids:
+            return error_response('No notification IDs provided', 400)
+
+        count = notification_service.bulk_delete(notification_ids, user_id)
+        unread_count = notification_service.get_unread_count(user_id)
+
+        return success_response({
+            'message': f'Deleted {count} notifications',
+            'count': count,
+            'unread_count': unread_count,
+            'unreadCount': unread_count
+        })
+
+    except Exception as e:
+        logger.error(f"Error bulk deleting: {e}", exc_info=True)
+        return error_response(f"Failed to bulk delete: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# GET PREFERENCES
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/preferences', methods=['GET'])
+@jwt_required()
+def get_preferences():
+    """Get notification preferences for current user"""
+    try:
+        preferences = {
+            'emailEnabled': True,
+            'pushEnabled': True,
+            'inAppEnabled': True,
+            'categories': {
+                'account': True,
+                'social': True,
+                'task': True,
+                'message': True,
+                'idea': True,
+                'startup': True,
+                'reward': True,
+                'event': True,
+                'newsletter': True,
+                'system': True,
+            },
+            'priorityThreshold': 'low',
+            'digestFrequency': 'daily',
+            'mutedUsers': [],
+            'mutedStartups': [],
+            'doNotDisturb': {
+                'enabled': False,
+                'startTime': '22:00',
+                'endTime': '08:00'
+            }
+        }
+        return success_response({'preferences': preferences})
+
+    except Exception as e:
+        logger.error(f"Error getting preferences: {e}", exc_info=True)
+        return error_response(f"Failed to get preferences: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# UPDATE PREFERENCES
+# ─────────────────────────────────────────────────────────────
+@notification_bp.route('/preferences', methods=['PUT', 'PATCH'])
+@jwt_required()
+def update_preferences():
+    """Update notification preferences for current user"""
+    try:
+        data = request.get_json() or {}
+        return success_response({
+            'message': 'Preferences updated',
+            'preferences': data
+        })
+
+    except Exception as e:
+        logger.error(f"Error updating preferences: {e}", exc_info=True)
+        return error_response(f"Failed to update preferences: {str(e)}", 500)
+    
+@notification_bp.route('/broadcasts', methods=['GET'])
+def get_announcements():
+    """Get global announcements (for dashboard)"""
+    try:
+        announcements = notification_service.get_announcements()
+        return success_response({'announcements': announcements})
+    except Exception as e:
+        logger.error(f"Error getting announcements: {e}", exc_info=True)
+        return error_response(f"Failed to get announcements: {str(e)}", 500)
+
+@notification_bp.route('/broadcasts', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def create_announcement():
+    """Create a global announcement (admin only)"""
+    try:
+        if request.method == "OPTIONS":
+            return '', 200
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+
+        required_fields = ['title', 'message']
+        if not all(field in data for field in required_fields):
+            return error_response("Missing required fields: title, message", 400)
+
+        announcement = notification_service.create_announcement(
+            title=data['title'],
+            user_id=user_id,
+            message=data['message'],
+            priority=data.get('priority', 'medium'),
+            actor_id=user_id,
+            link_url=data.get('link_url'),
+            metadata=data.get('data', {})
+        )
+        
+        if announcement:
+            return success_response({"announcement": announcement.to_dict()}, "Announcement created successfully", 201)
+        return error_response("Failed to create announcement", 500)
+
+    except Exception as e:
+        logger.error(f"Error creating announcement: {e}", exc_info=True)
+        return error_response(f"Failed to create announcement: {str(e)}", 500)
+    
+@notification_bp.route('/bulletins', methods=['GET'])
+def get_newsletter():
+    """Get latest newsletter content"""
+    try:
+        newsletter = notification_service.get_newsletter()
+        return success_response({'newsletter': newsletter})
+    except Exception as e:
+        logger.error(f"Error getting newsletter: {e}", exc_info=True)
+        return error_response(f"Failed to get newsletter: {str(e)}", 500)
+
+@notification_bp.route('/bulletins', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def create_newsletter():
+    """Create a new newsletter (admin only)"""
+    try:
+        if request.method == "OPTIONS":
+            return '', 200
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+
+        required_fields = ['title', 'content']
+        if not all(field in data for field in required_fields):
+            return error_response("Missing required fields: title, content", 400)
+
+        newsletter = notification_service.create_newsletter(
+            title=data['title'],
+            content=data['content'],
+            user_id=user_id,
+            actor_id=user_id,
+            link_url=data.get('link_url'),
+            metadata=data.get('data', {})
+        )
+        
+        if newsletter:
+            return success_response({"newsletter": newsletter.to_dict()}, "Newsletter created successfully", 201)
+        return error_response("Failed to create newsletter", 500)
+
+    except Exception as e:
+        logger.error(f"Error creating newsletter: {e}", exc_info=True)
+        return error_response(f"Failed to create newsletter: {str(e)}", 500)

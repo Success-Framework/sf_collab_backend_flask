@@ -14,26 +14,20 @@ os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
 _client = None
 _collection = None
 
-
 def get_collection():
-    """
-    Lazily initialize Chroma client & collection.
-    This ensures every Gunicorn worker loads from disk.
-    """
     global _client, _collection
 
-    if _collection is not None:
-        return _collection
-
-    _client = chromadb.Client(
-        Settings(
-            persist_directory=VECTOR_STORE_PATH,
-            anonymized_telemetry=False
+    if _client is None:
+        _client = chromadb.Client(
+            Settings(
+                persist_directory=VECTOR_DB_DIR,
+                anonymized_telemetry=False
+            )
         )
-    )
 
-    _collection = _client.get_or_create_collection(
-        name="ai_assistant_docs"
-    )
+    if _collection is None:
+        _collection = _client.get_or_create_collection(
+            name="website_docs"
+        )
 
     return _collection

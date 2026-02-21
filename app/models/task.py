@@ -13,8 +13,8 @@ class Task(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     priority = db.Column(Enum('low', 'medium', 'high'), default='medium')
-    status = db.Column(Enum('today', 'in_progress', 'completed', 'overdue'), default='today')
-    
+    status = db.Column(Enum('to_do', 'in_progress', 'completed', 'overdue'), default='today')
+    visible_by = db.Column(db.String(50), default='all')  # 'public', 'team', 'private'
     tags = db.Column(JSON, default=[])
     labels = db.Column(JSON, default=[])
     
@@ -25,7 +25,7 @@ class Task(db.Model):
     
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
+    urgent = db.Column(db.Boolean, default=False)
     is_on_time = db.Column(db.Boolean, default=True)
     progress_percentage = db.Column(db.Integer, default=0)
     
@@ -148,9 +148,17 @@ class Task(db.Model):
             'is_overdue': self.is_overdue(),
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
+            'visible_by': self.visible_by,
+            'urgent': self.urgent,
             'assigned_user': {
                 'id': self.task_assignee.id,
                 'firstName': self.task_assignee.first_name,
-                'lastName': self.task_assignee.last_name
-            } if self.task_assignee else None
+                'lastName': self.task_assignee.last_name,
+                'profilePicture': self.task_assignee.profile_picture
+            } if self.task_assignee else None,
+            'startup': {
+                'id': self.parent_startup.id,
+                'name': self.parent_startup.name,
+                'logoUrl': self.parent_startup.logo_url
+            } if self.parent_startup else None
         }

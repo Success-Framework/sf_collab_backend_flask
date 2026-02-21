@@ -30,45 +30,83 @@ class ChatConversation(db.Model):
 
     # HELPER FUNCTIONS
     
-    def add_participant(self, user, role='member'):
+    def add_participant(self, user_id, role='member', id=None):
         """Add participant to conversation"""
-        from sqlalchemy import insert
+        # Accept User objects or plain IDs
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
         
-        # Check if user is already a participant
         existing = db.session.execute(
-            conversation_participants.select().where(
-                conversation_participants.c.conversation_id == self.id,
-                conversation_participants.c.user_id == user.id
-            )
+            db.text('SELECT 1 FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+            {'cid': self.id, 'uid': uid}
         ).first()
         
         if not existing:
             stmt = conversation_participants.insert().values(
-                conversation_id=self.id,
-                user_id=user.id,
+                conversation_id=id or self.id or self._get_next_id(),
+                user_id=uid,
                 role=role
             )
             db.session.execute(stmt)
             db.session.commit()
-    
-    def remove_participant(self, user):
+    def _get_next_id(self):
+        """Get next ID for conversation (used when creating new conversation)"""
+        result = db.session.execute(
+            db.select(db.func.max(ChatConversation.id))
+        ).scalar()
+        return (result or 0) + 1
+    def is_hidden_for_user(self, user_id):
+        """Check if this conversation is soft-hidden for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT is_hidden FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return bool(result.is_hidden) if result else False
+        except Exception:
+            return False
+
+    def hide_for_user(self, user_id):
+        """Soft-hide conversation for a user (stays participant, just hidden from their list)"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            db.session.execute(
+                db.text('UPDATE conversation_participants SET is_hidden = 1 WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def unhide_for_user(self, user_id):
+        """Un-hide conversation for a user (e.g. when they receive a new message)"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            db.session.execute(
+                db.text('UPDATE conversation_participants SET is_hidden = 0 WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def remove_participant(self, user_id):
         """Remove participant from conversation"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
         stmt = conversation_participants.delete().where(
             conversation_participants.c.conversation_id == self.id,
-            conversation_participants.c.user_id == user.id
+            conversation_participants.c.user_id == uid
         )
         db.session.execute(stmt)
         db.session.commit()
     
     def get_participant_role(self, user):
         """Get participant role in conversation"""
+        uid = user.id if hasattr(user, 'id') else int(user)
         result = db.session.execute(
-            conversation_participants.select().where(
-                conversation_participants.c.conversation_id == self.id,
-                conversation_participants.c.user_id == user.id
-            )
+            db.text('SELECT role FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+            {'cid': self.id, 'uid': uid}
         ).first()
-        
         return result.role if result else None
     
     def get_messages_for_user(self, user, limit=50, offset=0):
@@ -88,22 +126,27 @@ class ChatConversation(db.Model):
     def get_last_message_preview(self, for_user=None):
         """Get last message preview with timezone conversion"""
         from app.models.user import User
+        
         last_message = self.messages.order_by(ChatMessage.created_at.desc()).first()
-        # FIXED: Check if last_message exists before accessing its properties
+        
+        # Check if there's a last message
         if not last_message:
             return None
-            
-        user=User.query.get(last_message.sender_id)
-        if last_message:
-            preview = {
-                'content': last_message.get_content_for_user(for_user) if for_user else last_message.prepare_for_sending(),
-                'created_at': last_message.created_at.isoformat(),
-                'sender_name': user.get_full_name() if user else 'Unknown',
-                'display_time': last_message.get_display_time_info(for_user) if for_user else None
-            }
-            return preview
-        return None
-    
+        
+        # Get the sender
+        user = User.query.get(last_message.sender_id)
+        
+        # Build preview (even if user not found, show message)
+        preview = {
+            'content': last_message.get_content_for_user(for_user) if for_user else last_message.prepare_for_sending(),
+            'created_at': last_message.created_at.isoformat(),
+            'sender_name': user.get_full_name() if user else 'Unknown',
+            'display_time': last_message.get_display_time_info(for_user) if for_user else None,
+            'is_deleted': last_message.is_deleted
+        }
+        
+        return preview
+        
     def add_message(self, sender, content, message_type='text', metadata_data=None, reply_to_id=None):
         """Add new message to conversation with timezone handling"""
         message = ChatMessage(
@@ -319,7 +362,8 @@ conversation_participants = db.Table('conversation_participants',
     db.Column('conversation_id', db.Integer, db.ForeignKey('chat_conversations.id'), primary_key=True),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('joined_at', db.DateTime, default=datetime.utcnow),
-    db.Column('role', db.String(20), default='member')  # member, admin
+    db.Column('role', db.String(20), default='member'),
+    db.Column('is_hidden', db.Boolean, default=False)
 )
 
 conversation_user_reads = db.Table('conversation_user_reads',

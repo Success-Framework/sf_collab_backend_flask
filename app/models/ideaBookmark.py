@@ -29,18 +29,20 @@ class IdeaBookmark(db.Model):
         if url:
             self.url = url
         db.session.commit()
-    
+    def count(self):
+        """Count total bookmarks for an idea"""
+        return IdeaBookmark.query.filter_by(idea_id=self.idea_id).count()
     def get_idea_details(self):
         """Get idea details"""
-        if self.idea:
+        if self.bookmarked_idea:
             return {
-                'title': self.idea.title,
-                'description': self.idea.description,
-                'industry': self.idea.industry,
-                'stage': self.idea.stage,
-                'creator': f"{self.idea.creator_first_name} {self.idea.creator_last_name}",
-                'likes': self.idea.likes,
-                'views': self.idea.views
+                'title': self.bookmarked_idea.title,
+                'description': self.bookmarked_idea.description,
+                'industry': self.bookmarked_idea.industry,
+                'stage': self.bookmarked_idea.stage,
+                'creator': f"{self.bookmarked_idea.creator_first_name} {self.bookmarked_idea.creator_last_name}",
+                'likes': self.bookmarked_idea.likes,
+                'views': self.bookmarked_idea.views
             }
         return None
     
@@ -61,8 +63,8 @@ class IdeaBookmark(db.Model):
             'idea': self.get_idea_details(),
             'is_recent': self.is_recent(),
             'user': {
-                'id': self.user.id,
-                'firstName': self.user.first_name,
-                'lastName': self.user.last_name
-            } if self.user else None
+                'id': self.bookmark_owner.id,
+                'firstName': self.bookmark_owner.first_name,
+                'lastName': self.bookmark_owner.last_name
+            } if self.bookmark_owner else None
         }

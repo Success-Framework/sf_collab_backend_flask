@@ -3,6 +3,7 @@ from app.extensions import db
 from sqlalchemy import Enum, JSON
 from .Enums import StartupStage
 import os
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 
 class Startup(db.Model):
     __tablename__ = 'startups'
@@ -33,10 +34,10 @@ class Startup(db.Model):
     logo_url = db.Column(db.String(500))
     banner_url = db.Column(db.String(500))
     
-    tech_stack = db.Column(db.JSON, nullable=False, default=list)
+    roles = db.Column(MutableDict.as_mutable(JSON), default=dict)
+    tech_stack = db.Column(MutableList.as_mutable(JSON), default=list)
     
     positions = db.Column(db.Integer, default=0)
-    roles = db.Column(JSON, default={})
     
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     creator_first_name = db.Column(db.String(100))
@@ -69,7 +70,7 @@ class Startup(db.Model):
         foreign_keys='JoinRequest.startup_id')
     
     startup_bookmarks = db.relationship('StartupBookmark',
-        back_populates='bookmarked_startup',
+        back_populates='startup',
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='StartupBookmark.startup_id')
@@ -109,7 +110,6 @@ class Startup(db.Model):
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='StartupDocument.startup_id')
-    
     # HELPER FUNCTIONS
     def increment_views(self):
         """Increment view count"""
@@ -141,9 +141,25 @@ class Startup(db.Model):
         """Remove a member from the startup"""
         member = self.startup_members.filter_by(user_id=user_id, is_active=True).first()
         if member:
-            member.is_active = False
+            db.session.delete(member)
             self.update_member_count()
-    
+            db.session.commit()
+            return True
+        return False
+    def remove_member_by_id(self, member_id):
+        member = self.startup_members.filter_by(
+            id=member_id,
+            is_active=True
+        ).first()
+
+        if not member:
+            return False
+
+        db.session.delete(member)
+        self.update_member_count()
+        db.session.commit()
+        return True
+
     def update_stage(self, new_stage):
         """Update startup stage"""
         self.stage = StartupStage(new_stage)

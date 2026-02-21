@@ -20,8 +20,11 @@ class User(db.Model):
     xp_points = db.Column(db.Integer, default=0)
     streak_days = db.Column(db.Integer, default=0)
     last_activity_date = db.Column(db.Date)
-    plan_id = db.Column(db.String, nullable=True) # Subscription plan
+    builder_plan_id = db.Column(db.String(255), nullable=True) # Subscription plan
+    founder_plan_id = db.Column(db.String(255), nullable=True) # Subscription plan
     credits = db.Column(db.Integer, default=0)  # For tracking user credits
+    last_login_ip = db.Column(db.String(45), nullable=True)  # IPv4/IPv6
+
     # Computed/cached stats
     total_revenue = db.Column(db.Float, default=0.0)
     satisfaction_percentage = db.Column(db.Float, default=100.0)
@@ -75,6 +78,39 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # ========== RELATIONSHIPS ==========
+    
+    # =========================================================================
+    # WALLET & STORE RELATIONSHIPS - ADD THESE TO YOUR USER MODEL
+    # =========================================================================
+
+    # Wallet (one-to-one relationship)
+    wallet = db.relationship("UserWallet", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan")
+
+    # Wallet transactions
+    wallet_transactions = db.relationship("WalletTransaction", 
+        back_populates="user", 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # Store purchases
+    purchases = db.relationship('ProductPurchase', 
+        back_populates='user', 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # User inventory (owned items)
+    inventory = db.relationship('UserInventory', 
+        back_populates='user', 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # Event token balances
+    event_token_balances = db.relationship("EventTokenBalance", 
+        back_populates="user",
+        lazy='dynamic')
     
     # Core Authentication & Profile
     refresh_tokens = db.relationship('RefreshToken', 
@@ -152,7 +188,7 @@ class User(db.Model):
         foreign_keys='ResourceLike.user_id')
     
     startup_bookmarks = db.relationship('StartupBookmark', 
-        back_populates='bookmark_owner', 
+        back_populates='user', 
         lazy='dynamic', 
         cascade='all, delete-orphan',
         foreign_keys='StartupBookmark.user_id')
@@ -168,6 +204,11 @@ class User(db.Model):
         lazy='dynamic', 
         cascade='all, delete-orphan',
         foreign_keys='IdeaBookmark.user_id')
+    idea_likes = db.relationship('IdeaLike',
+        back_populates='liker',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        foreign_keys='IdeaLike.user_id')
     
     # Tasks & Projects (Three different relationships - all need unique back_populatess)
     owned_tasks = db.relationship('Task', 
@@ -280,22 +321,20 @@ class User(db.Model):
         cascade='all, delete-orphan',
         foreign_keys='GoalMilestone.user_id')
     
-    sent_requests = db.relationship(
+    sent_friend_requests = db.relationship(
         "FriendRequest",
-        lazy='dynamic', 
         foreign_keys="FriendRequest.sender_id",
         back_populates="sender",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
 
-    # Friend requests received by this user
-    received_requests = db.relationship(
+    received_friend_requests = db.relationship(
         "FriendRequest",
-        lazy='dynamic', 
         foreign_keys="FriendRequest.receiver_id",
         back_populates="receiver",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
+
     
     permissions = db.relationship(
         "UserPermission",
@@ -309,25 +348,48 @@ class User(db.Model):
         cascade="all, delete-orphan",
         lazy="joined"
     )
+    transactions = db.relationship("Transaction", back_populates="user")
+    
+    wallet = db.relationship(
+        "UserWallet",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    
+    # Wallet/shop relationships (needed by WalletTransaction/ProductPurchase/UserInventory/EventTokenBalance)
+    wallet_transactions = db.relationship(
+        "WalletTransaction",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    purchases = db.relationship(
+        "ProductPurchase",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    inventory = db.relationship(
+        "UserInventory",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    event_token_balances = db.relationship(
+        "EventTokenBalance",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
 
     # ========== HELPER FUNCTIONS ==========
     
+    
     def update_last_activity(self):
         """Update last activity date and maintain streak"""
-        today = datetime.utcnow().date()
-        
-        if self.last_activity_date and self.last_activity_date == today - timedelta(days=1):
-            self.streak_days += 1
-        elif self.last_activity_date != today:
-            self.streak_days = 1
-        
-        self.last_activity_date = today
-        self.last_login = datetime.utcnow()
-        
-        from app.services.achievement_service import AchievementService
-        AchievementService.check_achievements(self.id, 'streak_days')
-        
-        db.session.commit()
+        from app.services.streak_service import StreakService
+        StreakService.update_streak(self.id)
     
     def add_xp_points(self, points: int):
         """Add XP points to user"""
@@ -419,6 +481,9 @@ class User(db.Model):
     def is_active(self):
         """Check if user is active"""
         return self.status == UserStatus.active
+    def is_banned(self):
+        """Check if user is banned"""
+        return self.status == UserStatus.banned
     def is_admin(self):
         """Check if user has admin role"""
         return self.role == UserRoles.admin
@@ -475,40 +540,58 @@ class User(db.Model):
         return min(activities / 10, 100)
     
     def get_recent_activity(self, limit=10):
-        """Get user's recent activity across all platforms"""
-        from app.models.task import Task
-        from app.models.idea import Idea
-        from app.models.ideaComment import IdeaComment
-
         activities = []
-        
-        for idea in self.ideas.order_by(Idea.created_at.desc()).limit(5).all():
-            activities.append({
-                'type': 'idea_created',
-                'title': idea.title,
-                'timestamp': idea.created_at,
-                'data': idea.to_dict()
-            })
-        
-        for task in self.owned_tasks.filter_by(status='completed').order_by(Task.completed_date.desc()).limit(5).all():
-            activities.append({
-                'type': 'task_completed',
-                'title': task.title,
-                'timestamp': task.completed_date,
-                'data': task.to_dict()
-            })
-        
-        for comment in self.idea_comments.order_by(IdeaComment.created_at.desc()).limit(5).all():
-            activities.append({
-                'type': 'comment_made',
-                'title': f'Comment on idea',
-                'timestamp': comment.created_at,
-                'data': comment.to_dict()
-            })
-        
-        activities.sort(key=lambda x: x['timestamp'], reverse=True)
-        return activities[:limit]
-    
+
+        try:
+            # -------- Tasks --------
+            for task in self.owned_tasks.filter_by(status='completed').all():
+                if not task.completed_date:
+                    continue  # skip broken data safely
+
+                activities.append({
+                    "type": "task_completed",
+                    "id": task.id,
+                    "title": task.title,
+                    "timestamp": task.completed_date
+                })
+
+            # -------- Ideas --------
+            for idea in self.ideas.all():
+                if not idea.created_at:
+                    continue
+
+                activities.append({
+                    "type": "idea_created",
+                    "id": idea.id,
+                    "title": idea.title,
+                    "timestamp": idea.created_at
+                })
+
+            # -------- Comments --------
+            for comment in self.comments.all():
+                if not comment.created_at:
+                    continue
+
+                activities.append({
+                    "type": "comment_created",
+                    "id": comment.id,
+                    "content": comment.content,
+                    "timestamp": comment.created_at
+                })
+
+            # -------- Sort safely --------
+            activities.sort(
+                key=lambda x: x["timestamp"],
+                reverse=True
+            )
+
+            return activities[:limit]
+
+        except Exception as e:
+            print(
+                f"[get_recent_activity] Failed for user {getattr(self, 'id', 'unknown')}"
+            )
+            return []  # auth MUST never fail because of activity
     def _enum_to_value(self,value):
         return value.value if hasattr(value, "value") else value
     @staticmethod
@@ -535,21 +618,18 @@ class User(db.Model):
         )
         
         return verification_code
-    def to_dict(self, include_password=False, include_statistics=False, include_recent_activity=False):
+    def to_dict(self, include_password=False, include_statistics=False, include_recent_activity=False, public=False):
         data = {
             'id': self.id,
             'firstName': self.first_name,
             'lastName': self.last_name,
-            'email': self.email,
-            'isEmailVerified': self.is_email_verified,
-            'lastLogin': self.last_login.isoformat() if self.last_login else None,
+            'fullName': self.get_full_name(),
+            'profile_picture': self.profile_picture,
             'status': self._enum_to_value(self.status),
             'role': self._enum_to_value(self.role),
             'xp_points': self.xp_points,
             'streak_days': self.streak_days,
             'last_activity_date': self.last_activity_date.isoformat() if self.last_activity_date else None,
-            'total_revenue': self.total_revenue,
-            'satisfaction_percentage': self.satisfaction_percentage,
             'active_startups_count': self.active_startups_count,
             'profile': {
                 'picture': self.profile_picture,
@@ -558,50 +638,54 @@ class User(db.Model):
                 'socialLinks': self.profile_social_links or {},
                 'country': self.profile_country,
                 'city': self.profile_city,
-                'timezone': self.profile_timezone
             },
-            'preferences': {
-                'emailNotifications': self.pref_email_notifications,
-                'pushNotifications': self.pref_push_notifications,
-                'privacy': self._enum_to_value(self.pref_privacy),
-                'language': self.pref_language,
-                'timezone': self.pref_timezone,
-                'theme': self._enum_to_value(self.pref_theme),
-                'builderPreferences': self.pref_builder_preferences
-            },
-            'notificationSettings': {
-                'newComments': self.notif_new_comments,
-                'newLikes': self.notif_new_likes,
-                'newSuggestions': self.notif_new_suggestions,
-                'joinRequests': self.notif_join_requests,
-                'approvals': self.notif_approvals,
-                'storyViews': self.notif_story_views,
-                'postEngagement': self.notif_post_engagement,
-                'emailDigest': self._enum_to_value(self.notif_email_digest),
-                'quietHours': {
-                    'enabled': self.notif_quiet_hours_enabled,
-                    'start': self.notif_quiet_hours_start,
-                    'end': self.notif_quiet_hours_end
-                }
-            },
+            'builder_plan_id': self.builder_plan_id,
+            'founder_plan_id': self.founder_plan_id,
             'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat(),
-            'fullName': self.get_full_name(),
-            'timezone': self.get_timezone(),
-            'permissions': [perm.to_dict() for perm in self.permissions],
             'roles': [ur.role for ur in self.user_roles],
-
-            # Multi-role profile data
-            # 'roles': self.roles or [],
-            # 'founderProfile': self.founder_profile or {},
-            # 'builderProfile': self.builder_profile or {},
-            # 'influencerProfile': self.influencer_profile or {},
-            # 'investorProfile': self.investor_profile or {},
-            # 'profileCompletion': {
-            #     'basicProfileSetup': self.profile_setup_completed,
-            #     'roleProfileCompleted': self.role_profile_completed
-            # }
         }
+        
+        # Private fields — only visible to the user themselves
+        if not public:
+            data.update({
+                'email': self.email,
+                'isEmailVerified': self.is_email_verified,
+                'lastLogin': self.last_login.isoformat() if self.last_login else None,
+                'last_seen': self.last_login.isoformat() if self.last_login else None,
+                'updatedAt': self.updated_at.isoformat(),
+                'timezone': self.get_timezone(),
+                'total_revenue': self.total_revenue,
+                'satisfaction_percentage': self.satisfaction_percentage,
+                'builder_plan_id': self.builder_plan_id,
+                'founder_plan_id': self.founder_plan_id,
+                'preferences': {
+                    'emailNotifications': self.pref_email_notifications,
+                    'pushNotifications': self.pref_push_notifications,
+                    'privacy': self._enum_to_value(self.pref_privacy),
+                    'language': self.pref_language,
+                    'timezone': self.pref_timezone,
+                    'theme': self._enum_to_value(self.pref_theme),
+                    'builderPreferences': self.pref_builder_preferences
+                },
+                'notificationSettings': {
+                    'newComments': self.notif_new_comments,
+                    'newLikes': self.notif_new_likes,
+                    'newSuggestions': self.notif_new_suggestions,
+                    'joinRequests': self.notif_join_requests,
+                    'approvals': self.notif_approvals,
+                    'storyViews': self.notif_story_views,
+                    'postEngagement': self.notif_post_engagement,
+                    'emailDigest': self._enum_to_value(self.notif_email_digest),
+                    'quietHours': {
+                        'enabled': self.notif_quiet_hours_enabled,
+                        'start': self.notif_quiet_hours_start,
+                        'end': self.notif_quiet_hours_end
+                    }
+                },
+                'permissions': [perm.to_dict() for perm in self.permissions],
+                'credits': self.credits,
+                'wallet': self.wallet.to_dict() if self.wallet else None,
+            })
         
         if include_password:
             data['password'] = self.password
@@ -613,3 +697,4 @@ class User(db.Model):
             data['recentActivity'] = self.get_recent_activity()
         
         return data
+    

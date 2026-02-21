@@ -21,6 +21,7 @@ class ChatMessage(db.Model):
     metadata_data = db.Column(JSON, default={})  # For file URLs, image dimensions, etc.
     
     # Status tracking
+    is_deleted = db.Column(db.Boolean, default=False)
     is_edited = db.Column(db.Boolean, default=False)
     edited_at = db.Column(db.DateTime, nullable=True)
     
@@ -124,6 +125,7 @@ class ChatMessage(db.Model):
             'updated_at': self.updated_at.isoformat(),
             'sender_timezone': self.sender_timezone,
             # File fields
+            'is_deleted': self.is_deleted,
             'file_url': self.file_url,
             'file_name': self.file_name,
             'file_size': self.file_size,
@@ -170,11 +172,14 @@ class ChatMessage(db.Model):
         self.is_edited = True
         self.edited_at = datetime.utcnow()
         db.session.commit()
+    def delete_message(self):
+        """Mark message as deleted"""
+        self.is_deleted = True
+        db.session.commit()
     
     def mark_as_read(self, user_id):
         """Mark message as read by user"""
-        # This would require a read_receipts table in a real implementation
-        # For now, this is a placeholder
+        self.read_by.append(user_id)
         pass
     
     def has_file(self):

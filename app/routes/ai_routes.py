@@ -20,6 +20,8 @@ import requests
 from app.models.user import User
 from app.services.ai_assistant.ingest import ingest_document
 from app.services.ai_assistant.rag import ask_assistant
+from app.services.ai_image_gen import generate_image
+from app.utils.ai_helpers import get_groq_client, get_openai_client, extract_text_from_response, get_response, generate_pdf_from_markdown, get_vision_response
 # Load environment variables
 load_dotenv()
 
@@ -27,50 +29,8 @@ load_dotenv()
 ai_bp = Blueprint('qwen', __name__)
 
 # Configuration
-def get_groq_client():
-    key = current_app.config.get("GROQ_API_KEY")
-    return Groq(api_key=key) if key else None
-
-def get_openai_client():
-    key = current_app.config.get("OPENAI_API_KEY")
-    return OpenAI(api_key=key) if key else None
 
 
-def extract_text_from_response(response, *, expect_json=False, strict=False):
-    texts = []
-
-    for item in getattr(response, "output", []):
-        # item is ResponseOutputMessage
-        for content in getattr(item, "content", []):
-            # content is ResponseOutputText / tool calls / etc
-            if getattr(content, "type", None) == "output_text":
-                text = getattr(content, "text", "").strip()
-                if text:
-                    texts.append(text)
-
-    if not texts:
-        return [] if expect_json else ""
-
-    combined = "\n".join(texts).strip()
-
-    if not expect_json:
-        return combined
-
-    # --- JSON sanitation ---
-    cleaned = re.sub(r"^```(?:json)?|```$", "", combined, flags=re.IGNORECASE).strip()
-
-    match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
-    if not match:
-        if strict:
-            raise ValueError("No JSON found in model response")
-        return cleaned
-
-    try:
-        return json.loads(match.group(1))
-    except json.JSONDecodeError as e:
-        if strict:
-            raise ValueError(f"Invalid JSON from model: {e}")
-        return match.group(1)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 QWN_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'qwen_generated')  # Changed name
 
@@ -141,205 +101,633 @@ def get_models():
         logging.error(f'Error getting models: {str(e)}')
         return standard_response(False, None, str(e), 500)
 
-#! GENERATE CONTENT
-#! GENERATE CONTENT
+# GENERATE CONTENT
+#     """Generate content (chat, business plan, pitch deck) with structured JSON output"""
+#     try:
+#         if request.method == 'OPTIONS':
+#             return standard_response(True, {}, code=200)
+#         data = request.get_json()
+
+#         if not data or 'prompt' not in data:
+#             return standard_response(False, None, 'Missing prompt in request', 400)
+#         OPENAI_API_KEY = current_app.config.get("OPENAI_API_KEY")
+#         GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
+#         groq_client = get_groq_client()
+
+#         prompt = data.get('prompt')
+#         model = data.get('model', AVAILABLE_MODELS[0])
+#         content_type = data.get('content_type', 'chat')  # chat, business_plan, pitch_deck
+#         temperature = data.get('temperature', 0.7)
+#         max_tokens = data.get('max_tokens', 2048)
+#         output_format = data.get('output_format', 'text')  # text, json
+        
+#         if model not in AVAILABLE_MODELS:
+#             return standard_response(False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400)
+        
+#         client = None
+#         if model == 'qwen/qwen3-32b':
+#             client = get_groq_client()
+#         elif model == 'openai/gpt-oss-20b':
+#             client = get_openai_client()
+
+#         if not client:
+#             return standard_response(False, None, 'API key not configured for selected model', 500)
+#         # Simplified system prompts
+#         system_prompts = {
+#             'chat': '''You are a helpful and professional AI assistant. Provide accurate, detailed, and well-structured responses in Markdown format.''',
+            
+#             'business_plan': '''You are an expert business consultant specializing in startup development. 
+#             Generate a comprehensive, professional business plan in Markdown format.
+            
+#             Include these sections:
+#             1. Executive Summary
+#             2. Company Description
+#             3. Market Analysis
+#             4. Products & Services
+#             5. Marketing Strategy
+#             6. Operations Plan
+#             7. Management Team
+#             8. Financial Projections
+#             9. Funding Needs
+#             10. Risk Analysis
+            
+#             Use proper Markdown formatting with headers, lists, tables where appropriate.
+#             Include realistic numbers and data.''',
+            
+#             'pitch_deck': '''You are a pitch deck expert and venture capital advisor. 
+#             Generate compelling, investor-ready pitch deck content in Markdown format.
+            
+#             Structure it as a pitch deck with these slides:
+#             1. Title Slide
+#             2. The Problem
+#             3. The Solution
+#             4. Market Opportunity
+#             5. Product
+#             6. Business Model
+#             7. Traction
+#             8. Competition
+#             9. Team
+#             10. Financials
+#             11. Funding Ask
+#             12. Contact
+            
+#             Use proper Markdown formatting. Make it visually descriptive and include quantifiable metrics.'''
+#         }
+        
+#         system_prompt = system_prompts.get(content_type, system_prompts['chat'])
+        
+#         # Enhance prompt based on content type
+#         if content_type == 'business_plan':
+#             enhanced_prompt = f"""Create a comprehensive, investor-ready business plan for: {prompt}
+            
+#             Please include:
+#             1. Specific, quantifiable data where applicable
+#             2. Realistic financial projections
+#             3. Detailed market analysis
+#             4. Clear operational plans
+#             5. Risk assessment and mitigation strategies
+            
+#             Format the response in Markdown with clear sections and proper formatting."""
+            
+#         elif content_type == 'pitch_deck':
+#             enhanced_prompt = f"""Create a compelling, investor-focused pitch deck for: {prompt}
+            
+#             Requirements:
+#             1. Make it visually descriptive (imagine each slide's content)
+#             2. Include quantifiable metrics and projections
+#             3. Highlight competitive advantages clearly
+#             4. Focus on traction and proof points
+#             5. Structure for a 10-12 minute presentation
+            
+#             Format the response in Markdown with slide titles and bullet points."""
+            
+#         else:
+#             enhanced_prompt = prompt
+#         response_text = ""
+#         if model == 'qwen/qwen3-32b' and content_type in ['business_plan', 'pitch_deck']:
+#             max_tokens = min(max_tokens, 4096)
+
+#             # Call Groq API - REMOVE response_format for now to avoid JSON validation issues
+#             chat_completion = groq_client.chat.completions.create(
+#                 messages=[
+#                     {"role": "system", "content": system_prompt},
+#                     {"role": "user", "content": enhanced_prompt}
+#                 ],
+#                 model=model,
+#                 temperature=temperature,
+#                 max_tokens=max_tokens,
+#                 response_format={"type": "json_object"} if content_type in ['business_plan', 'pitch_deck'] else None
+#             )
+#             response_text = chat_completion.choices[0].message.content
+        
+#         elif model == 'openai/gpt-oss-20b':
+#             # Call OpenAI API directly
+#             headers = {
+#                 'Authorization': f'Bearer {OPENAI_API_KEY}',
+#                 'Content-Type': 'application/json'
+#             }
+
+#             payload = {
+#                 "model": "gpt-4.1-mini",
+#                 "messages": [
+#                     {
+#                         "role": "system",
+#                         "content": [
+#                             {"type": "text", "text": system_prompt}
+#                         ]
+#                     },
+#                     {
+#                         "role": "user",
+#                         "content": [
+#                             {"type": "text", "text": enhanced_prompt}
+#                         ]
+#                     }
+#                 ],
+#                 "temperature": temperature,
+#                 "max_tokens": max_tokens
+#             }
+            
+#             response = client.responses.create(
+#                 model="gpt-4.1-mini",
+#                 input=enhanced_prompt,
+#                 temperature=temperature,
+#                 max_output_tokens=max_tokens
+#             )
+#             test_responses = extract_text_from_response(response, expect_json=True, strict=True)
+
+
+#             chat_completion = response.json()
+        
+        
+#         # Generate downloadable content
+#         download_formats = ['txt', 'md']
+#         download_links = {}
+        
+#         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+#         for fmt in download_formats:
+#             filename = f"{content_type}_{timestamp}.{fmt}"
+#             filepath = os.path.join(QWN_UPLOAD_FOLDER, filename)
+            
+#             try:
+#                 with open(filepath, 'w', encoding='utf-8') as f:
+#                     if fmt == 'md':
+#                         f.write(f"# {content_type.replace('_', ' ').title()}\n\n")
+#                         f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+#                         f.write(f"**Model:** {model}\n")
+#                         f.write(f"**Prompt:** {prompt[:200]}...\n\n")
+#                         f.write("---\n\n")
+#                         f.write(response_text)
+#                     else:  # txt
+#                         f.write(response_text)
+                
+#                 download_links[fmt] = f"/api/qwen/download/{filename}"
+                
+#             except Exception as e:
+#                 logging.error(f"Error creating {fmt} file: {str(e)}")
+        
+#         return standard_response(True, {
+#             'response': response_text,  # Return as text, not parsed JSON
+#             'model': model,
+#             'content_type': content_type,
+#             'download_links': download_links,
+#             'timestamp': datetime.now().isoformat(),
+#             'tokens_used': chat_completion.usage.total_tokens if hasattr(chat_completion, 'usage') else None,
+#             'format': 'markdown'
+#         })
+    
+#     except Exception as e:
+#         logging.error(f'Generation error: {str(e)}')
 @ai_bp.route('/generate', methods=['POST', 'OPTIONS'])
 def qwen_generate():
-    """Generate content (chat, business plan, pitch deck) with structured JSON output"""
+    """Generate content (chat, business plan, pitch deck) in Markdown"""
     try:
         if request.method == 'OPTIONS':
             return standard_response(True, {}, code=200)
-        data = request.get_json()
 
+        data = request.get_json()
         if not data or 'prompt' not in data:
             return standard_response(False, None, 'Missing prompt in request', 400)
-        OPENAI_API_KEY = current_app.config.get("OPENAI_API_KEY")
-        GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
-        groq_client = get_groq_client()
 
         prompt = data.get('prompt')
+
+        if isinstance(prompt, list):
+            prompt = "\n".join(map(str, prompt))
+        elif not isinstance(prompt, str):
+            prompt = str(prompt)
+
         model = data.get('model', AVAILABLE_MODELS[0])
-        content_type = data.get('content_type', 'chat')  # chat, business_plan, pitch_deck
+        content_type = data.get('content_type', 'chat')
         temperature = data.get('temperature', 0.7)
         max_tokens = data.get('max_tokens', 2048)
-        output_format = data.get('output_format', 'text')  # text, json
-        
         if model not in AVAILABLE_MODELS:
-            return standard_response(False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400)
-        
-        if not GROQ_API_KEY and model == 'qwen/qwen3-32b':
-            return standard_response(False, None, 'Groq API key not configured', 500)
-        
-        if not OPENAI_API_KEY and model == 'openai/gpt-oss-20b':
-            return standard_response(False, None, 'OpenAI API key not configured', 500)
-        # Simplified system prompts
+            return standard_response(
+                False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400
+            )
+
+        # =========================
+        # SYSTEM PROMPTS
+        # =========================
         system_prompts = {
-            'chat': '''You are a helpful and professional AI assistant. Provide accurate, detailed, and well-structured responses in Markdown format.''',
-            
-            'business_plan': '''You are an expert business consultant specializing in startup development. 
-            Generate a comprehensive, professional business plan in Markdown format.
-            
-            Include these sections:
-            1. Executive Summary
-            2. Company Description
-            3. Market Analysis
-            4. Products & Services
-            5. Marketing Strategy
-            6. Operations Plan
-            7. Management Team
-            8. Financial Projections
-            9. Funding Needs
-            10. Risk Analysis
-            
-            Use proper Markdown formatting with headers, lists, tables where appropriate.
-            Include realistic numbers and data.''',
-            
-            'pitch_deck': '''You are a pitch deck expert and venture capital advisor. 
-            Generate compelling, investor-ready pitch deck content in Markdown format.
-            
-            Structure it as a pitch deck with these slides:
-            1. Title Slide
-            2. The Problem
-            3. The Solution
-            4. Market Opportunity
-            5. Product
-            6. Business Model
-            7. Traction
-            8. Competition
-            9. Team
-            10. Financials
-            11. Funding Ask
-            12. Contact
-            
-            Use proper Markdown formatting. Make it visually descriptive and include quantifiable metrics.'''
+            'chat': (
+                "You are a helpful and professional AI assistant. "
+                "Provide accurate, detailed, well-structured responses in Markdown."
+            ),
+            'pitch_deck': (
+                "You are a venture capital pitch expert.\n\n"
+                "Generate investor-ready pitch deck content in Markdown.\n\n"
+                "Slides:\n"
+                "1. Title\n2. Problem\n3. Solution\n4. Market\n5. Product\n"
+                "6. Business Model\n7. Traction\n8. Competition\n9. Team\n"
+                "10. Financials\n11. Funding Ask\n12. Contact"
+            ),
         }
-        
+
         system_prompt = system_prompts.get(content_type, system_prompts['chat'])
-        
-        # Enhance prompt based on content type
+
+        # =========================
+        # PROMPT ENHANCEMENT
+        # =========================
         if content_type == 'business_plan':
-            enhanced_prompt = f"""Create a comprehensive, investor-ready business plan for: {prompt}
-            
-            Please include:
-            1. Specific, quantifiable data where applicable
-            2. Realistic financial projections
-            3. Detailed market analysis
-            4. Clear operational plans
-            5. Risk assessment and mitigation strategies
-            
-            Format the response in Markdown with clear sections and proper formatting."""
-            
+            enhanced_prompt = (
+                "Create an investor-ready business plan for:\n\n"
+                f"{prompt}\n\n"
+                "Include realistic financials, market sizing, risks, and operations."
+            )
+
         elif content_type == 'pitch_deck':
-            enhanced_prompt = f"""Create a compelling, investor-focused pitch deck for: {prompt}
-            
-            Requirements:
-            1. Make it visually descriptive (imagine each slide's content)
-            2. Include quantifiable metrics and projections
-            3. Highlight competitive advantages clearly
-            4. Focus on traction and proof points
-            5. Structure for a 10-12 minute presentation
-            
-            Format the response in Markdown with slide titles and bullet points."""
-            
+            enhanced_prompt = (
+                "Create an investor-focused pitch deck for:\n\n"
+                f"{prompt}\n\n"
+                "Include metrics, traction, competitive advantages, and projections."
+            )
         else:
             enhanced_prompt = prompt
-        response_text = ""
-        if model == 'qwen/qwen3-32b' and content_type in ['business_plan', 'pitch_deck']:
-            max_tokens = min(max_tokens, 4096)
 
-            # Call Groq API - REMOVE response_format for now to avoid JSON validation issues
-            chat_completion = groq_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": enhanced_prompt}
-                ],
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens
-                # Remove response_format to avoid JSON validation errors
-                # response_format={"type": "json_object"} if content_type in ['business_plan', 'pitch_deck'] else None
-            )
-            response_text = chat_completion.choices[0].message.content
-        
-        elif model == 'openai/gpt-oss-20b':
-            # Call OpenAI API directly
-            headers = {
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
-                'Content-Type': 'application/json'
-            }
+        response_text, tokens_used = get_response(model, system_prompt, enhanced_prompt, temperature=temperature, max_tokens=max_tokens)
 
-            payload = {
-                "model": "gpt-4.1-mini",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": [
-                            {"type": "text", "text": system_prompt}
-                        ]
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": enhanced_prompt}
-                        ]
-                    }
-                ],
-                "temperature": temperature,
-                "max_tokens": max_tokens
-            }
-            
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=payload
-            )
-            data = response.json()
-            response_text = data["choices"][0]["message"]["content"]
-
-            chat_completion = response.json()
-        
-        
-        # Generate downloadable content
-        download_formats = ['txt', 'md']
+        # =========================
+        # FILE GENERATION
+        # =========================
         download_links = {}
-        
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
-        for fmt in download_formats:
+
+        for fmt in ['txt', 'md']:
             filename = f"{content_type}_{timestamp}.{fmt}"
             filepath = os.path.join(QWN_UPLOAD_FOLDER, filename)
-            
+
             try:
                 with open(filepath, 'w', encoding='utf-8') as f:
                     if fmt == 'md':
                         f.write(f"# {content_type.replace('_', ' ').title()}\n\n")
-                        f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                        f.write(f"**Model:** {model}\n")
-                        f.write(f"**Prompt:** {prompt[:200]}...\n\n")
-                        f.write("---\n\n")
-                        f.write(response_text)
-                    else:  # txt
-                        f.write(response_text)
-                
-                download_links[fmt] = f"/api/qwen/download/{filename}"
-                
+                        f.write(f"**Generated:** {datetime.utcnow().isoformat()} UTC\n")
+                        f.write(f"**Model:** {model}\n\n---\n\n")
+                    f.write(response_text)
+
+                download_links[fmt] = f"/api/ai/download/{filename}"
+
             except Exception as e:
-                logging.error(f"Error creating {fmt} file: {str(e)}")
-        
+                logging.error(f"File generation failed: {e}")
+
+        # =========================
+        # RESPONSE
+        # =========================
         return standard_response(True, {
-            'response': response_text,  # Return as text, not parsed JSON
-            'model': model,
-            'content_type': content_type,
-            'download_links': download_links,
-            'timestamp': datetime.now().isoformat(),
-            'tokens_used': chat_completion.usage.total_tokens if hasattr(chat_completion, 'usage') else None,
-            'format': 'markdown'
+            "response": response_text,
+            "model": model,
+            "content_type": content_type,
+            "download_links": download_links,
+            "timestamp": datetime.utcnow().isoformat(),
+            "tokens_used": tokens_used,
+            "format": "markdown",
         })
-    
+
     except Exception as e:
-        logging.error(f'Generation error: {str(e)}')
+        logging.exception("Generation error")
         return standard_response(False, None, str(e), 500)
+
+
+def format_metadata_block(metadata: dict) -> str:
+            if not metadata:
+                return ""
+
+            lines = []
+            for key, value in metadata.items():
+                if value:
+                    label = key.replace("_", " ").title()
+                    lines.append(f"- **{label}:** {value}")
+
+            if not lines:
+                return ""
+
+            return (
+                "### Context & Constraints (User-Provided Metadata)\n"
+                + "\n".join(lines)
+                + "\n\n"
+            )
+
+@ai_bp.route('/business-ideas', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def qwen_business_ideas():
+    try:
+        if request.method == 'OPTIONS':
+            return standard_response(True, {}, code=200)
+        data = request.get_json()
+        content_type = data.get('content_type', 'business_ideas')
+        IDEA_CREDITS_COST = 5
+        BUSINESS_PLAN_CREDITS_COST = 10
+        if content_type == 'business_ideas':
+            required_credits = IDEA_CREDITS_COST
+        elif content_type == 'business_plan':
+            required_credits = BUSINESS_PLAN_CREDITS_COST
+        else:
+            return standard_response(False, None, 'Invalid content_type. Choose business_ideas or business_plan', 400)
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return standard_response(False, None, 'User not found', 404)
+        if user.credits < required_credits:
+            return standard_response(False, None, 'Insufficient credits', 402)
+        model = data.get('model', AVAILABLE_MODELS[0])
+        max_tokens = data.get('max_tokens', 2048)
+        metadata = data.get('metadata', {})
+        if  content_type not in ['business_ideas', 'business_plan']:
+            return standard_response(False, None, 'Invalid content_type. Choose business_ideas or business_plan', 400)
         
+
+        system_prompts = {
+            'business_ideas': (
+                "You are a senior startup strategist and venture studio consultant with experience "
+                "launching, validating, and scaling early-stage companies globally.\n\n"
+
+                "Your task is to generate innovative, realistic, and execution-ready business ideas "
+                "based on the user's input.\n\n"
+
+                "CRITICAL INSTRUCTIONS:\n"
+                "- Output must be written in clean, well-structured Markdown\n"
+                "- Ideas must be realistic, monetizable, and aligned with current market trends\n"
+                "- Avoid generic or obvious ideas\n"
+                "- Focus on differentiation, defensibility, and scalability\n"
+                "- Assume the reader is a founder or early-stage investor\n\n"
+
+                "FOR EACH BUSINESS IDEA, INCLUDE THE FOLLOWING SECTIONS:\n\n"
+
+                "## 1. Idea Name\n"
+                "- Short, brandable, and descriptive name\n\n"
+
+                "## 2. One-Line Pitch\n"
+                "- A concise sentence explaining what the business does and for whom\n\n"
+
+                "## 3. Problem Statement\n"
+                "- Clearly describe the real-world problem being solved\n"
+                "- Who experiences this problem and why it matters\n\n"
+
+                "## 4. Solution Overview\n"
+                "- How the product or service solves the problem\n"
+                "- What makes the solution compelling and usable\n\n"
+
+                "## 5. Target Market\n"
+                "- Primary customer segment (B2B, B2C, niche, enterprise, etc.)\n"
+                "- Ideal customer profile\n"
+                "- Geographic focus if relevant\n\n"
+
+                "## 6. Revenue Model\n"
+                "- How the business makes money\n"
+                "- Pricing strategy (subscription, usage-based, licensing, etc.)\n\n"
+
+                "## 7. Unique Selling Points (USP)\n"
+                "- What makes this idea different from competitors\n"
+                "- Why customers would choose this over alternatives\n\n"
+
+                "## 8. Competitive Landscape\n"
+                "- Existing alternatives or competitors\n"
+                "- How this idea positions itself differently\n\n"
+
+                "## 9. Validation & MVP Strategy\n"
+                "- How to test this idea quickly\n"
+                "- What an MVP could look like\n\n"
+
+                "## 10. Scalability & Growth Potential\n"
+                "- How this business could grow over time\n"
+                "- Expansion paths, upsells, or network effects\n\n"
+
+                "OUTPUT REQUIREMENTS:\n"
+                "- Generate 3 to 5 distinct business ideas\n"
+                "- Use clear Markdown headers and bullet points\n"
+                "- Be concise but insightful\n"
+                "- No emojis, no fluff, no filler text"
+            ),
+
+            'business_plan': (
+                "You are an expert business consultant, former startup founder, and investor advisor.\n\n"
+
+                "Your task is to generate a professional, investor-ready business plan based on the "
+                "user's input.\n\n"
+
+                "The output will be used for:\n"
+                "- Investor review\n"
+                "- Strategic planning\n"
+                "- PDF generation\n\n"
+
+                "CRITICAL INSTRUCTIONS:\n"
+                "- Write in a formal, professional tone\n"
+                "- Output must be in clean, structured Markdown\n"
+                "- Use clear section headers\n"
+                "- Avoid vague language and generic advice\n"
+                "- Assume the reader understands business fundamentals\n\n"
+
+                "STRUCTURE THE BUSINESS PLAN USING THE FOLLOWING SECTIONS:\n\n"
+
+                "## 1. Executive Summary\n"
+                "- Brief overview of the business\n"
+                "- Value proposition\n"
+                "- Target market\n"
+                "- Financial and funding highlights\n\n"
+
+                "## 2. Company Description\n"
+                "- Mission and vision\n"
+                "- Legal structure (assumed if not provided)\n"
+                "- Stage of the company (idea, MVP, early traction)\n\n"
+
+                "## 3. Market Analysis\n"
+                "- Industry overview\n"
+                "- Market size (TAM, SAM, SOM if applicable)\n"
+                "- Trends and growth drivers\n"
+                "- Customer segmentation\n\n"
+
+                "## 4. Problem & Opportunity\n"
+                "- Clear articulation of the problem\n"
+                "- Why existing solutions are insufficient\n"
+                "- Market opportunity created by this gap\n\n"
+
+                "## 5. Products & Services\n"
+                "- Detailed description of the offering\n"
+                "- Key features and benefits\n"
+                "- Product roadmap (short-term vs long-term)\n\n"
+
+                "## 6. Business Model\n"
+                "- How the company generates revenue\n"
+                "- Pricing strategy\n"
+                "- Key cost drivers\n\n"
+
+                "## 7. Marketing & Sales Strategy\n"
+                "- Customer acquisition channels\n"
+                "- Go-to-market strategy\n"
+                "- Sales funnel and retention strategy\n\n"
+
+                "## 8. Operations Plan\n"
+                "- Day-to-day operations\n"
+                "- Technology stack assumptions\n"
+                "- Key partners or suppliers\n\n"
+
+                "## 9. Management & Team\n"
+                "- Founding team roles (assumed if not provided)\n"
+                "- Key skills and responsibilities\n"
+                "- Hiring roadmap\n\n"
+
+                "## 10. Competitive Analysis\n"
+                "- Key competitors\n"
+                "- Competitive advantages\n"
+                "- Barriers to entry\n\n"
+
+                "## 11. Financial Projections\n"
+                "- Revenue projections (3–5 years)\n"
+                "- Cost structure\n"
+                "- High-level profitability outlook\n"
+                "- Assumptions used\n\n"
+
+                "## 12. Funding Requirements\n"
+                "- Amount of funding required\n"
+                "- Use of funds\n"
+                "- Expected runway\n\n"
+
+                "## 13. Risk Analysis & Mitigation\n"
+                "- Market risks\n"
+                "- Operational risks\n"
+                "- Financial risks\n"
+                "- Mitigation strategies\n\n"
+
+                "OUTPUT REQUIREMENTS:\n"
+                "- Use Markdown headings (##)\n"
+                "- Use bullet points and tables where appropriate\n"
+                "- Keep the content realistic and coherent\n"
+                "- Make it suitable for direct PDF conversion\n"
+                "- Do NOT include disclaimers or AI mentions"
+            )
+
+        }
+        system_prompt = system_prompts.get(content_type)
+
+        
+        prompt = data.get('prompt')
+
+        if isinstance(prompt, list):
+            prompt = "\n".join(map(str, prompt))
+        elif not isinstance(prompt, str):
+            prompt = str(prompt)
+
+        model = data.get('model', AVAILABLE_MODELS[0])
+        content_type = data.get('content_type', 'chat')
+        temperature = data.get('temperature', 0.7)
+        max_tokens = data.get('max_tokens', 4096)
+        if model not in AVAILABLE_MODELS:
+            return standard_response(
+                False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400
+            )
+        # =========================
+        # PROMPT ENHANCEMENT
+        # =========================
+        metadata_block = format_metadata_block(metadata)
+
+        if content_type == 'business_ideas':
+            enhanced_prompt = f"""
+            {metadata_block}
+
+            User request:
+            {prompt}
+
+            Additional requirements:
+            - Assume this is for a real startup, not a hypothetical idea.
+            - Ideas must be commercially viable within 12–36 months.
+            - Budget, location, and tech constraints MUST be respected.
+            - Industry assumptions must align with the provided metadata.
+            - If metadata is missing, state reasonable assumptions explicitly.
+            - Avoid generic SaaS ideas unless strongly differentiated.
+
+            For each idea, be specific, concrete, and practical.
+            """
+
+
+        elif content_type == 'business_plan':
+            enhanced_prompt = f"""
+            {metadata_block}
+
+            Business concept:
+            {prompt}
+
+            Business plan requirements:
+            - Write for professional investors.
+            - Use the provided metadata as hard constraints.
+            - Budget must influence scope, hiring, and GTM strategy.
+            - Location must influence market access, costs, and regulation.
+            - Technology choices must align with stated tech preferences.
+            - Clearly label estimates when assumptions are made.
+
+            Tone:
+            - Professional
+            - No fluff
+            - Investor-grade clarity
+            """
+
+        else:
+            enhanced_prompt = prompt
+        response_text, tokens_used = get_response(model, system_prompt, enhanced_prompt, temperature=temperature, max_tokens=max_tokens)
+        user.credits -= required_credits
+        db.session.commit()
+        # =========================
+        # FILE GENERATION
+        # =========================
+        download_links = {}
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        pdf_filename = f"{content_type}_{timestamp}.pdf"
+        pdf_path = os.path.join(QWN_UPLOAD_FOLDER, pdf_filename)
+
+        try:
+            generate_pdf_from_markdown(response_text, pdf_path)
+            download_links["pdf"] = f"/api/ai/download/{pdf_filename}"
+        except Exception as e:
+            logging.error(f"PDF generation failed: {e}")
+
+        for fmt in ['txt', 'md']:
+            filename = f"{content_type}_{timestamp}.{fmt}"
+            filepath = os.path.join(QWN_UPLOAD_FOLDER, filename)
+
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    if fmt == 'md':
+                        f.write(f"# {content_type.replace('_', ' ').title()}\n\n")
+                        f.write(f"**Generated:** {datetime.utcnow().isoformat()} UTC\n")
+                        f.write(f"**Model:** {model}\n\n---\n\n")
+                    f.write(response_text)
+
+                download_links[fmt] = f"/api/ai/download/{filename}"
+
+            except Exception as e:
+                logging.error(f"File generation failed: {e}")
+
+        return standard_response(True, {
+            "response": response_text,
+            "model": model,
+            "content_type": content_type,
+            "download_links": download_links,
+            "timestamp": datetime.utcnow().isoformat(),
+            "tokens_used": tokens_used,
+            "format": "markdown",
+        })
+    except:
+        print('An exception occurred')
+        logging.exception("Business ideas/plans error")
+        return standard_response(False, None, str(e), 500)
 ### Chat 
 @ai_bp.route('/chat', methods=['POST', 'OPTIONS'])
 def qwen_chat():
@@ -533,7 +921,6 @@ def generate_logo():
             model="gpt-4.1-mini",
             input=slogan_prompt
         )
-        print(slogan_response)
         slogan_responses = extract_text_from_response(slogan_response, expect_json=True, strict=True)
 
         if not slogan_responses:
@@ -638,14 +1025,17 @@ def upload_document():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
-    if not user or user.role not in ["ADMIN"]:
+    if not user or not user.is_admin():
         return {
             "success": False,
             "error": "You are not authorized to upload documents"
         }, 403
     if "file" not in request.files:
         return {"error": "No file provided"}, 400
-
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user.is_admin():
+        return {"error": "Unauthorized"}, 403
     file = request.files["file"]
     if file.filename == "":
         return {"error": "Empty filename"}, 400
@@ -680,10 +1070,170 @@ def assistant_query():
         return standard_response(False, None, "Empty question", 400)
 
     answer = ask_assistant(question)
-
+    print("Assistant answer:", answer)
     return standard_response(True, {
         "answer": answer
     })
+
+@ai_bp.route("/image/text-to-image", methods=["POST", "OPTIONS"])
+@jwt_required()
+def text_to_image():
+    if request.method == "OPTIONS":
+        return standard_response(True, {}, code=200)
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
+    if not user:
+        return standard_response(False, None, "Unauthorized", 401)
+
+    data = request.get_json()
+    prompt = data.get("prompt", "").strip()
+
+    if not prompt:
+        return standard_response(False, None, "Prompt is required", 400)
+
+    COST_PER_IMAGE = 10
+
+    if user.credits < COST_PER_IMAGE:
+        return standard_response(False, None, "Not enough credits", 402)
+
+    try:
+        image_base64 = generate_image(prompt)
+    except Exception as e:
+        return standard_response(False, None, str(e), 500)
+
+    user.credits -= COST_PER_IMAGE
+    db.session.commit()
+
+    return standard_response(True, {
+        "cost": COST_PER_IMAGE,
+        "image": {
+            "base64": image_base64
+        }
+    })
+
+# ==================================
+# Generates social media captions using AI from text input or image + text input. Captions are optimized per platform and tone and
+# return only caption text.
+#
+# Supported platforms: Instagram, LinkedIn, Twitter/X, Facebook, YouTube (community posts), TikTok
+#
+# Supported tones: casual, professional, inspiring, promotional, educational, storytelling, humorous, minimalist
+# ==================================
+@ai_bp.route('/generate/caption', methods=['POST'])
+def generate_caption():
+    try:
+        if request.method == 'OPTIONS':
+            return standard_response(True, {}, code=200)
+
+        data = request.get_json()
+        if not data:
+            return standard_response(False, None, 'Missing data in request', 400)
+
+        model = data.get('model', AVAILABLE_MODELS[0])
+        content_type = data.get('content_type', 'text')
+        platform = data.get('platform', 'Instagram')
+        tone = data.get('tone', 'casual')
+        temperature = data.get('temperature', 0.7)
+        max_tokens = data.get('max_tokens', 200)
+
+        prompt = data.get('prompt')
+
+        if isinstance(prompt, list):
+            prompt = "\n".join(map(str, prompt))
+        elif not isinstance(prompt, str):
+            prompt = str(prompt)
+
+        if model not in AVAILABLE_MODELS:
+            return standard_response(
+                False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400
+            )
+        
+        # ==================================
+        # CAPTION-BASED SYSTEM PROMPTS
+        # ==================================
+
+        CAPTION_SYSTEM_PROMPTS = {
+            "text": (
+                "You are a professional social media copywriter.\n"
+                "Generate short, catchy, platform-optimized captions.\n"
+                "Rules:\n"
+                "- Output only caption text\n"
+                "- No explanations\n"
+                "- Include emojis and hashtags where appropriate\n"
+                "- Generate 3 variations\n"
+            ),
+            "image": (
+                "You are a professional social media copywriter.\n"
+                "Generate short, catchy, platform-optimized captions from the given image and optional context.\n"
+                "Generate captions that visually match the image.\n"
+                "Rules:\n"
+                "- Do not mention the image explicitly\n"
+                "- No analysis or explanations\n"
+                "- Include emojis and hashtags\n"
+                "- Generate 3 variations\n"
+            )
+        }
+
+        system_prompt = CAPTION_SYSTEM_PROMPTS[content_type]
+        response_text = ""
+        tokens_used = 0
+
+        # =========================
+        # TEXT-ONLY CAPTION
+        # =========================
+        if content_type == 'text':
+
+            user_prompt = (
+                f"Platform: {platform}\n"
+                f"Tone: {tone}\n"
+                f"Input: {prompt}"
+            )
+
+            response_text, tokens_used = get_response(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        # =========================
+        # IMAGE-BASED CAPTION
+        # =========================
+        if content_type == 'image':
+            image_file = data.get('image')
+            if not image_file:
+                return standard_response(False, None, 'Image file required', 400)
+
+            response_text, tokens_used = get_vision_response(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_file=image_file,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        # =========================
+        # RESPONSE
+        # =========================
+        return standard_response(True, {
+            "response": response_text,
+            "model": model,
+            "tokens_used": tokens_used,
+            "content_type": content_type,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+    except Exception as e:
+        logging.exception("Generation error")
+        return standard_response(False, None, str(e), 500)
+
+    except Exception as e:
+        logging.exception("Caption generation failed")
+        return standard_response(False, None, str(e), 500)
 
 
 # @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])

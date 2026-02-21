@@ -14,7 +14,7 @@ class IdeaComment(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    suggestion = db.Column(db.Boolean, default=False)
     #! Relationships
     comment_author = db.relationship('User', back_populates='idea_comments', foreign_keys=[author_id])
     parent_idea = db.relationship('Idea', back_populates='idea_comments', foreign_keys=[idea_id])
@@ -42,5 +42,6 @@ class IdeaComment(db.Model):
                 'fullName': self.get_author_name()
             },
             'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat()
+            'updatedAt': self.updated_at.isoformat(),
+            'suggestion': self.suggestion
         }

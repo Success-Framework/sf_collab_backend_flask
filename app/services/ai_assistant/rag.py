@@ -1,14 +1,25 @@
 # app/services/ai_assistant/rag.py
 
 from sentence_transformers import SentenceTransformer
+from threading import Lock
 from groq import Groq
 from flask import current_app
 
 from app.services.ai_assistant.vector_store import get_collection
 from app.services.ai_assistant.prompts import ASSISTANT_SYSTEM_PROMPT
 import re
+_embedding_model = None
+_model_lock = Lock()
 
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        with _model_lock:
+            if _embedding_model is None:
+                _embedding_model = SentenceTransformer(
+                    "sentence-transformers/all-MiniLM-L6-v2"
+                )
+    return _embedding_model
 
 # SIMILARITY_THRESHOLD = 0.25
 MAX_DISTANCE_THRESHOLD = 2.0
@@ -27,10 +38,13 @@ def ask_assistant(question: str) -> str:
     """
     question = question.lower().strip()
     # 1. Embed query
+    embedding_model = get_embedding_model()
     query_embedding = embedding_model.encode([question])[0].tolist()
 
     # 2. Vector search
     collection = get_collection()
+    print("Total vectors:", collection.count())
+
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=TOP_K,
@@ -39,7 +53,8 @@ def ask_assistant(question: str) -> str:
 
     documents = results.get("documents", [[]])[0]
     distances = results.get("distances", [[]])[0]
-
+    print("RAG documents:", documents)
+    print("RAG distances:", distances)
     if not documents or not distances:
         return FALLBACK2
 

@@ -12,9 +12,8 @@ class StartupBookmark(db.Model):
     url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    bookmark_owner = db.relationship('User', back_populates='startup_bookmarks',foreign_keys=[user_id])
-    bookmarked_startup = db.relationship('Startup', back_populates='startup_bookmarks',foreign_keys=[startup_id])
-    
+    user = db.relationship('User', back_populates='startup_bookmarks',foreign_keys=[user_id])
+    startup = db.relationship('Startup', back_populates='startup_bookmarks', foreign_keys=[startup_id])
     # HELPER FUNCTIONS
     
     def update_content(self, title=None, content_preview=None, url=None):

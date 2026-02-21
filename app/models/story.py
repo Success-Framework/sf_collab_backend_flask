@@ -53,15 +53,15 @@ class Story(db.Model):
     
     def get_viewers_count(self):
         """Get number of unique viewers"""
-        return self.story_views.count()
+        return self.views_list.count()
     
     def get_recent_viewers(self, limit=10):
         """Get recent viewers"""
-        return self.story_views.order_by(StoryView.viewed_at.desc()).limit(limit).all()
+        return self.views_list.order_by(StoryView.viewed_at.desc()).limit(limit).all()
     
     def has_user_viewed(self, user_id):
         """Check if user has viewed this story"""
-        return self.story_views.filter_by(user_id=user_id).first() is not None
+        return self.views_list.filter_by(user_id=user_id).first() is not None
     
     def _enum_to_value(self,value):
         return value.value if hasattr(value, "value") else value
