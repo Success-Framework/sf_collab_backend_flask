@@ -41,9 +41,7 @@ class JoinRequest(db.Model):
         try:
         
             from app.models.chatConversation import ChatConversation
-            chat_conversation = ChatConversation.query.filter_by(startup_id=self.startup_id).first()
-            if chat_conversation:
-                chat_conversation.add_participant(self.user_id)
+            ChatConversation.add_to_startup_chat(member.member_user, self.target_startup)
             db.session.add(member)
         except Exception as e:
           print("Error adding member to chat conversation:", e)

@@ -275,6 +275,7 @@ DROP TABLE IF EXISTS `chat_conversations`;
 CREATE TABLE `chat_conversations` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(255) DEFAULT NULL,
+  `parent_startup_id` int DEFAULT NULL,
   `conversation_type` varchar(20) DEFAULT NULL,
   `created_by_id` int NOT NULL,
   `description` text,
@@ -357,6 +358,7 @@ CREATE TABLE `conversation_participants` (
   `user_id` int NOT NULL,
   `joined_at` datetime DEFAULT NULL,
   `role` varchar(20) DEFAULT NULL,
+  `is_hidden` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`conversation_id`,`user_id`),
   KEY `conversation_id` (`conversation_id`),
   KEY `user_id` (`user_id`),
@@ -2001,6 +2003,7 @@ CREATE TABLE `user_wallets` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,
   `sf_coins` int DEFAULT 0,
+  `credits` int DEFAULT 0,
   `premium_gems` int DEFAULT 0,
   `event_tokens` int DEFAULT 0,
   `total_coins_earned` int DEFAULT 0,
@@ -2082,3 +2085,28 @@ LOCK TABLES `event_token_balances` WRITE;
 /*!40000 ALTER TABLE `event_token_balances` DISABLE KEYS */;
 /*!40000 ALTER TABLE `event_token_balances` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `errors`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `errors` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `error_message` varchar(500) NOT NULL,
+  `error_from_backend` varchar(255) DEFAULT NULL,
+  `stack` text,
+  `page` varchar(255) DEFAULT NULL,
+  `component` varchar(255) DEFAULT NULL,
+  `timestamp` datetime DEFAULT CURRENT_TIMESTAMP,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_errors_timestamp` (`timestamp`),
+  KEY `idx_errors_created_at` (`created_at`),
+  KEY `idx_errors_error_from_backend` (`error_from_backend`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `errors` WRITE;
+/*!40000 ALTER TABLE `errors` DISABLE KEYS */;
+/*!40000 ALTER TABLE `errors` ENABLE KEYS */;
+UNLOCK TABLES;
+
