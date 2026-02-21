@@ -96,8 +96,9 @@ def get_user_plan_type(user: User) -> PlanType:
   """Get the plan type for a user based on plan_id"""
   if not user.founder_plan_id and not user.builder_plan_id:
     return PlanType.FOUNDER_FREE
-  
+  print(f"User {user.id} - Founder Plan: {user.founder_plan_id}, Builder Plan: {user.builder_plan_id}")
   plan_mapping = {
+    # Standard plans
     "founder-free": PlanType.FOUNDER_FREE,
     "founder-starter": PlanType.FOUNDER_STARTER,
     "founder-pro": PlanType.FOUNDER_PRO,
@@ -107,6 +108,22 @@ def get_user_plan_type(user: User) -> PlanType:
     "builder-pro": PlanType.BUILDER_PRO,
     "builder-plus": PlanType.BUILDER_PLUS,
     "builder-elite": PlanType.BUILDER_ELITE,
+    # Crowdfunding plans map to their standard equivalents
+    "crowdfunding-founder-explorer": PlanType.FOUNDER_STARTER,
+    "crowdfunding-founder-starter-supporter": PlanType.FOUNDER_STARTER,
+    "crowdfunding-founder-pro": PlanType.FOUNDER_PRO,
+    "crowdfunding-founder-power": PlanType.FOUNDER_SCALE,
+    "crowdfunding-founder-champion": PlanType.FOUNDER_SCALE,
+    "crowdfunding-founder-patron": PlanType.FOUNDER_PARTNER,
+    "crowdfunding-founding-partner": PlanType.FOUNDER_PARTNER,
+    "crowdfunding-strategic-supporter": PlanType.FOUNDER_PARTNER,
+    "crowdfunding-builder-supporter": PlanType.BUILDER_PRO,
+    "crowdfunding-builder-early": PlanType.BUILDER_PRO,
+    "crowdfunding-builder-starter": PlanType.BUILDER_PLUS,
+    "crowdfunding-builder-pro-supporter": PlanType.BUILDER_PLUS,
+    "crowdfunding-builder-power-supporter": PlanType.BUILDER_ELITE,
+    "crowdfunding-builder-champion": PlanType.BUILDER_ELITE,
+    "crowdfunding-builder-patron": PlanType.BUILDER_ELITE,
   }
   if user.founder_plan_id:
     plan_id = user.founder_plan_id
@@ -114,6 +131,7 @@ def get_user_plan_type(user: User) -> PlanType:
     plan_id = user.builder_plan_id
   else:
     plan_id = "founder-free"
+  
   return plan_mapping.get(plan_id.lower(), PlanType.FOUNDER_FREE)
 
 def get_plan_limits(user: User) -> dict:
@@ -132,15 +150,7 @@ def can_create_project(user: User) -> bool:
 def can_add_collaborator(user: User) -> bool:
     plan_limits = get_plan_limits(user)
 
-    current_collaborators = (
-        db.session
-        .query(func.count(StartupMember.id))
-        .filter(
-            StartupMember.user_id != user.id
-        )
-        .scalar()
-    )
-
+    current_collaborators = db.session.query(func.count(StartupMember.id)).join(StartupMember.member_startup).filter(StartupMember.user_id == user.id and StartupMember.member_startup.creator_id == user.id).scalar()
     return current_collaborators < plan_limits["max_collaborators"]
 
 def can_create_task_or_milestone(user: User) -> bool:
