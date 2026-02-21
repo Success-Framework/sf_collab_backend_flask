@@ -75,7 +75,8 @@ def create_comment():
             content=data['content'],
             author_id=data['author_id'],
             author_first_name=data['author_first_name'],
-            author_last_name=data['author_last_name']
+            author_last_name=data['author_last_name'],
+            suggestion=data.get('suggestion', False)
         )
         
         db.session.add(comment)

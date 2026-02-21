@@ -38,11 +38,16 @@ class JoinRequest(db.Model):
             role=self.role,
             joined_at=datetime.utcnow()
         )
-        from app.models.chatConversation import ChatConversation
-        chat_conversation = ChatConversation.query.filter_by(startup_id=self.startup_id).first()
-        if chat_conversation:
-            chat_conversation.add_participant(self.user_id)
-        db.session.add(member)
+        try:
+        
+            from app.models.chatConversation import ChatConversation
+            chat_conversation = ChatConversation.query.filter_by(startup_id=self.startup_id).first()
+            if chat_conversation:
+                chat_conversation.add_participant(self.user_id)
+            db.session.add(member)
+        except Exception as e:
+          print("Error adding member to chat conversation:", e)
+          pass
         return member
     
     def reject(self, reviewer_id=None):

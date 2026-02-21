@@ -525,6 +525,7 @@ CREATE TABLE `idea_comments` (
   `author_id` int NOT NULL,
   `author_first_name` varchar(100) DEFAULT NULL,
   `author_last_name` varchar(100) DEFAULT NULL,
+  `suggestion` boolean DEFAULT FALSE,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
