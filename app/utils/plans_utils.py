@@ -160,15 +160,17 @@ def can_upload_file(user: User, file_size_mb: float) -> bool:
 
 def consume_ai_credits(user: User, amount: int) -> bool:
   """Consume AI credits for a user"""
-  if user.credits >= amount:
-    user.credits -= amount
+  if getattr(user, 'wallet', None) and (user.wallet.credits or 0) >= amount:
+    user.wallet.spend_credits(amount, description="Consumed AI Credits")
     db.session.commit()
     return True
   return False
 
 def get_remaining_ai_credits(user: User) -> int:
   """Get remaining AI credits for user"""
-  return user.credits
+  if getattr(user, 'wallet', None):
+      return user.wallet.credits or 0
+  return 0
 
 def calculate_platform_fee(user: User, amount: float) -> float:
   """Calculate platform fee based on user's plan"""

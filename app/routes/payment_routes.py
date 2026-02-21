@@ -396,6 +396,18 @@ def stripe_webhook():
                 
                 if plan_credits > 0:
                     user.credits = (user.credits or 0) + plan_credits
+                    
+                    # Also log this real-money purchase into the UserWallet gamified ledger
+                    if not user.wallet:
+                        from app.models.UserWallet import UserWallet
+                        user.wallet = UserWallet(user_id=user.id)
+                        db.session.add(user.wallet)
+                        db.session.flush()
+                        
+                    user.wallet.add_credits(
+                        amount=plan_credits,
+                        description=f"Purchased plan/top-up: {plan_id}"
+                    )
             else:
                 print(f"⚠️ User {user_id} not found")
 

@@ -446,7 +446,7 @@ def qwen_business_ideas():
         user = User.query.get(user_id)
         if not user:
             return standard_response(False, None, 'User not found', 404)
-        if user.credits < required_credits:
+        if not user.wallet or user.wallet.credits < required_credits:
             return standard_response(False, None, 'Insufficient credits', 402)
         model = data.get('model', AVAILABLE_MODELS[0])
         max_tokens = data.get('max_tokens', 2048)
@@ -682,7 +682,10 @@ def qwen_business_ideas():
         else:
             enhanced_prompt = prompt
         response_text, tokens_used = get_response(model, system_prompt, enhanced_prompt, temperature=temperature, max_tokens=max_tokens)
-        user.credits -= required_credits
+        user.wallet.spend_credits(
+            amount=required_credits, 
+            description=f"Generated AI content: {content_type}"
+        )
         db.session.commit()
         # =========================
         # FILE GENERATION
