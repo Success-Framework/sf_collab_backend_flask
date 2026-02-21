@@ -1339,6 +1339,7 @@ def get_startup_member_ids(startup_id, exclude_user_id=None):
 @jwt_required()
 def remove_startup_member(startup_id, member_id):
     """Remove member from startup"""
+    current_user = get_jwt_identity()
     startup = Startup.query.get_or_404(startup_id)
 
     if not can_manage_members(startup_id):
@@ -1346,6 +1347,8 @@ def remove_startup_member(startup_id, member_id):
 
     # Get member info before removal for notification
     member = StartupMember.query.get(member_id)
+    if member.user_id == current_user:
+        return error_response('You cannot remove yourself. Use the leave startup endpoint instead.', 400)
     member_user_id = member.user_id if member else None
 
     db.session.delete(member)
@@ -1475,3 +1478,41 @@ def leave_startup(startup_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to leave startup: {str(e)}', 500)
+
+@startups_bp.route('/<int:startup_id>/members/<int:member_id>/change-role', methods=['POST'])
+@jwt_required()
+def change_member_role(startup_id, member_id):
+    """Change a member's role (e.g. from member to founder)"""
+    current_user_id = get_jwt_identity()
+    
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized', 403)
+    
+    member = StartupMember.query.get(member_id)
+    if not member:
+        return error_response('Member not found', 404)
+    
+    if member.startup_id != startup_id:
+        return error_response('Member does not belong to this startup', 400)
+    startup = Startup.query.get(startup_id)
+    data = request.get_json() or {}
+    new_role = data.get('role')
+    if new_role not in startup.roles.keys():
+        return error_response('Invalid role specified', 400)
+    
+    try:
+        member.role = new_role
+        db.session.commit()
+        
+        try:
+            notify_info(
+                user_id=member.user_id,
+                message=f"Your role in the startup {member.startup.name} has been changed to: {new_role}"
+            )
+        except Exception as e:
+            print(f"⚠️ Role change notification failed: {e}")
+        
+        return success_response(message='Member role changed successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to change member role: {str(e)}', 500)
