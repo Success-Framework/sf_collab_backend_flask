@@ -9,15 +9,18 @@ join_requests_bp = Blueprint('join_requests', __name__)
 @join_requests_bp.route('', methods=['GET'])
 @jwt_required()
 def get_join_requests():
-    """Get all join requests with filtering"""
+    """Get all join requests for a user with filtering"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     startup_id = request.args.get('startup_id', type=int)
     search = request.args.get('search', type=str)
     user_id = request.args.get('user_id', type=int)
     status = request.args.get('status', type=str)
-    
-    query = JoinRequest.query
+
+    if not user_id:
+        user_id = get_jwt_identity()
+
+    query = JoinRequest.query.filter(JoinRequest.user_id == user_id)
     
     if search:
         search_pattern = f"%{search}%"
@@ -30,8 +33,6 @@ def get_join_requests():
         )
     if startup_id:
         query = query.filter(JoinRequest.startup_id == startup_id)
-    if user_id:
-        query = query.filter(JoinRequest.user_id == user_id)
     if status:
         from app.models.Enums import JoinRequestStatus
         query = query.filter(JoinRequest.status == JoinRequestStatus(status))
