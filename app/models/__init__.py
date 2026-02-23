@@ -39,3 +39,4 @@ from .outreach_campaign import OutreachCampaign
 from .outreach_contact import OutreachContact
 from .outreach_sendjobs import OutreachSendJob
 from .outreach_draft import OutreachDraft
+from .pitch_deck import PitchDeck

@@ -64,6 +64,8 @@ from .routes import (
     user_social_routes,
     dashboard_routes,
     video_gen_routes,
+    pitch_deck_routes,
+    
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -137,4 +139,6 @@ blueprints = [
 { "blueprint": user_social_routes.user_social_bp, "url_prefix": '/api/user-social' },
 { "blueprint": dashboard_routes.dashboard_bp, "url_prefix": '/api/dashboard' },
 { "blueprint": video_gen_routes.video_bp, "url_prefix": '/api/video' },
+{"blueprint": pitch_deck_routes.pitch_decks_bp, "url_prefix":"/api/pitch-decks"}
+
 ]
