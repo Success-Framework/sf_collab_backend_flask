@@ -76,6 +76,9 @@ class User(db.Model):
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Storage
+    storage_used_mb = db.Column(db.Float, default=0.0, nullable=False)
     
     # ========== RELATIONSHIPS ==========
     
@@ -698,3 +701,20 @@ class User(db.Model):
         
         return data
     
+    def increase_storage_used(self, file_size_mb):
+        """ Increase user's used storage when a file is uploaded """
+        if not file_size_mb:
+            return
+        self.storage_used_mb = (self.storage_used_mb or 0) + file_size_mb
+
+    def decrease_storage_used(self, file_size_mb):
+        """ Decrease user's used storage when a file is deleted. """
+        if not file_size_mb:
+            return
+        self.storage_used_mb = max((self.storage_used_mb or 0) - file_size_mb, 0)
+
+    def update_storage_used(self, old_file_size_mb, new_file_size_mb):
+        """ Update user's used storage when a file is updated/replaced. """
+        if not old_file_size_mb or not new_file_size_mb:
+            return
+        self.storage_used_mb = max((self.storage_used_mb or 0) - old_file_size_mb + new_file_size_mb, 0)
