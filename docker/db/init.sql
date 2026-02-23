@@ -81,6 +81,7 @@ CREATE TABLE `users` (
   `notif_quiet_hours_end` varchar(5) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `storage_used_mb` float NOT NULL DEFAULT 0.0,
   
   PRIMARY KEY (`id`),
 
@@ -651,6 +652,7 @@ CREATE TABLE `knowledge` (
   `image_content_type` varchar(100) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `file_size_mb` float DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `author_id` (`author_id`),
   CONSTRAINT `knowledge_ibfk_1` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`)
