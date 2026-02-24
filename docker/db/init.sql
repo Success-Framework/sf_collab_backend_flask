@@ -360,6 +360,10 @@ CREATE TABLE `conversation_participants` (
   `joined_at` datetime DEFAULT NULL,
   `role` varchar(20) DEFAULT NULL,
   `is_hidden` tinyint(1) DEFAULT '0',
+  `is_archived` tinyint(1) DEFAULT 0 NOT NULL,
+  `archived_at` datetime DEFAULT NULL,
+  `is_pinned` tinyint(1) DEFAULT 0 NOT NULL,
+  `pinned_at` datetime DEFAULT NULL,
   PRIMARY KEY (`conversation_id`,`user_id`),
   KEY `conversation_id` (`conversation_id`),
   KEY `user_id` (`user_id`),
@@ -2161,4 +2165,33 @@ CREATE TABLE `idea_comment_likes` (
 LOCK TABLES `idea_comment_likes` WRITE;
 /*!40000 ALTER TABLE `idea_comment_likes` DISABLE KEYS */;
 /*!40000 ALTER TABLE `idea_comment_likes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `pitch_decks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pitch_decks` (
+  `id` varchar(36) NOT NULL,
+  `user_id` int NOT NULL,
+  `startup_id` int DEFAULT NULL,
+  `title` varchar(255) NOT NULL,
+  `template_type` varchar(100) NOT NULL,
+  `theme_type` varchar(100) NOT NULL,
+  `slides_json` json NOT NULL,
+  `credits_used` int DEFAULT 20,
+  `status` varchar(50) DEFAULT 'draft',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `startup_id` (`startup_id`),
+  KEY `status` (`status`),
+  CONSTRAINT `pitch_decks_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `pitch_decks_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `pitch_decks` WRITE;
+/*!40000 ALTER TABLE `pitch_decks` DISABLE KEYS */;
+/*!40000 ALTER TABLE `pitch_decks` ENABLE KEYS */;
 UNLOCK TABLES;
