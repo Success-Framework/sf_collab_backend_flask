@@ -117,8 +117,6 @@ def create_app(config_name=None):
     @app.before_request
     def start_request_timer():
         g.start_time = time.time()
-        if request.method == "OPTIONS":
-            return make_response()  # Let CORS preflight requests pass through quickly
         
 
     @app.after_request
