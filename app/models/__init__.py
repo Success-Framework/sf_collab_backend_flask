@@ -33,6 +33,11 @@ from .ResourceLike import ResourceLike
 from .ResourceDownload import ResourceDownload
 from .refreshToken import RefreshToken
 from .waitlist import Waitlist
+from .planVersion import PlanVersion
+from .businessPlan import BusinessPlan
+from .planSection import PlanSection
+
+
 from .builder import BuilderProfile, BuilderSkill, BuilderPortfolio, BuilderApplication, SavedStartup, ApplicationStatus
 from .outreach_email_account import OutreachEmailAccount
 from .outreach_campaign import OutreachCampaign
