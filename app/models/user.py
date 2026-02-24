@@ -382,7 +382,25 @@ class User(db.Model):
         cascade="all, delete-orphan"
     )
 
-
+    startup_views = db.relationship(
+        'StartupView',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+    contribution_ideas = db.relationship(
+        'ContributionIdea',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+    idea_comment_likes = db.relationship(
+        'IdeaCommentLike',
+        back_populates='liker',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        foreign_keys='IdeaCommentLike.user_id'
+    )
     # ========== HELPER FUNCTIONS ==========
     
     
@@ -643,6 +661,7 @@ class User(db.Model):
             'founder_plan_id': self.founder_plan_id,
             'createdAt': self.created_at.isoformat(),
             'roles': [ur.role for ur in self.user_roles],
+            'startupViews': self.startup_views.count(),
         }
         
         # Private fields — only visible to the user themselves

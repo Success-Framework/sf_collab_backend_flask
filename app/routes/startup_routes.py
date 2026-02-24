@@ -204,8 +204,9 @@ def get_top_startups():
 @startups_bp.route('/<int:startup_id>', methods=['GET'])
 @jwt_required()
 def get_startup(startup_id):
+    current_user_id = get_jwt_identity()
     startup = Startup.query.get_or_404(startup_id)
-    startup.increment_views()
+    startup.increment_views(current_user_id)
 
     role = get_current_user_startup_role(startup_id)
 
@@ -239,7 +240,7 @@ def get_startup(startup_id):
 def register_startup():
     """Register new startup with file uploads to file system"""
     current_user_id = get_jwt_identity()
-    startup = None
+    startup = Startup()
     startup_upload_dir = None
     
     try:
@@ -465,7 +466,7 @@ def register_startup():
                 last_activity_date = waitlist_user.last_activity_at.date() if waitlist_user.last_activity_at else None
                 
                 if last_activity_date != today:
-                    waitlist_user.add_points(category='new_startup')
+                    waitlist_user.add_points(points=Waitlist.POINTS_PER_STARTUP, category='new_startup')
         except Exception as e:
             print(f"⚠️ [REGISTER_STARTUP] Failed to award startup creation points: {e}")
         

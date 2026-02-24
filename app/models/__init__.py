@@ -1,6 +1,6 @@
 from .user import User
 from .userAchievement import UserAchievement
-from .startup import Startup
+from .startup import Startup, StartupView
 from .startUpMember import StartupMember
 from .growthMetric import GrowthMetric
 from .achievement import Achievement

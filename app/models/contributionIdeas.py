@@ -17,7 +17,7 @@ class ContributionIdea(db.Model):
   status = db.Column(db.String(50), nullable=False) # pending, approved, rejected
   created_at = db.Column(db.DateTime, default=datetime.utcnow)  
   
-
+  user = db.relationship('User', back_populates='contribution_ideas', foreign_keys=[user_id])
   def to_dict(self):
     data = {
       'id': self.id,
@@ -27,7 +27,13 @@ class ContributionIdea(db.Model):
       'area': self.area,
       'status': self.status,
       'user_id': self.user_id,
-      'createdAt': self.created_at.isoformat()
+      'createdAt': self.created_at.isoformat(),
+      'user': {
+        'id': self.user.id,
+        'first_name': self.user.first_name,
+        'last_name': self.user.last_name,
+        'profile_picture': self.user.profile_picture
+      } if self.user else None
     }
     
     return data
