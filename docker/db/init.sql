@@ -49,7 +49,6 @@ CREATE TABLE `users` (
   `credits` int DEFAULT 0,
   `xp_points` int DEFAULT NULL,
   `streak_days` int DEFAULT NULL,
-  `credits` int DEFAULT 0,
   `last_activity_date` date DEFAULT NULL,
   `total_revenue` float DEFAULT NULL,
   `satisfaction_percentage` float DEFAULT NULL,
@@ -2113,10 +2112,6 @@ LOCK TABLES `errors` WRITE;
 UNLOCK TABLES;
 
 
---
--- Table structure for table `startup_views`
---
-
 DROP TABLE IF EXISTS `startup_views`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -2162,3 +2157,26 @@ LOCK TABLES `idea_comment_likes` WRITE;
 /*!40000 ALTER TABLE `idea_comment_likes` DISABLE KEYS */;
 /*!40000 ALTER TABLE `idea_comment_likes` ENABLE KEYS */;
 UNLOCK TABLES;
+
+--
+-- Table structure for table `sessions` (Flask-Session)
+--
+
+DROP TABLE IF EXISTS `sessions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sessions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_id` varchar(255) DEFAULT NULL,
+  `data` blob,
+  `expiry` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `session_id` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `sessions` WRITE;
+/*!40000 ALTER TABLE `sessions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sessions` ENABLE KEYS */;
+UNLOCK TABLES;
+
