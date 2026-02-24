@@ -213,8 +213,6 @@ def purchase_product(product_id):
         if product.stock_quantity is not None:
             product.stock_quantity -= 1
         
-        db.session.commit()
-        
         # Record transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
@@ -228,6 +226,7 @@ def purchase_product(product_id):
             reference_id=str(product_id),
             description=f'Purchased: {product.name}'
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,

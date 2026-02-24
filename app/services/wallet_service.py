@@ -1,7 +1,26 @@
 from datetime import datetime
+from enum import Enum
 from app.extensions import db
-from app.models.wallet import UserWallet, WalletTransaction, TransactionType, CurrencyType, ExchangeRate
+from app.models.UserWallet import UserWallet
+from app.models.WalletTransaction import WalletTransaction
 from app.models.user import User
+
+
+class TransactionType(str, Enum):
+    EXCHANGE = "exchange"
+    PURCHASE = "purchase"
+    REWARD = "reward"
+    REFUND = "refund"
+    TRANSFER = "transfer"
+    ADJUSTMENT = "adjustment"
+
+
+class CurrencyType(str, Enum):
+    SF_COINS = "sf_coins"
+    PREMIUM_GEMS = "premium_gems"
+    EVENT_TOKENS = "event_tokens"
+    CREDITS = "credits"
+    XP = "xp"
 
 class DailyLimitExceeded(Exception):
     """Raised when a user has hit their daily earning limit"""
@@ -32,7 +51,7 @@ class WalletService:
         """Reset daily earning counter if a new day has started"""
         now = datetime.utcnow()
         if wallet.last_earning_reset is None or wallet.last_earning_reset.date() < now.date():
-            wallet.daily_coins_earned = 0
+            wallet.daily_earnings = 0
             wallet.last_earning_reset = now
 
     @staticmethod
@@ -44,10 +63,10 @@ class WalletService:
         if currency_type == "sf_coins" and amount > 0:
             WalletService._reset_daily_limit_if_needed(wallet)
             
-            remaining = wallet.daily_earning_limit - wallet.daily_coins_earned
+            remaining = wallet.daily_earning_limit - wallet.daily_earnings
             if remaining <= 0:
                 raise DailyLimitExceeded(
-                    wallet.daily_earning_limit, wallet.daily_coins_earned, amount
+                    wallet.daily_earning_limit, wallet.daily_earnings, amount
                 )
             
             # Cap the amount to what's remaining
@@ -63,7 +82,7 @@ class WalletService:
         # Update stats if adding coins
         if currency_type == "sf_coins" and amount > 0:
             wallet.total_coins_earned += amount
-            wallet.daily_coins_earned += amount
+            wallet.daily_earnings += amount
             
         # Create transaction record
         transaction = WalletTransaction(
@@ -119,31 +138,7 @@ class WalletService:
 
     @staticmethod
     def exchange_currency(user_id, from_currency, to_currency, amount):
-        """Exchange one currency for another based on active rates"""
-        rate = ExchangeRate.query.filter_by(
-            from_currency=from_currency, 
-            to_currency=to_currency, 
-            is_active=True
-        ).first()
-        
-        if not rate:
-            raise ValueError("Exchange rate not found or inactive")
-            
-        # Calculate resulting amount
-        to_amount = int(amount * rate.rate)
-        
-        # Deduct from source
-        WalletService.deduct_funds(
-            user_id, amount, from_currency, 
-            TransactionType.EXCHANGE, 
-            description=f"Exchanged for {to_currency}"
-        )
-        
-        # Add to destination
-        wallet = WalletService.add_funds(
-            user_id, to_amount, to_currency, 
-            TransactionType.EXCHANGE, 
-            description=f"Exchanged from {from_currency}"
-        )
-        
-        return wallet
+        """Exchange one currency for another"""
+        # NOTE: ExchangeRate table was removed. Re-implement with a new
+        # rate source if currency exchange is needed in the future.
+        raise NotImplementedError("Currency exchange is not currently available")

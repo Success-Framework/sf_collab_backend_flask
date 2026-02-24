@@ -41,7 +41,6 @@ class UserWallet(db.Model):
             if self.last_earning_reset.date() < now.date():
                 self.daily_earnings = 0
                 self.last_earning_reset = now
-                db.session.commit()
     
     def earn_sf_coins(self, amount, description="Earned SF Coins"):
         """Earn SF Coins (subject to daily limit)"""
