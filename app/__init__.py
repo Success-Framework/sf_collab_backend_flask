@@ -198,7 +198,7 @@ def create_app(config_name=None):
         sess.init_app(app)
     except Exception as e:
         if "already exists" in str(e):
-            print("⚠ Sessions table race (harmless)")
+            print(f"⚠ Sessions table race (harmless): {type(e).__name__}: {e}")
         else:
             raise
     
