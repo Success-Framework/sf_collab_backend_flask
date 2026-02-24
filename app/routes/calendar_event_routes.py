@@ -36,7 +36,7 @@ def get_user_full_name(user_id):
 def has_calendar_event_visibility_access(user_id, event):
     """Check if user has visibility access to task based on visibility settings"""
     # Admin always has access
-    if event.parent_startup.creator_id == int(user_id):
+    if event.parent_startup is not None and event.parent_startup.creator_id == int(user_id):
         return True
     # Owner always has access
 

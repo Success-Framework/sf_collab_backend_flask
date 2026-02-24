@@ -6,6 +6,8 @@ from authlib.integrations.flask_client import OAuth
 from flask_session import Session
 from app.config import Config
 from flask_socketio import SocketIO
+from flask_limiter import Limiter
+import os
 oauth = OAuth()
 jwt = JWTManager()
 cors = CORS()
@@ -20,4 +22,25 @@ socketio = SocketIO(
     ping_interval=25,
     logger=True,
     engineio_logger=True,
+)
+
+from flask_jwt_extended import get_jwt_identity
+from flask import request
+
+def user_or_ip():
+    try:
+        user = get_jwt_identity()
+        if user:
+            return f"user:{user}"
+    except:
+        pass
+    return request.remote_addr
+
+
+limiter = Limiter(
+    key_func=user_or_ip,
+    default_limits=["1000 per day"],
+    storage_uri=os.getenv("REDIS_URL", "memory://"), # Changed default to memory://
+    storage_options={"socket_connect_timeout": 1},
+    strategy="fixed-window",
 )

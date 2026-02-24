@@ -38,8 +38,14 @@ class JoinRequest(db.Model):
             role=self.role,
             joined_at=datetime.utcnow()
         )
-
-        db.session.add(member)
+        try:
+        
+            from app.models.chatConversation import ChatConversation
+            ChatConversation.add_to_startup_chat(member.member_user, self.target_startup)
+            db.session.add(member)
+        except Exception as e:
+          print("Error adding member to chat conversation:", e)
+          pass
         return member
     
     def reject(self, reviewer_id=None):
@@ -47,6 +53,7 @@ class JoinRequest(db.Model):
         self.status = JoinRequestStatus.rejected
         self.updated_at = datetime.utcnow()
         db.session.delete(self)
+        db.session.commit()
     
     def cancel(self):
         """Cancel join request (by user)"""

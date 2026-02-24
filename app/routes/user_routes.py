@@ -2,7 +2,9 @@ from flask import Blueprint, request, jsonify, send_from_directory
 from app.models.user import User
 from app.models.userRole import UserRole
 from app.models.Enums import UserStatus, Privacy, Theme, EmailDigest
+from app.utils.upload_to_s3 import upload_file_to_s3, get_public_url, generate_presigned_url
 from app.extensions import db
+from sqlalchemy import func
 from app.utils.helper import error_response, success_response, paginate
 from flask_jwt_extended import (
     create_access_token, 
@@ -94,13 +96,12 @@ def handle_file_uploads(user_id, user, files):
             if file and file.filename:
                 if not allowed_avatar(file.filename):
                     raise ValueError('Invalid avatar file type. Allowed types: png, jpg, jpeg, gif')
-                
-                file_info = save_uploaded_file(file, user_id, 'avatar')
-                user.profile_picture = file_info['url']
+                key = upload_file_to_s3(file, folder='uploads/avatars', public=True)
+                user.profile_picture = get_public_url(key)
                 uploaded_files.append({
                     'type': 'profile_picture',
-                    'url': file_info['url'],
-                    'filename': file_info['name']
+                    'url': get_public_url(key),
+                    'filename': file.filename
                 })
         
         # Handle cover photo upload
@@ -110,7 +111,11 @@ def handle_file_uploads(user_id, user, files):
                 if not allowed_avatar(file.filename):
                     raise ValueError('Invalid cover photo file type. Allowed types: png, jpg, jpeg, gif')
                 
-                file_info = save_uploaded_file(file, user_id, 'avatar')
+                key = upload_file_to_s3(file, folder='uploads/avatars', public=True)
+                file_info = {
+                    'name': file.filename,
+                    'url': get_public_url(key)
+                }
                 # Assuming you have a cover_photo field in your user model
                 # If not, you can store it in profile_social_links or add the field
                 if hasattr(user, 'cover_photo'):
@@ -129,7 +134,12 @@ def handle_file_uploads(user_id, user, files):
                     if not allowed_file(file.filename):
                         raise ValueError('Invalid document file type')
                     
-                    file_info = save_uploaded_file(file, user_id, 'file')
+                    key = upload_file_to_s3(file, folder='uploads/docs', public=False)
+                    file_info = {
+                        'name': file.filename,
+                        'url': generate_presigned_url(key),
+                        'size': file.content_length
+                    }
                     # Store document info in user profile or create a separate documents table
                     # For now, we'll just track the upload
                     uploaded_files.append({
@@ -216,7 +226,6 @@ def handle_user_data_update(user_id, user, data):
             # Delete all existing roles first
             UserRole.query.filter_by(user_id=user.id).delete()
             # Add new roles
-            print(data['roles'])
             for role in data['roles']:
                 userRole = UserRole(
                     user_id=user.id,
@@ -265,6 +274,13 @@ def get_users():
     role = request.args.get('role', type=str)
     search = request.args.get('search', type=str)
     query = User.query
+    if page == 1:
+        query = query.order_by(User.created_at.desc())
+    else:
+        query = query.order_by(
+            User.created_at.desc(),
+            func.random()
+        )
     # Apply filters
     if status:
         query = query.filter(User.status == UserStatus(status))
@@ -280,7 +296,7 @@ def get_users():
     result = paginate(query, page, per_page)
     
     return success_response({
-        'users': [user.to_dict() for user in result['items']],
+        'users': [user.to_dict(public=True) for user in result['items']],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],
@@ -299,7 +315,11 @@ def get_user(user_id):
     if not user:
         return error_response('User not found', 404)
     
-    return success_response({'user': user.to_dict(include_statistics=include_stats)}, 'User retrieved successfully')
+    # Check if the requesting user is viewing their own profile
+    current_user_id = get_jwt_identity()
+    is_own_profile = int(current_user_id) == int(user_id)
+    
+    return success_response({'user': user.to_dict(include_statistics=include_stats, public=not is_own_profile)}, 'User retrieved successfully')
 
 #! CREATE NEW USER
 @users_bp.route('', methods=['POST'])

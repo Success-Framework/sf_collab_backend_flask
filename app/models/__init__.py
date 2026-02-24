@@ -1,6 +1,6 @@
 from .user import User
 from .userAchievement import UserAchievement
-from .startup import Startup
+from .startup import Startup, StartupView
 from .startUpMember import StartupMember
 from .growthMetric import GrowthMetric
 from .achievement import Achievement
@@ -40,3 +40,10 @@ from .outreach_contact import OutreachContact
 from .outreach_sendjobs import OutreachSendJob
 from .outreach_draft import OutreachDraft
 from .pitch_deck import PitchDeck
+# from .wallet import UserWallet, WalletTransaction, ExchangeRate
+from .UserWallet import UserWallet
+from .WalletTransaction import WalletTransaction
+from .virtual_product import VirtualProduct
+from .product_purchase import ProductPurchase
+from .user_inventory import UserInventory
+from .EventTokenBalance import EventTokenBalance

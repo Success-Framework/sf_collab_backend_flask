@@ -678,7 +678,277 @@ class NotificationService:
                 'categoryBreakdown': {},
                 'priorityBreakdown': {}
             }
-
-
+            
+    def get_announcements(self) -> List[Dict[str, Any]]:
+        """
+        Get global announcements (for dashboard)
+        
+        Returns:
+            List of announcement dicts
+        """
+        try:
+            # For simplicity, using notifications with category 'announcement'
+            announcements = Notification.query.filter_by(
+                category='announcement'
+            ).order_by(Notification.created_at.desc()).all()
+            
+            return [a.to_dict() for a in announcements]
+            
+        except Exception as e:
+            logger.error(f"Error getting announcements: {e}")
+            return []
+    @staticmethod
+    def create_announcement(
+        title: str,
+        user_id: int,
+        message: str,
+        priority: str = 'medium',
+        actor_id: Optional[int] = None,
+        link_url: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Notification]:
+        """
+        Create a global announcement
+        
+        Args:
+            title: Announcement title
+            message: Announcement message
+            link_url: Optional URL for more info
+            
+        Returns:
+            Created Notification object or None if failed
+        """
+        try:
+            # For simplicity, using user_id = None for global announcements
+            announcement = Notification(
+                user_id=user_id,
+                notification_type="info",
+                actor_id=actor_id,
+                category="announcement",
+                priority=priority,
+                title=title,
+                message=message,
+                link_url=link_url,
+                is_read=False,
+                data=metadata
+                # metadata=metadata or {}
+            )
+            
+            db.session.add(announcement)
+            db.session.commit()
+            
+            logger.info(f"Created announcement {announcement.id}")
+            return announcement
+            
+        except Exception as e:
+            logger.error(f"Error creating announcement: {e}")
+            db.session.rollback()
+            return None
+    def get_newsletter(self) -> List[Dict[str, Any]]:
+        """
+        Get newsletter content (for dashboard)
+        
+        Returns:
+            List of newsletter dicts
+        """
+        try:
+            # For simplicity, using notifications with category 'newsletter'
+            newsletters = Notification.query.filter_by(
+                category='newsletter'
+            ).order_by(Notification.created_at.desc()).all()
+            
+            return [n.to_dict() for n in newsletters]
+            
+        except Exception as e:
+            logger.error(f"Error getting newsletters: {e}")
+            return []
+    def create_newsletter(
+        self,
+        title: str,
+        user_id: int,
+        content: str,
+        actor_id: Optional[int] = None,
+        link_url: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Notification]:
+        """
+        Create a newsletter entry
+        
+        Args:
+            title: Newsletter title
+            message: Newsletter message
+            link_url: Optional URL for more info
+            
+        Returns:
+            Created Notification object or None if failed
+        """
+        try:
+            # For simplicity, using user_id = None for global newsletters
+            newsletter = Notification(
+                user_id=user_id,
+                notification_type="info",
+                category="newsletter",
+                priority="medium",
+                title=title,
+                message=content,
+                actor_id=actor_id,
+                link_url=link_url,
+                is_read=False,
+                data=metadata
+            )
+            
+            db.session.add(newsletter)
+            db.session.commit()
+            
+            logger.info(f"Created newsletter {newsletter.id}")
+            return newsletter
+            
+        except Exception as e:
+            logger.error(f"Error creating newsletter: {e}")
+            db.session.rollback()
+            return None
+    @staticmethod
+    def update_announcement(
+        announcement_id: int,
+        title: Optional[str] = None,
+        message: Optional[str] = None,
+        priority: Optional[str] = None,
+        link_url: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        actor_id: Optional[int] = None
+    ) -> Optional[Notification]:
+        """Update an announcement"""
+        try:
+            announcement = Notification.query.filter_by(
+                id=announcement_id,
+                category='announcement'
+            ).first()
+            
+            if not announcement:
+                return None
+            
+            if title:
+                announcement.title = title
+            if message:
+                announcement.message = message
+            if priority:
+                announcement.priority = priority
+            if link_url:
+                announcement.link_url = link_url
+            if metadata:
+                announcement.data = metadata
+            
+            db.session.commit()
+            logger.info(f"Updated announcement {announcement_id}")
+            return announcement
+            
+        except Exception as e:
+            logger.error(f"Error updating announcement: {e}")
+            db.session.rollback()
+            return None
+    @staticmethod
+    def delete_announcement(announcement_id: int, user_id: int) -> bool:
+        """Delete an announcement"""
+        try:
+            announcement = Notification.query.filter_by(
+                id=announcement_id,
+                category='announcement'
+            ).first()
+            
+            if not announcement:
+                return False
+            
+            db.session.delete(announcement)
+            db.session.commit()
+            logger.info(f"Deleted announcement {announcement_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting announcement: {e}")
+            db.session.rollback()
+            return False
+    @staticmethod
+    def clear_all_announcements(user_id: int) -> int:
+        """Delete all announcements"""
+        try:
+            count = Notification.query.filter_by(category='announcement').delete()
+            db.session.commit()
+            logger.info(f"Cleared {count} announcements")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error clearing announcements: {e}")
+            db.session.rollback()
+            return 0
+    @staticmethod
+    def update_newsletter(
+        newsletter_id: int,
+        title: Optional[str] = None,
+        content: Optional[str] = None,
+        link_url: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        actor_id: Optional[int] = None
+    ) -> Optional[Notification]:
+        """Update a newsletter"""
+        try:
+            newsletter = Notification.query.filter_by(
+                id=newsletter_id,
+                category='newsletter'
+            ).first()
+            
+            if not newsletter:
+                return None
+            
+            if title:
+                newsletter.title = title
+            if content:
+                newsletter.message = content
+            if link_url:
+                newsletter.link_url = link_url
+            if metadata:
+                newsletter.data = metadata
+            
+            db.session.commit()
+            logger.info(f"Updated newsletter {newsletter_id}")
+            return newsletter
+            
+        except Exception as e:
+            logger.error(f"Error updating newsletter: {e}")
+            db.session.rollback()
+            return None
+    @staticmethod
+    def delete_newsletter(newsletter_id: int, user_id: int) -> bool:
+        """Delete a newsletter"""
+        try:
+            newsletter = Notification.query.filter_by(
+                id=newsletter_id,
+                category='newsletter'
+            ).first()
+            
+            if not newsletter:
+                return False
+            
+            db.session.delete(newsletter)
+            db.session.commit()
+            logger.info(f"Deleted newsletter {newsletter_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting newsletter: {e}")
+            db.session.rollback()
+            return False
+    @staticmethod
+    def clear_all_newsletters(user_id: int) -> int:
+        """Delete all newsletters"""
+        try:
+            count = Notification.query.filter_by(category='newsletter').delete()
+            db.session.commit()
+            logger.info(f"Cleared {count} newsletters")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error clearing newsletters: {e}")
+            db.session.rollback()
+            return 0
 # Singleton instance
 notification_service = NotificationService()

@@ -1,6 +1,6 @@
 from flask import Flask, request, abort, request, g, send_from_directory, make_response, session
 from flask_cors import CORS
-from .extensions import db, migrate, jwt, sess
+from .extensions import db, migrate, jwt, sess, limiter
 from app.config import Config
 from app.routes import auth_routes
 from .config import get_config
@@ -50,6 +50,7 @@ def create_app(config_name=None):
     
     # Session configuration
     print(f"SESSION_TYPE from config: {app.config.get('SESSION_TYPE')}")
+    
 
     
     app.config['SESSION_PERMANENT'] = True
@@ -116,6 +117,7 @@ def create_app(config_name=None):
     @app.before_request
     def start_request_timer():
         g.start_time = time.time()
+        
 
     @app.after_request
     def log_response(response):
@@ -177,9 +179,10 @@ def create_app(config_name=None):
         
     # Initialize extensions
     db.init_app(app)
+    from app import models # Ensure models are loaded for migration
     migrate.init_app(app, db)
     jwt.init_app(app)
-    
+    limiter.init_app(app)
     if app.config.get("SESSION_TYPE") == "filesystem":
         app.config["SESSION_FILE_DIR"] = os.path.join(BASE_DIR, "flask_session")
         os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)

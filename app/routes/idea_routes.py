@@ -250,7 +250,12 @@ def like_idea(idea_id):
         if idea.creator_id != current_user_id:
             try:
                 voter_name = get_user_full_name(current_user_id)
-                if liked:
+                # Prevent SPAM: Only send notification if user hasn't already liked today
+                last_like = IdeaLike.query.filter_by(user_id=current_user_id, idea_id=idea_id).first()
+                today = datetime.datetime.utcnow().date()
+                if last_like and last_like.created_at.date() == today:
+                    print("User has already liked this idea today, skipping notification")
+                elif liked:
                     notify_idea_voted(
                         user_id=idea.creator_id,
                         voter_id=current_user_id,
@@ -367,7 +372,7 @@ def delete_idea(idea_id):
         return error_response('Idea not found', 404)
     
     # Check ownership
-    if idea.creator_id != current_user_id:
+    if int(idea.creator_id) != int(current_user_id):
         return error_response('Unauthorized to delete this idea', 403)
     
     try:

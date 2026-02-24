@@ -329,6 +329,10 @@ def get_user_profile():
         if not user:
             return error_response('User not found', 404)
         
+        # Ensure wallet exists
+        from app.services.wallet_service import WalletService
+        WalletService.get_wallet(user.id)
+        
         return success_response(user.to_dict(), 'Profile retrieved successfully', 200)
         
     except Exception as e:

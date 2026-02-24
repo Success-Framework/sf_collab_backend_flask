@@ -41,12 +41,10 @@ def get_current_user_startup_role(startup_id: int) -> str:
     )
 
     if not membership:
-        print(f"User {user_id} has no membership in startup {startup_id}")
         return 'none'
 
-    print(f"User {user_id} membership role: {membership.role}, type: {type(membership.role)}")
-    print(f"UserRoles.founder: {UserRoles.founder}, type: {type(UserRoles.founder)}")
-
+    if membership.admin:
+        return 'admin'
     # Special elevated member role - handle both enum and string
     role_value = membership.role.value if hasattr(membership.role, 'value') else membership.role
     if role_value == 'founder':

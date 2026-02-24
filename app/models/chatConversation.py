@@ -8,9 +8,9 @@ class ChatConversation(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=True)  # For group chats
-    conversation_type = db.Column(db.String(20), default='direct')  # direct, group
+    conversation_type = db.Column(db.String(20), default='direct')  # direct, group, startup, general
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
+    parent_startup_id = db.Column(db.Integer, db.ForeignKey('startups.id'), nullable=True)  # For startup-specific chats
     # Group chat properties
     description = db.Column(db.Text, nullable=True)
     avatar_url = db.Column(db.String(500), nullable=True)
@@ -30,45 +30,119 @@ class ChatConversation(db.Model):
 
     # HELPER FUNCTIONS
     
-    def add_participant(self, user, role='member'):
+    def add_participant(self, user_id, role='member', id=None):
         """Add participant to conversation"""
-        from sqlalchemy import insert
+        # Accept User objects or plain IDs
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
         
-        # Check if user is already a participant
         existing = db.session.execute(
-            conversation_participants.select().where(
-                conversation_participants.c.conversation_id == self.id,
-                conversation_participants.c.user_id == user.id
-            )
+            db.text('SELECT 1 FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+            {'cid': self.id, 'uid': uid}
         ).first()
         
         if not existing:
             stmt = conversation_participants.insert().values(
-                conversation_id=self.id,
-                user_id=user.id,
+                conversation_id=id or self.id or self._get_next_id(),
+                user_id=uid,
                 role=role
             )
             db.session.execute(stmt)
             db.session.commit()
-    
-    def remove_participant(self, user):
+    def _get_next_id(self):
+        """Get next ID for conversation (used when creating new conversation)"""
+        result = db.session.execute(
+            db.select(db.func.max(ChatConversation.id))
+        ).scalar()
+        return (result or 0) + 1
+    def is_hidden_for_user(self, user_id):
+        """Check if this conversation is soft-hidden for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT is_hidden FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return bool(result.is_hidden) if result else False
+        except Exception:
+            return False
+
+    def is_archived_for_user(self, user_id):
+        """Check if this conversation is archived for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT is_archived FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return bool(result.is_archived) if result else False
+        except Exception:
+            return False
+
+    def is_pinned_for_user(self, user_id):
+        """Check if this conversation is pinned for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT is_pinned FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return bool(result.is_pinned) if result else False
+        except Exception:
+            return False
+
+    def get_pinned_at_for_user(self, user_id):
+        """Get when this conversation was pinned for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT pinned_at FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return result.pinned_at.isoformat() if result and result.pinned_at else None
+        except Exception:
+            return None
+
+    def hide_for_user(self, user_id):
+        """Soft-hide conversation for a user (stays participant, just hidden from their list)"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            db.session.execute(
+                db.text('UPDATE conversation_participants SET is_hidden = 1 WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def unhide_for_user(self, user_id):
+        """Un-hide conversation for a user (e.g. when they receive a new message)"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            db.session.execute(
+                db.text('UPDATE conversation_participants SET is_hidden = 0 WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def remove_participant(self, user_id):
         """Remove participant from conversation"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
         stmt = conversation_participants.delete().where(
             conversation_participants.c.conversation_id == self.id,
-            conversation_participants.c.user_id == user.id
+            conversation_participants.c.user_id == uid
         )
         db.session.execute(stmt)
         db.session.commit()
     
     def get_participant_role(self, user):
         """Get participant role in conversation"""
+        uid = user.id if hasattr(user, 'id') else int(user)
         result = db.session.execute(
-            conversation_participants.select().where(
-                conversation_participants.c.conversation_id == self.id,
-                conversation_participants.c.user_id == user.id
-            )
+            db.text('SELECT role FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+            {'cid': self.id, 'uid': uid}
         ).first()
-        
         return result.role if result else None
     
     def get_messages_for_user(self, user, limit=50, offset=0):
@@ -155,7 +229,50 @@ class ChatConversation(db.Model):
             )
             db.session.add(welcome_message)
             db.session.commit()
+    @staticmethod
+    def add_to_startup_chat(user, startup):
+        """Add user to startup chat conversation"""
+        import logging
+        logger = logging.getLogger(__name__)
         
+        logger.info(f"Adding user to startup chat - user_id: {user.id} (type: {type(user.id).__name__}), startup_id: {startup.id} (type: {type(startup.id).__name__})")
+        try:
+        
+            startup_chat = ChatConversation.query.filter_by(conversation_type='startup', parent_startup_id=startup.id).first()
+            logger.debug(f"Existing startup_chat found: {startup_chat is not None} (type: {type(startup_chat).__name__})")
+        except:
+            logger.exception("Error querying for startup chat")
+            startup_chat = None
+        if startup_chat:
+            logger.info(f"Adding participant to existing startup chat - conversation_id: {startup_chat.id} (type: {type(startup_chat.id).__name__})")
+            startup_chat.add_participant(user, role='member')
+            db.session.commit()
+            logger.info("Participant added successfully")
+        else:
+            logger.info(f"Creating new startup chat - name: '{startup.name}' (type: {type(startup.name).__name__}), created_by_id: {user.id} (type: {type(user.id).__name__})")
+            startup_chat = ChatConversation(
+                name=f'{startup.name} Chat',
+                conversation_type='startup',
+                parent_startup_id=startup.id,   
+                created_by_id=user.id
+            )
+            db.session.add(startup_chat)
+            db.session.commit()
+            logger.info(f"Startup chat created successfully - conversation_id: {startup_chat.id} (type: {type(startup_chat.id).__name__})")
+    @staticmethod
+    def remove_from_startup_chat(user, startup_id):
+        """Remove user from startup chat conversation"""
+        startup_chat = ChatConversation.query.filter_by(conversation_type='startup', parent_startup_id=startup_id).first()
+
+        if startup_chat:
+            startup_chat.remove_participant(user)
+    @staticmethod
+    def delete_startup_chat(startup_id):
+        """Remove startup chat conversation (e.g. when startup is deleted)"""
+        startup_chat = ChatConversation.query.filter_by(conversation_type='startup', parent_startup_id=startup_id).first()
+
+        if startup_chat:
+            db.session.delete(startup_chat)
     def is_user_participant(self, user_id):
         """Check if user is a participant in this conversation"""
         return any(str(participant.id) == str(user_id) for participant in self.participants)
@@ -214,6 +331,7 @@ class ChatConversation(db.Model):
     def increment_unread_count(self, sender_id):
         """Increment unread count for all participants except sender"""
         from sqlalchemy import update, and_
+
         
         for participant in self.participants:
             if participant.id != sender_id:  # Don't increment for message sender
@@ -272,7 +390,12 @@ class ChatConversation(db.Model):
             } for user in self.participants],
             'last_message': self.get_last_message_preview(for_user),
             'message_count': self.messages.count(),
-            'unread_count': self.get_unread_message_count(for_user.id) if for_user else 0
+            'unread_count': self.get_unread_message_count(for_user.id) if for_user else 0,
+            'is_hidden': self.is_hidden_for_user(for_user.id) if for_user else False,
+            'is_archived': self.is_archived_for_user(for_user.id) if for_user else False,
+            'is_pinned': self.is_pinned_for_user(for_user.id) if for_user else False,
+            'pinned_at': self.get_pinned_at_for_user(for_user.id) if for_user else None,
+            'parent_startup_id': self.parent_startup_id
         }
         
         return data
@@ -324,7 +447,14 @@ conversation_participants = db.Table('conversation_participants',
     db.Column('conversation_id', db.Integer, db.ForeignKey('chat_conversations.id'), primary_key=True),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('joined_at', db.DateTime, default=datetime.utcnow),
-    db.Column('role', db.String(20), default='member')  # member, admin
+    db.Column('role', db.String(20), default='member'),
+    db.Column('is_hidden', db.Boolean, default=False),
+    # ── Archive support (per-user, per-conversation) ──────────────────────────
+    db.Column('is_archived', db.Boolean, default=False, nullable=False),
+    db.Column('archived_at', db.DateTime, nullable=True)
+    # ── Pin support (per-user) ──────────────────────────────────────────────
+    ,db.Column('is_pinned', db.Boolean, default=False, nullable=False)
+    ,db.Column('pinned_at', db.DateTime, nullable=True)
 )
 
 conversation_user_reads = db.Table('conversation_user_reads',

@@ -12,8 +12,11 @@ from app.models.userRole import UserRole
 from app.notifications.helpers import notify_access_request_pending
 from app.utils.plans_utils import can_create_project, can_add_collaborator
 from app.models.startUpMember import StartupMember
+from app.models.chatConversation import ChatConversation
+
 from app.models.waitlist import Waitlist
 import os 
+from sqlalchemy import func
 from io import BytesIO
 import json
 from datetime import datetime
@@ -137,6 +140,15 @@ def get_startups():
     
 
     
+
+    if page == 1:
+        query = query.order_by(Startup.created_at.desc())
+    else:
+        query = query.order_by(
+            Startup.created_at.desc(),
+            func.random()
+        )
+
     # Apply filters
     if industry:
         query = query.filter(Startup.industry.ilike(f'%{industry}%'))
@@ -165,13 +177,36 @@ def get_startups():
             'pages': result['pages']
         }
     })
-
+@startups_bp.route('/top', methods=['GET'])
+@jwt_required()
+def get_top_startups():
+    """Get top startups by views"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 3, type=int)
+    
+    query = Startup.query.filter(Startup.views > 0)
+    
+    # Order by views descending
+    query = query.order_by(Startup.views.desc())
+    
+    result = paginate(query, page, per_page)
+    
+    return success_response({
+        'startups': [startup.to_dict() for startup in result['items']],
+        'pagination': {
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'pages': result['pages']
+        }
+    })
 #! GET SINGLE STARTUP (Public - no auth required)
 @startups_bp.route('/<int:startup_id>', methods=['GET'])
 @jwt_required()
 def get_startup(startup_id):
+    current_user_id = get_jwt_identity()
     startup = Startup.query.get_or_404(startup_id)
-    startup.increment_views()
+    startup.increment_views(current_user_id)
 
     role = get_current_user_startup_role(startup_id)
 
@@ -205,6 +240,8 @@ def get_startup(startup_id):
 def register_startup():
     """Register new startup with file uploads to file system"""
     current_user_id = get_jwt_identity()
+    startup = Startup()
+    startup_upload_dir = None
     
     try:
         # Check if request has form data
@@ -223,76 +260,105 @@ def register_startup():
             return error_response('Startup name already exists', 409)
 
         # Get current user info
-        current_user = User.query.get(current_user_id)
-        if not current_user:
-            return error_response('User not found', 404)
-        if not current_user.is_email_verified:
-            return error_response('User email not verified', 403)
-        if current_user.is_banned():
-            return error_response('User is banned', 403)
+        try:
+            current_user = User.query.get(current_user_id)
+            if not current_user:
+                return error_response('User not found', 404)
+            if not current_user.is_email_verified:
+                return error_response('User email not verified', 403)
+            if current_user.is_banned():
+                return error_response('User is banned', 403)
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] User validation error: {str(e)}")
+            return error_response(f'User validation failed: {str(e)}', 500)
 
-        # if not can_create_project(current_user):
-        #     return error_response('Startup creation limit reached for your plan', 403)
-        roles_data = data.get('roles', {})
-        
-        if isinstance(roles_data, str):
-            try:
-                roles_data = json.loads(roles_data)
-            except json.JSONDecodeError:
-                roles_data = {}
+        # Parse roles data
+        try:
+            roles_data = data.get('roles', {})
+            if isinstance(roles_data, str):
+                try:
+                    roles_data = json.loads(roles_data)
+                except json.JSONDecodeError:
+                    roles_data = {}
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Roles parsing error: {str(e)}")
+            roles_data = {}
         
         # Parse tech stack if provided
-        tech_stack_data = data.get('tech_stack', [])
-        if isinstance(tech_stack_data, str):
-            try:
-                tech_stack_data = json.loads(tech_stack_data)
-            except json.JSONDecodeError:
-                tech_stack_data = []
+        try:
+            tech_stack_data = data.get('tech_stack', [])
+            if isinstance(tech_stack_data, str):
+                try:
+                    tech_stack_data = json.loads(tech_stack_data)
+                except json.JSONDecodeError:
+                    tech_stack_data = []
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Tech stack parsing error: {str(e)}")
+            tech_stack_data = []
         
         # Calculate total positions from roles data
-        total_positions = 0
-        if roles_data:
-            # If roles_data is a dictionary with role objects containing positionsNumber
-            for role_key, role_value in roles_data.items():
-                if isinstance(role_value, dict) and 'positionsNumber' in role_value:
-                    total_positions += int(role_value.get('positionsNumber', 0))
-                else:
-                    # Fallback: count each role as 1 position
-                    total_positions += 1
-        else:
-            # Fallback to form data positions
+        try:
+            total_positions = calculate_total_positions(roles_data, data.get('positions', 0))
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Position calculation error: {str(e)}")
             total_positions = int(data.get('positions', 0))
         
         # Create startup first to get ID
-        startup = Startup(
-            name=data['name'],
-            industry=data['industry'],
-            location=data.get('location'),
-            description=data.get('description'),
-            stage=data.get('stage', 'idea'),
-            positions=total_positions,  # Use calculated total positions
-            roles=roles_data,
+        try:
+            startup = Startup(
+                name=data['name'],
+                industry=data['industry'],
+                location=data.get('location'),
+                description=data.get('description'),
+                stage=data.get('stage', 'idea'),
+                positions=total_positions,
+                roles=roles_data,
+                tech_stack=tech_stack_data,
+                revenue=float(data.get('revenue', 0)),
+                funding_amount=float(data.get('funding_amount', 0)),
+                funding_round=data.get('funding_round', 'pre-seed'),
+                burn_rate=float(data.get('burn_rate', 0)),
+                runway_months=int(data.get('runway_months', 0)),
+                valuation=float(data.get('valuation', 0)),
+                financial_notes=data.get('financial_notes', ''),
+                creator_id=current_user_id,
+                creator_first_name=current_user.first_name,
+                creator_last_name=current_user.last_name
+            )
             
-            tech_stack=tech_stack_data,
-            
-            revenue=float(data.get('revenue', 0)),
-            funding_amount=float(data.get('funding_amount', 0)),
-            funding_round=data.get('funding_round', 'pre-seed'),
-            burn_rate=float(data.get('burn_rate', 0)),
-            runway_months=int(data.get('runway_months', 0)),
-            valuation=float(data.get('valuation', 0)),
-            financial_notes=data.get('financial_notes', ''),
-            creator_id=current_user_id,
-            creator_first_name=current_user.first_name,
-            creator_last_name=current_user.last_name
-        )
+            db.session.add(startup)
+            db.session.flush()  # Get startup ID without committing
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Startup creation error: {str(e)}")
+            db.session.rollback()
+            return error_response(f'Failed to create startup object: {str(e)}', 500)
         
-        db.session.add(startup)
-        db.session.commit()
+        # Create startup upload directory
+        try:
+            startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup.id))
+            os.makedirs(startup_upload_dir, exist_ok=True)
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Directory creation error: {str(e)}")
+            db.session.rollback()
+            return error_response(f'Failed to create upload directory: {str(e)}', 500)
+
+        # Create startup Chatroom
+        try:
+            print("Creating chat conversation for new startup...:", startup.to_dict())
+            ChatConversation.add_to_startup_chat(current_user, startup)
+            print("Chat conversation created for startup:", startup)
+        except Exception as e:
+            print(f"⚠️ [REGISTER_STARTUP] Chat creation error: {str(e)}")
+            # Don't fail the entire request for chat creation
         
-        # ════════════════════════════════════════════════════════════
-        # ✨ NOTIFICATION: Startup Created (4.4)
-        # ════════════════════════════════════════════════════════════
+        try:
+            db.session.commit()
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Database commit error: {str(e)}")
+            db.session.rollback()
+            return error_response(f'Failed to save startup: {str(e)}', 500)
+        
+        # Send startup creation notification
         try:
             notify_startup_created(
                 user_id=current_user_id,
@@ -300,98 +366,117 @@ def register_startup():
                 startup_id=startup.id
             )
         except Exception as e:
-            print(f"⚠️ Startup creation notification failed: {e}")
-        
-        # Create startup-specific upload directory
-        startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup.id))
-        os.makedirs(startup_upload_dir, exist_ok=True)
+            print(f"⚠️ [REGISTER_STARTUP] Startup creation notification failed: {e}")
         
         # Handle logo upload to file system
-        if 'logo' in files:
-            logo_file = files['logo']
-            if logo_file and logo_file.filename != '' and allowed_file(logo_file.filename):
-                if validate_file_size(logo_file):
-                    filename = secure_filename(logo_file.filename)
-                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                    unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
-                    logo_path = os.path.join(startup_upload_dir, unique_filename)
-                    logo_file.save(logo_path)
-                    
-                    # Save both local path (for existing routes) and URL path
-                    startup.logo_path = logo_path
-                    startup.logo_url = f"/startups/{startup.id}/logo"  # URL for frontend
-                    startup.logo_content_type = logo_file.content_type
+        try:
+            if 'logo' in files:
+                logo_file = files['logo']
+                if logo_file and logo_file.filename != '' and allowed_file(logo_file.filename):
+                    if validate_file_size(logo_file):
+                        filename = secure_filename(logo_file.filename)
+                        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                        unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
+                        logo_path = os.path.join(startup_upload_dir, unique_filename)
+                        logo_file.save(logo_path)
+                        
+                        startup.logo_path = logo_path
+                        startup.logo_url = f"/startups/{startup.id}/logo"
+                        startup.logo_content_type = logo_file.content_type
+        except Exception as e:
+            print(f"⚠️ [REGISTER_STARTUP] Logo upload error: {str(e)}")
         
         # Handle banner upload to file system
-        if 'banner' in files:
-            banner_file = files['banner']
-            if banner_file and banner_file.filename != '' and allowed_file(banner_file.filename):
-                if validate_file_size(banner_file):
-                    filename = secure_filename(banner_file.filename)
-                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                    unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
-                    banner_path = os.path.join(startup_upload_dir, unique_filename)
-                    banner_file.save(banner_path)
-                    
-                    # Save both local path (for existing routes) and URL path
-                    startup.banner_path = banner_path
-                    startup.banner_url = f"/startups/{startup.id}/banner"  # URL for frontend
-                    startup.banner_content_type = banner_file.content_type
+        try:
+            if 'banner' in files:
+                banner_file = files['banner']
+                if banner_file and banner_file.filename != '' and allowed_file(banner_file.filename):
+                    if validate_file_size(banner_file):
+                        filename = secure_filename(banner_file.filename)
+                        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                        unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
+                        banner_path = os.path.join(startup_upload_dir, unique_filename)
+                        banner_file.save(banner_path)
+                        
+                        startup.banner_path = banner_path
+                        startup.banner_url = f"/startups/{startup.id}/banner"
+                        startup.banner_content_type = banner_file.content_type
+        except Exception as e:
+            print(f"⚠️ [REGISTER_STARTUP] Banner upload error: {str(e)}")
 
         # Handle document uploads to file system
-        document_files = files.getlist('documents')
-        for doc_file in document_files:
-            if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
-                if validate_file_size(doc_file):
-                    filename = secure_filename(doc_file.filename)
-                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                    unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
-                    doc_path = os.path.join(startup_upload_dir, unique_filename)
-                    doc_file.save(doc_path)
-                    
-                    # For documents, we'll use the existing download route
-                    file_url = f"/startups/{startup.id}/documents/{unique_filename}"
-                    
-                    startup.add_document(
-                        filename=doc_file.filename,
-                        file_path=doc_path,  # Keep local path for existing download route
-                        file_url=file_url,
-                        content_type=doc_file.content_type,
-                        document_type=data.get('document_type', 'general')
-                    )
+        try:
+            document_files = files.getlist('documents')
+            for doc_file in document_files:
+                try:
+                    if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
+                        if validate_file_size(doc_file):
+                            filename = secure_filename(doc_file.filename)
+                            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                            unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
+                            doc_path = os.path.join(startup_upload_dir, unique_filename)
+                            doc_file.save(doc_path)
+                            
+                            file_url = f"/startups/{startup.id}/documents/{unique_filename}"
+                            
+                            startup.add_document(
+                                filename=doc_file.filename,
+                                file_path=doc_path,
+                                file_url=file_url,
+                                content_type=doc_file.content_type,
+                                document_type=data.get('document_type', 'general')
+                            )
+                except Exception as e:
+                    print(f"⚠️ [REGISTER_STARTUP] Individual document upload error: {str(e)}")
+                    # Continue with other documents
+        except Exception as e:
+            print(f"⚠️ [REGISTER_STARTUP] Documents upload error: {str(e)}")
         
         # Add user to userRoles as founder
-        existing_role = UserRole.query.filter_by(
-            user_id=current_user_id,
-            role="founder"
-        ).first()
+        try:
+            existing_role = UserRole.query.filter_by(
+                user_id=current_user_id,
+                role="founder"
+            ).first()
 
-        if not existing_role:
-            db.session.add(UserRole(user_id=current_user_id, role="founder"))
-        current_user.active_startups_count += 1
+            if not existing_role:
+                db.session.add(UserRole(user_id=current_user_id, role="founder"))
+            current_user.active_startups_count += 1
+        except Exception as e:
+            print(f"⚠️ [REGISTER_STARTUP] User role assignment error: {str(e)}")
         
         # Add creator as first member
-        startup.add_member(
-            current_user_id,
-            current_user.first_name,
-            current_user.last_name,
-            'founder'
-        )
-        # Give Startup Creation Points
-        # Give Startup Creation Points (once per day per user)
+        try:
+            startup.add_member(
+                current_user_id,
+                current_user.first_name,
+                current_user.last_name,
+                'founder'
+            )
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Failed to add creator as member: {str(e)}")
+            db.session.rollback()
+            return error_response(f'Failed to add creator as member: {str(e)}', 500)
+        
+        # Award startup creation points
         try:
             waitlist_user = Waitlist.query.filter_by(email=current_user.email).first()
             if waitlist_user:
-                # Check if user already got points today
                 today = datetime.utcnow().date()
                 last_activity_date = waitlist_user.last_activity_at.date() if waitlist_user.last_activity_at else None
                 
                 if last_activity_date != today:
-                    waitlist_user.add_points(
-                        category='new_startup'
-                    )
+                    waitlist_user.add_points(points=Waitlist.POINTS_PER_STARTUP, category='new_startup')
         except Exception as e:
-            print(f"⚠️ Failed to award startup creation points: {e}")
+            print(f"⚠️ [REGISTER_STARTUP] Failed to award startup creation points: {e}")
+        
+        # Final commit
+        try:
+            db.session.commit()
+        except Exception as e:
+            print(f"❌ [REGISTER_STARTUP] Final commit error: {str(e)}")
+            db.session.rollback()
+            return error_response(f'Failed to finalize startup: {str(e)}', 500)
         
         return success_response({
             'startup': startup.to_dict(),
@@ -399,12 +484,14 @@ def register_startup():
             }, 'Startup created successfully', 201)
         
     except Exception as e:
+        print(f"❌ [REGISTER_STARTUP] Critical error: {str(e)}")
         db.session.rollback()
         # Clean up uploaded files if registration fails
-        if 'startup' in locals() and startup.id:
-            startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup.id))
-            if os.path.exists(startup_upload_dir):
+        if startup_upload_dir and os.path.exists(startup_upload_dir):
+            try:
                 shutil.rmtree(startup_upload_dir)
+            except Exception as cleanup_error:
+                print(f"⚠️ [REGISTER_STARTUP] Cleanup error: {str(cleanup_error)}")
         return error_response(f'Failed to create startup: {str(e)}', 500)
 
 #! UPDATE STARTUP
@@ -592,7 +679,7 @@ def add_startup_member(startup_id):
             data['last_name'],
             data.get('role', 'member')
         )
-        
+        ChatConversation.add_to_startup_chat(member.member_user, startup)
         # ════════════════════════════════════════════════════════════
         # ✨ NOTIFICATION: Added to Startup (4.4)
         # ════════════════════════════════════════════════════════════
@@ -626,32 +713,8 @@ def delete_startup(startup_id):
     
     # Check if user is authorized to delete this startup
     role = get_current_user_startup_role(startup_id)
-    print(f"DELETE startup {startup_id}")
-    print(f"Current User: {current_user_id}")
-    print(f"Startup Creator: {startup.creator_id}")
-    print(f"User Role: {role}")
-    print(f"Can Manage Members: {can_manage_members(startup_id)}")
-    
-    # Additional debugging
-    user = User.query.get(current_user_id)
-    print(f"Current User Object: {user}")
-    print(f"Current User Email: {user.email if user else 'None'}")
-    print(f"Current User Role: {user.role if user else 'None'}")
-    
-    # Check membership directly
-    membership = StartupMember.query.filter_by(
-        user_id=current_user_id,
-        startup_id=startup_id,
-        is_active=True
-    ).first()
-    print(f"Direct Membership Check: {membership}")
-    if membership:
-        print(f"Membership Role: {membership.role}")
-        print(f"Membership Role Type: {type(membership.role)}")
-        print(f"Membership Role Value: {membership.role.value if hasattr(membership.role, 'value') else membership.role}")
-    
-    if not can_manage_members(startup_id):
-        print(f"❌ AUTHORIZATION FAILED - User {current_user_id} cannot manage members for startup {startup_id}")
+    if role == 'none' or not role:
+        print(f"❌ AUTHORIZATION FAILED - User {current_user_id} has role '{role}' for startup {startup_id}")
         return error_response('Unauthorized to delete this startup', 403)
     
     try:
@@ -659,9 +722,9 @@ def delete_startup(startup_id):
         startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup_id))
         if os.path.exists(startup_upload_dir):
             shutil.rmtree(startup_upload_dir)
-        
         # Delete from database
         db.session.delete(startup)
+        ChatConversation.delete_startup_chat(startup_id)
         db.session.commit()
         return success_response(message='Startup deleted successfully')
     except Exception as e:
@@ -1059,16 +1122,16 @@ def send_join_request(startup_id):
 
             managers = StartupMember.query.filter(
                 StartupMember.startup_id == startup_id,
-                StartupMember.role.in_([UserRoles.owner, UserRoles.founder]),
+                (StartupMember.role.in_(['owner', 'founder'])) | (StartupMember.admin == True),
                 StartupMember.is_active == True
             ).all()
-            
+            print(f"Notifying {len(managers)} managers about new join request:", [f"{m.first_name} {m.last_name}" for m in managers])
             requester_name = f"{current_user.first_name} {current_user.last_name}"
             for manager in managers:
-                notify_access_request_pending(
+                notify_info(
                     user_id=manager.user_id,
-                    resource=f"Join request from {requester_name} for {startup.name}",
-                    request_id=join_request.id
+                    message=f"{requester_name} has requested to join {startup.name} as a {role}.",
+                    link_url=f"/startup-details/{startup.id}"
                 )
         except Exception as e:
             print(f"⚠️ Join request notification failed: {e}")
@@ -1255,7 +1318,6 @@ def has_startup_management_access(user_id, startup_id):
     current_user = User.query.get(user_id)
     if current_user and current_user.role == 'admin':
         return True
-    
     # Check if user is the creator or has admin/manager role in the startup
     startup = Startup.query.get(startup_id)
     if startup and startup.creator_id == user_id:
@@ -1269,7 +1331,6 @@ def has_startup_management_access(user_id, startup_id):
     
     if not membership or not membership.role:
         return False
-
     membership_role_value = membership.role.value if hasattr(membership.role, 'value') else membership.role
 
     allowed_roles = {
@@ -1296,7 +1357,7 @@ def get_startup_member_ids(startup_id, exclude_user_id=None):
 @jwt_required()
 def remove_startup_member(startup_id, member_id):
     """Remove member from startup"""
-        
+    current_user = get_jwt_identity()
     startup = Startup.query.get_or_404(startup_id)
 
     if not can_manage_members(startup_id):
@@ -1304,9 +1365,15 @@ def remove_startup_member(startup_id, member_id):
 
     # Get member info before removal for notification
     member = StartupMember.query.get(member_id)
+    if member.user_id == current_user:
+        return error_response('You cannot remove yourself. Use the leave startup endpoint instead.', 400)
     member_user_id = member.user_id if member else None
 
     db.session.delete(member)
+    # chat_conversation = ChatConversation.query.filter_by(startup_id=startup_id).first()
+    # if chat_conversation and member_user_id:
+    #     chat_conversation.remove_participant(member_user_id)
+
     db.session.commit()
 
     
@@ -1324,6 +1391,71 @@ def remove_startup_member(startup_id, member_id):
             print(f"⚠️ Removed from startup notification failed: {e}")
     return success_response(message='Member removed successfully')
 
+@startups_bp.route('/<int:startup_id>/members/<int:member_id>/promote', methods=['POST'])
+@jwt_required()
+def promote_member_to_admin(startup_id, member_id):
+    """Promote a member to admin role"""
+    current_user_id = get_jwt_identity()
+    
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized', 403)
+    
+    member = StartupMember.query.get(member_id)
+    if not member:
+        return error_response('Member not found', 404)
+    
+    if member.startup_id != startup_id:
+        return error_response('Member does not belong to this startup', 400)
+    
+    try:
+        member.admin = True
+        db.session.commit()
+        
+        try:
+            notify_info(
+                user_id=member.user_id,
+                message=f"You have been promoted to admin of the startup: {member.startup.name}"
+            )
+        except Exception as e:
+            print(f"⚠️ Promoted to admin notification failed: {e}")
+        
+        return success_response(message='Member promoted to admin successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to promote member: {str(e)}', 500)
+
+@startups_bp.route('/<int:startup_id>/members/<int:member_id>/demote', methods=['POST'])
+@jwt_required()
+def demote_member_from_admin(startup_id, member_id):
+    """Demote an admin member back to regular member role"""
+    current_user_id = get_jwt_identity()
+    
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized', 403)
+    
+    member = StartupMember.query.get(member_id)
+    if not member:
+        return error_response('Member not found', 404)
+    
+    if member.startup_id != startup_id:
+        return error_response('Member does not belong to this startup', 400)
+    
+    try:
+        member.admin = False
+        db.session.commit()
+        
+        try:
+            notify_info(
+                user_id=member.user_id,
+                message=f"You have been demoted from admin of the startup: {member.startup.name}"
+            )
+        except Exception as e:
+            print(f"⚠️ Demoted from admin notification failed: {e}")
+        
+        return success_response(message='Member demoted from admin successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to demote member: {str(e)}', 500)
 @startups_bp.route('/<int:startup_id>/leave', methods=['DELETE'])
 @jwt_required()
 def leave_startup(startup_id):
@@ -1342,6 +1474,9 @@ def leave_startup(startup_id):
     
     try:
         db.session.delete(membership)
+        # chat_conversation = ChatConversation.query.filter_by(startup_id=startup_id).first()
+        # if chat_conversation:
+        #     chat_conversation.remove_participant(current_user_id)
         db.session.commit()
         
         try:
@@ -1361,3 +1496,41 @@ def leave_startup(startup_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to leave startup: {str(e)}', 500)
+
+@startups_bp.route('/<int:startup_id>/members/<int:member_id>/change-role', methods=['POST'])
+@jwt_required()
+def change_member_role(startup_id, member_id):
+    """Change a member's role (e.g. from member to founder)"""
+    current_user_id = get_jwt_identity()
+    
+    if not has_startup_management_access(current_user_id, startup_id):
+        return error_response('Unauthorized', 403)
+    
+    member = StartupMember.query.get(member_id)
+    if not member:
+        return error_response('Member not found', 404)
+    
+    if member.startup_id != startup_id:
+        return error_response('Member does not belong to this startup', 400)
+    startup = Startup.query.get(startup_id)
+    data = request.get_json() or {}
+    new_role = data.get('role')
+    if new_role not in startup.roles.keys():
+        return error_response('Invalid role specified', 400)
+    
+    try:
+        member.role = new_role
+        db.session.commit()
+        
+        try:
+            notify_info(
+                user_id=member.user_id,
+                message=f"Your role in the startup {member.startup.name} has been changed to: {new_role}"
+            )
+        except Exception as e:
+            print(f"⚠️ Role change notification failed: {e}")
+        
+        return success_response(message='Member role changed successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to change member role: {str(e)}', 500)

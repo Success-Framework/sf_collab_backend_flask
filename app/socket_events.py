@@ -3,7 +3,7 @@ WebSocket Events Handler for Real-Time Chat
 """
 
 from flask_socketio import emit, join_room, leave_room
-from app.extensions import socketio
+from app.extensions import socketio, db
 from flask_jwt_extended import decode_token
 from flask import request
 from datetime import datetime
@@ -124,13 +124,18 @@ def handle_send_message(data):
     
     user_id = socket_sessions[sid]['user_id']
     conversation_id = data.get('conversation_id')
-    content = data.get('content')
+    content = data.get('content', '').strip()
+    file_url = data.get('file_url')
+    file_name = data.get('file_name')
+    file_type = data.get('file_type')
+    is_image = data.get('is_image', False)
     message_type = data.get('message_type', 'text')
     reply_to_id = data.get('reply_to_id')
     
-    if not content or not conversation_id:
-        emit('error', {'message': 'Missing content or conversation_id'})
+    if not content and not file_url:
+        emit('error', {'message': 'Message content or file URL is required'})
         return
+        
     
     try:
         user = User.query.get(user_id)
@@ -144,13 +149,17 @@ def handle_send_message(data):
             emit('error', {'message': 'Not a participant'})
             return
         
-        # Create message
+        # Create message - Now including file fields
         message = ChatMessage(
             conversation_id=conversation_id,
             sender_id=user_id,
             original_content=content,
             message_type=message_type,
             reply_to_id=reply_to_id,
+            file_url=file_url,
+            file_name=file_name,
+            file_type=file_type,
+            is_image=is_image,
             sender_timezone=user.get_timezone() if hasattr(user, 'get_timezone') else 'UTC'
         )
         
@@ -167,20 +176,49 @@ def handle_send_message(data):
             'lastName': user.last_name,
             'profilePicture': user.profile_picture
         }
+
+        # For each participant who had hidden this conversation, un-hide it
+        # so the new message reappears in their list
+        for participant in conversation.participants:
+            if str(participant.id) != str(user_id):
+                if conversation.is_hidden_for_user(participant.id):
+                    conversation.unhide_for_user(participant.id)
         
         room = f"conversation_{conversation_id}"
+        # Include conversation_type so the frontend can suppress general chat notifications
+        conversation_meta = {
+            'id': conversation_id,
+            'conversation_type': conversation.conversation_type,
+            'name': conversation.name,
+        }
         
         # Broadcast to conversation room
         emit('new_message', {
             'message': message_data,
-            'conversation_id': conversation_id
+            'conversation_id': conversation_id,
+            'conversation': conversation_meta,
         }, room=room)
         # 2️⃣ Emit to each participant's user room (GLOBAL updates)
         for participant in conversation.participants:
             emit('conversation_message', {
                 'conversation_id': conversation_id,
-                'message': message_data
+                'message': message_data,
+                'conversation': conversation_meta,
             }, room=f"user_{participant.id}")
+
+        # 3️⃣ Emit "delivered" back to the SENDER if any recipient is currently online
+        now_iso = datetime.utcnow().isoformat()
+        any_recipient_online = any(
+            str(p.id) != str(user_id) and str(p.id) in connected_users
+            for p in conversation.participants
+        )
+        if any_recipient_online:
+            socketio.emit('message_status_update', {
+                'message_id': message.id,
+                'conversation_id': conversation_id,
+                'status': 'delivered',
+                'delivered_at': now_iso
+            }, room=f"user_{user_id}")
                 
         logging.info(f"Message sent by user {user_id} in conversation {conversation_id}")
         
@@ -224,8 +262,9 @@ def handle_typing_stop(data):
     }, room=room, include_self=False)
 @socketio.on('mark_read')
 def handle_mark_read(data):
-    """Mark conversation as read"""
+    """Mark conversation as read and notify senders their messages were read"""
     from app.models.chatConversation import ChatConversation
+    from app.models.chatMessage import ChatMessage
     
     conversation_id = data.get('conversation_id')
     sid = request.sid
@@ -237,16 +276,72 @@ def handle_mark_read(data):
     
     try:
         conversation = ChatConversation.query.get(conversation_id)
-        if conversation and conversation.is_user_participant(user_id):
-            conversation.mark_as_read(user_id)
-            
-            room = f"conversation_{conversation_id}"
-            emit('messages_read', {
-                'user_id': user_id,
+        if not (conversation and conversation.is_user_participant(user_id)):
+            return
+
+        # Get unread messages BEFORE marking as read (sent by others, not this user)
+        from app.models.chatConversation import conversation_user_reads
+        from sqlalchemy import and_
+        
+        read_status = None
+        try:
+            read_status = db.session.execute(
+                conversation_user_reads.select().where(
+                    and_(
+                        conversation_user_reads.c.conversation_id == conversation_id,
+                        conversation_user_reads.c.user_id == user_id
+                    )
+                )
+            ).first()
+        except Exception:
+            pass
+
+        last_read_at = read_status.last_read_at if read_status else None
+
+        # Fetch messages that this user hasn't read yet (sent by someone else)
+        unread_messages_query = ChatMessage.query.filter(
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.sender_id != user_id,
+            ChatMessage.is_deleted == False
+        )
+        if last_read_at:
+            unread_messages_query = unread_messages_query.filter(
+                ChatMessage.created_at > last_read_at
+            )
+        unread_messages = unread_messages_query.all()
+
+        # Mark as read in DB
+        conversation.mark_as_read(user_id)
+
+        room = f"conversation_{conversation_id}"
+        now_iso = datetime.utcnow().isoformat()
+
+        # Notify room that this user read the conversation
+        emit('messages_read', {
+            'user_id': user_id,
+            'conversation_id': conversation_id,
+            'timestamp': now_iso
+        }, room=room)
+
+        # For each unread message, tell the SENDER their message was read
+        notified_senders = set()
+        for msg in unread_messages:
+            sender_id = str(msg.sender_id)
+            # Emit to the sender's personal room so they see the green ticks
+            socketio.emit('message_status_update', {
+                'message_id': msg.id,
                 'conversation_id': conversation_id,
-                'timestamp': datetime.utcnow().isoformat()
-            }, room=room)
-            
+                'status': 'read',
+                'read_at': now_iso,
+                'read_by': user_id
+            }, room=f"user_{sender_id}")
+            notified_senders.add(sender_id)
+
+        logging.info(
+            f"User {user_id} read conversation {conversation_id}, "
+            f"notified {len(notified_senders)} senders"
+        )
+
     except Exception as e:
         logging.error(f"Error marking as read: {e}")
 @socketio.on('get_online_users')
@@ -311,3 +406,15 @@ def emit_user_status_update(user_id, status):
         }, room=f"user_{user_id}")
     except Exception as e:
         logging.error(f"Error emitting status: {e}")
+        
+def emit_user_left_conversation(conversation_id, user_id, user_name):
+    """Emit when a user leaves a conversation."""
+    socketio.emit(
+        "user_left_conversation",
+        {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "user_name": user_name,
+        },
+        room=f"conversation_{conversation_id}",
+    )
