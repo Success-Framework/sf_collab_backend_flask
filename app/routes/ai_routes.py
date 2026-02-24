@@ -885,7 +885,7 @@ def generate_logo():
 
     total_cost = COST_PER_IMAGE * IMAGE_COUNT
 
-    if user.credits < total_cost:
+    if not user.wallet or (user.wallet.credits or 0) < total_cost:
         return jsonify({"error": "Not enough credits"}), 402
     
     client = get_openai_client()
@@ -1011,7 +1011,10 @@ def generate_logo():
             "base64": img.b64_json
         })
 
-    user.credits -= total_cost
+    user.wallet.spend_credits(
+        amount=total_cost,
+        description=f"Generated {IMAGE_COUNT} logo images"
+    )
     db.session.commit()
 
     return jsonify({
@@ -1098,7 +1101,7 @@ def text_to_image():
 
     COST_PER_IMAGE = 10
 
-    if user.credits < COST_PER_IMAGE:
+    if not user.wallet or (user.wallet.credits or 0) < COST_PER_IMAGE:
         return standard_response(False, None, "Not enough credits", 402)
 
     try:
@@ -1106,7 +1109,10 @@ def text_to_image():
     except Exception as e:
         return standard_response(False, None, str(e), 500)
 
-    user.credits -= COST_PER_IMAGE
+    user.wallet.spend_credits(
+        amount=COST_PER_IMAGE,
+        description="Generated AI image"
+    )
     db.session.commit()
 
     return standard_response(True, {

@@ -3,10 +3,6 @@ from sqlalchemy import Integer, ForeignKey
 from sqlalchemy.orm import relationship
 from app.extensions import db
 
-transaction_type = db.Column(db.String(20), nullable=False)
-currency_type = db.Column(db.String(20), nullable=False)
-
-
 
 class WalletTransaction(db.Model):
     __tablename__ = 'wallet_transactions'
@@ -50,7 +46,7 @@ class WalletTransaction(db.Model):
             description=description
         )
         db.session.add(transaction)
-        db.session.commit()
+        # NOTE: caller is responsible for db.session.commit()
         return transaction
     
     def to_dict(self):
