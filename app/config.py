@@ -28,20 +28,36 @@ class Config:
     # Flask
     # ------------------------
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    SMTP_ENCRYPTION_KEY = os.getenv("SMTP_ENCRYPTION_KEY", "dev-smtp-encryption-key-change-in-production")
     DEBUG = True
     TESTING = False
 
     # ------------------------
     # Database
     # ------------------------
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+    
+    # --- Session storage (local vs prod) ---
+    # ------------------------
+    # Sessions (config only)
+    # ------------------------
+    SESSION_TYPE = os.getenv("SESSION_TYPE", "sqlalchemy")  # or "filesystem" for local
+    SESSION_SQLALCHEMY_TABLE = os.getenv("SESSION_SQLALCHEMY_TABLE", "sessions")
+    SESSION_PERMANENT = True
+
+
+    
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///instance/sf_collab_dev.db"
+    )
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
 
     SQLALCHEMY_POOL_SIZE = 5
-    SQLALCHEMY_MAX_OVERFLOW = 10
-    SQLALCHEMY_POOL_RECYCLE = 3600
-    SQLALCHEMY_POOL_TIMEOUT = 30
+    #SQLALCHEMY_MAX_OVERFLOW = 10
+    #SQLALCHEMY_POOL_RECYCLE = 3600
+    #SQLALCHEMY_POOL_TIMEOUT = 30
 
     # ------------------------
     # OAuth
@@ -100,6 +116,7 @@ class Config:
     CORS_ORIGINS = [
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174",
         "https://sfclb.netlify.app",
         "https://sfmanagers-frontend.vercel.app",
         "https://sfcollab.com",
@@ -107,6 +124,7 @@ class Config:
         "https://api.sfcollab.com",
         "https://www.api.sfcollab.com",
         "https://d329ej3iwi83w9.cloudfront.net",
+        'http://localhost:5173',
     ]
 
     CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -118,8 +136,10 @@ class Config:
         "Origin",
     ]
 
+    DEFAULT_PAGE_SIZE = 10
+    MAX_PAGE_SIZE = 100
     SOCKETIO_CORS_ALLOWED_ORIGINS = CORS_ORIGINS
-
+    
     # ------------------------
     # Sessions
     # ------------------------
@@ -166,10 +186,13 @@ class Config:
     # Timezone
     TIMEZONE = 'UTC'
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+    
+    
+    
     @staticmethod
     def init_stripe():
         if not Config.STRIPE_SECRET_KEY:
-            raise RuntimeError("STRIPE_SECRET_KEY is not set")
+            print("WARNING: STRIPE_SECRET_KEY is missing. Payments will fail.")
         stripe.api_key = Config.STRIPE_SECRET_KEY
 
 
@@ -194,7 +217,7 @@ class TestingConfig(Config):
     TESTING = True
     DEBUG = True
 
-    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    
     RATELIMIT_ENABLED = False
     WTF_CSRF_ENABLED = False
 

@@ -164,7 +164,7 @@ def thank_email_template(data: DataType, see_email_template: bool = False) -> st
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Thank You for Joining {brand_name}!</h1>
   <p>Hello <strong>{data['user'].get('name', 'startup enthusiast')}</strong>,</p>
@@ -191,7 +191,7 @@ def verification_code_email_template(data: DataType, see_email_template: bool = 
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Verify Your Email</h1>
   <p>Hello <strong>{data['user'].get('name', 'user')}</strong>,</p>
@@ -215,7 +215,7 @@ def password_reset_email_template(data: DataType, see_email_template: bool = Fal
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@meridian" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@meridian" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Password Reset Request</h1>
   <p>Hello <strong>{data['user'].get('name', 'user')}</strong>,</p>
@@ -240,7 +240,7 @@ def welcome_email_template(data: DataType, see_email_template: bool = False) -> 
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>Welcome to {brand_name}!</h1>
   <p>Hello <strong>{data.get('name', 'user')}</strong>,</p>
@@ -267,7 +267,7 @@ def contact_form_email_template(data: DataType, see_email_template: bool = False
       <body>
       <div class="container">
   <div class='header'>
-  <img src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}'/>
   </div>
   <h1>New Contact Form Submission</h1>
   <p>You have received a new message from the contact form on your website.</p>
@@ -280,12 +280,63 @@ def contact_form_email_template(data: DataType, see_email_template: bool = False
       </body>
     </html>
     """
+def transaction_bill_email_template(transaction, see_email_template: bool = False) -> str:
+  transaction_type = transaction.type.title()
+  amount = transaction.amount / 100  # Assuming amount is stored in cents
+  currency = transaction.currency.upper()
+  transaction_id = transaction.id or 'N/A'
+  date = transaction.created_at.isoformat() if transaction.created_at else 'N/A'
+  parsed_date = transaction.created_at.strftime("%B %d, %Y") if transaction.created_at else 'N/A'
+  recipient = "SF Collab"
+  description = transaction.donation_message or ''
+  plan_id = transaction.plan_id or ''
+  def replace_dashes_and_title_case(s: str) -> str:
+    return s.replace('-', ' ').title()
+  if transaction_type == 'subscription' and plan_id:
+    transaction_type = f"Subscription - {replace_dashes_and_title_case(plan_id)}"
+  is_donation = transaction_type.lower() == 'donation'
+  title = "Donation Receipt" if is_donation else "Crowdfunding Contribution Receipt"
+  
+  return f"""
+    <html>
+      <head>
+      <style>
+  {styles}
+      </style>
+      </head>
+      <body>
+      <div class="container">
+  <div class='header'>
+  <img loading="lazy" src='{"cid:logo@sf" if not see_email_template else logo_sf}' alt='Logo of {brand_name}' title='Logo of {brand_name}' style="height: 50px;"/>
+  </div>
+  <h1>{title}</h1>
+  <p>Hello <strong>{f'{transaction.user.first_name} {transaction.user.last_name}' if transaction.user else 'Supporter'}</strong>,</p>
+  <p>Thank you for your generous {'donation' if is_donation else 'contribution'} to {brand_name}!</p>
+  <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 20px; border-radius: 12px; margin: 20px 0;">
+    <p><strong>Transaction Details:</strong></p>
+    <p><strong>Type:</strong> {transaction_type}</p>
+    {transaction_id and plan_id and f'<p><strong>Plan:</strong> {replace_dashes_and_title_case(plan_id)}</p>' or ''}
+    <p><strong>Amount:</strong> {currency} {amount:.2f}</p>
+    <p><strong>Transaction ID:</strong> {transaction_id}</p>
+    <p><strong>Date:</strong> {parsed_date}</p>
+    <p><strong>Recipient:</strong> {recipient}</p>
+    {f'<p><strong>Message:</strong> {description}</p>' if description else ''}
+  </div>
+  <p>Your {'donation' if is_donation else 'contribution'} will help us continue to support startups and innovators in our community.</p>
+  <a target='_blank' href="{frontend_url}/dashboard"><button class='button'>View Your Account</button></a>
+  <p>For tax purposes, please keep this email as your receipt.</p>
+  {footer}
+      </div>
+      </body>
+    </html>
+    """
 templates = {
   "thank_email": thank_email_template,
   "verification_code_email": verification_code_email_template,
   "password_reset_email": password_reset_email_template,
   "welcome_email": welcome_email_template,
-  "contact_form_email": contact_form_email_template
+  "contact_form_email": contact_form_email_template,
+  "transaction_bill_email": transaction_bill_email_template
 }
 
 # Exporting the templates

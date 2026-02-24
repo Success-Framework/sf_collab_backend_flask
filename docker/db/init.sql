@@ -41,9 +41,12 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `is_email_verified` tinyint(1) DEFAULT NULL,
   `last_login` datetime DEFAULT NULL,
+  `last_login_ip` varchar(45) DEFAULT NULL,
   `status` enum('active','deleted', 'banned') DEFAULT NULL,
   `role` enum('founder','contributor', 'influencer', 'content_creator', 'community_manager','hr_specialist','investor','advisor','mentor','partner','admin','moderator','member','technical_lead','engineering_manager','backend_engineer','frontend_engineer','fullstack_engineer','mobile_engineer','software_architect','qa_engineer','test_automation_engineer','devops_engineer','cloud_engineer','sre','infrastructure_engineer','platform_engineer','cybersecurity_engineer','data_scientist','data_engineer','machine_learning_engineer','ai_engineer','mlops_engineer','data_analyst','ai_researcher','product_manager','product_owner','ux_designer','ui_designer','product_designer','ux_researcher','growth_engineer','growth_marketer','seo_specialist','content_strategist') DEFAULT NULL,
-  `plan_id` VARCHAR(255) DEFAULT NULL,
+  `builder_plan_id` VARCHAR(255) DEFAULT NULL,
+  `founder_plan_id` VARCHAR(255) DEFAULT NULL,
+  `credits` int DEFAULT 0,
   `xp_points` int DEFAULT NULL,
   `streak_days` int DEFAULT NULL,
   `last_activity_date` date DEFAULT NULL,
@@ -77,6 +80,7 @@ CREATE TABLE `users` (
   `notif_quiet_hours_end` varchar(5) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `storage_used_mb` float NOT NULL DEFAULT 0.0,
   
   PRIMARY KEY (`id`),
 
@@ -88,11 +92,13 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
+
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-/*INSERT INTO `users` VALUES (11,'John','Admin','admin@startup.com','$2b$12$LQv3c1yqBWVHxkd0L8k7uO9P0tYY0tR8k8D6eB6QY8YdX7vL5sYfC',1,'2024-01-15 09:30:00','active','admin',5000,45,'2024-01-15',25000,95.5,3,'https://example.com/images/admin-profile.jpg','Experienced startup founder and mentor with 10+ years in tech industry.','TechStart Inc.','{\"github\": \"https://github.com/johnadmin\", \"twitter\": \"https://twitter.com/johnadmin\", \"linkedin\": \"https://linkedin.com/in/johnadmin\"}','United States','San Francisco','America/Los_Angeles',1,1,'public','en','America/Los_Angeles','dark',1,1,1,1,1,0,1,'daily',1,'22:00','07:00','2023-01-10 08:00:00','2024-01-15 09:30:00'),(12,'Sarah','Chen','sarah.chen@startup.com','$2b$12$K8v9c2zR.CVHxjd0M9l8vN0Q1uZZ1uS9l9E7fC7RZ9ZeY8wM6tZhD',1,'2024-01-15 10:15:00','active','founder',3200,30,'2024-01-15',15000,88.2,2,'https://example.com/images/sarah-profile.jpg','Passionate about AI and machine learning. Building the next generation of intelligent applications.','AI Innovations LLC','{\"twitter\": \"https://twitter.com/sarahchenai\", \"linkedin\": \"https://linkedin.com/in/sarahchen\"}','Canada','Toronto','America/Toronto',1,1,'public','en','America/Toronto','light',1,1,1,1,1,1,1,'weekly',0,'23:00','08:00','2023-03-15 14:20:00','2024-01-15 10:15:00'),(13,'Mike','Rodriguez','mike.rodriguez@startup.com','$2b$12$N9w0d3A.SDWJyl1N0m9wO1R2vAA2vT0m0F8gD8SA0AfZd9xN7uAiE',1,'2024-01-14 16:45:00','active','member',1800,25,'2024-01-14',8000,92,1,'https://example.com/images/mike-profile.jpg','Product manager with expertise in SaaS platforms and user experience design.','ProductLabs','{\"linkedin\": \"https://linkedin.com/in/mikerodriguez\", \"portfolio\": \"https://mikerodriguez.design\"}','Spain','Barcelona','Europe/Madrid',1,0,'','en','Europe/Madrid','light',1,0,1,0,1,0,1,'weekly',1,'21:00','07:00','2023-05-20 11:10:00','2024-01-14 16:45:00'),(14,'Emily','Watson','emily.watson@startup.com','$2b$12$P0x1e4B.TEXKzm2O1n0xP2S3wBB3wU1n1G9hE9TB1BgAe0yO8vBjF',1,'2024-01-15 08:20:00','active','',2500,60,'2024-01-15',12000,96.8,1,'https://example.com/images/emily-profile.jpg','Full-stack developer specializing in React, Node.js, and cloud architecture.','DevCraft Studios','{\"github\": \"https://github.com/emilywatson\", \"twitter\": \"https://twitter.com/emilydev\", \"linkedin\": \"https://linkedin.com/in/emilywatson\"}','United Kingdom','London','Europe/London',1,1,'public','en','Europe/London','dark',1,1,0,0,0,1,1,'',0,'22:00','08:00','2023-02-10 09:45:00','2024-01-15 08:20:00'),(15,'Alex','Kumar','alex.kumar@startup.com','$2b$12$Q1y2f5C.UFYLAn3P2o1yQ3T4xCC4xV2o2H0iF0UC2ChBf1zP9wCkG',1,'2024-01-13 14:30:00','active','',1500,15,'2024-01-13',6000,85.5,0,'https://example.com/images/alex-profile.jpg','Digital marketing expert focused on growth hacking and content strategy for tech startups.','GrowthHack Media','{\"twitter\": \"https://twitter.com/alexgrowth\", \"linkedin\": \"https://linkedin.com/in/alexkumar\", \"instagram\": \"https://instagram.com/alexkumar\"}','India','Bangalore','Asia/Kolkata',1,1,'public','en','Asia/Kolkata','light',1,1,1,1,1,1,1,'daily',1,'23:30','09:00','2023-07-05 16:20:00','2024-01-13 14:30:00'),(16,'David','Wilson','david.wilson@startup.com','$2b$12$R2z3g6D.VGZMBo4Q3p2zR4U5yDD5yW3p3I1jG1VD3DiCg2A0x1DlH',1,'2024-01-05 11:00:00','','member',800,0,'2024-01-05',3000,75,0,'https://example.com/images/david-profile.jpg','Former startup advisor taking a break from the ecosystem.',NULL,'{\"linkedin\": \"https://linkedin.com/in/davidwilson\"}','Australia','Sydney','Australia/Sydney',0,0,'private','en','Australia/Sydney','light',0,0,0,0,0,0,0,'',0,'22:00','08:00','2023-04-12 10:15:00','2024-01-10 09:00:00'),(17,'Lisa','Johnson','lisa.johnson@startup.com','$2b$12$S3a4h7E.WHAMCp5R4q3aT5V6zEE6zX4q4J2kH2WE4EjDh3B1y2EmI',0,NULL,'active','member',100,1,'2024-01-15',0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2024-01-15 12:00:00','2024-01-15 12:00:00'),(18,'Robert','Thompson','robert.thompson@startup.com','$2b$12$T4b5i8F.XIBNQq6S5r4bU6W7aFF7aY5r5K3lI3XF5FkEi4C2z3FnJ',1,'2024-01-14 17:20:00','active','investor',4200,90,'2024-01-14',50000,91.2,0,'https://example.com/images/robert-profile.jpg','Angel investor focused on early-stage tech startups. Always looking for innovative ideas.','Thompson Ventures','{\"twitter\": \"https://twitter.com/robthompsonvc\", \"website\": \"https://thompsonventures.com\", \"linkedin\": \"https://linkedin.com/in/robertthompson\"}','United States','New York','America/New_York',1,1,'','en','America/New_York','dark',1,0,1,1,1,0,0,'daily',1,'20:00','06:00','2022-11-08 13:45:00','2024-01-14 17:20:00'),(19,'Maria','Garcia','maria.garcia@startup.com','$2b$12$U5c6j9G.YJCOTr7T6s5cV7X8bGG8bZ6s6L4mJ4YG6GlFj5D3a4GoK',1,'2024-01-15 11:30:00','active','',1900,22,'2024-01-15',7500,89.5,1,'https://example.com/images/maria-profile.jpg','UI/UX designer passionate about creating beautiful and functional interfaces.','DesignCraft Studio','{\"behance\": \"https://behance.net/mariagarcia\", \"dribbble\": \"https://dribbble.com/mariagarcia\"}','Mexico','Mexico City','America/Mexico_City',1,1,'public','es','America/Mexico_City','light',1,1,1,0,1,1,1,'weekly',0,'23:00','08:00','2023-06-18 15:20:00','2024-01-15 11:30:00'),(20,'James','Lee','james.lee@startup.com','$2b$12$V6d7k0H.ZKDPSu8U7t6dW8Y9cHH9cA7t7M5nK5ZH7HmGk6E4b5HpL',1,'2024-01-14 13:45:00','active','',2800,40,'2024-01-14',11000,94.2,1,'https://example.com/images/james-profile.jpg','Backend developer specializing in microservices and database architecture.','CodeForge Solutions','{\"github\": \"https://github.com/jameslee\", \"linkedin\": \"https://linkedin.com/in/jameslee\"}','South Korea','Seoul','Asia/Seoul',1,0,'','ko','Asia/Seoul','dark',1,0,0,0,0,0,1,'',1,'00:00','09:00','2023-03-22 08:30:00','2024-01-14 13:45:00'),(100,'Mohamed','','mohamed311@gmail.com','scrypt:32768:8:1$k33uICRwHJuqIN7v$b575b790a096bd99a112cd1ad20b0d65c6e360da3e6983823405298c7833392102cad8c9bf370bfde137178f561e50cdce7dddfa1ece32d01fcac3b0ffa32622',1,'2025-12-14 04:47:38','active','member',0,0,'2025-12-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocKWikJW89KC1-jcYZqnOimQSUVKZGF-MH379Jikz1maz_33FQ=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-11-28 02:24:03','2025-12-14 04:47:38'),(101,'Aung','Marma','aungmarma582@gmail.com','scrypt:32768:8:1$id1nTJheh5PXBFwy$762ed30483c49dc808951de0e16f700cf142e7456dd1904e7d0e858cbe2f38c2b37dd5c816aa1a188771098d7c61b064197bc06b30d0071daf1fc6e5ae0e6c45',1,'2025-11-28 03:25:32','active','member',0,0,'2025-11-28',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocIXgcQroBTmAZJ-M5qWrbtW_dkLLn_u0lIirTtI9Hhl_DLGIQ=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-11-28 03:25:32','2025-11-28 03:25:33'),(102,'George ','Zaher','zahergeorge00@gmail.com','scrypt:32768:8:1$GSiGFnMKqzjwxkMX$5cbd50d1f8c10d5128ed190532865c15561e8073cb5eabde56cce1fb090458eff57777485d9432cbec2943aa955ee504f9cb86bec9b456655825ffbde083114d',0,'2025-11-28 18:06:51','active','member',0,0,'2025-11-28',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocIJ5S5u53qsbdQR9kvMH7lMnm4ZG7RkQv8FzfJgEHj82tdYBA=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-11-28 18:05:01','2025-11-28 18:06:51'),(103,'Hfxx','Cxsjbb','cxsjbbhfxx@gmail.com','scrypt:32768:8:1$dxFxvKC7maLX4pOW$1a0923b44efd17406651268c03b68dbad6f75eccfbe69702c28d48c4d049155fa012537701f5164302491667feeba098ca1e0be568d8e9ae89c315153a7bebce',1,'2025-11-28 18:07:42','active','member',0,0,'2025-11-28',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocJNiTLqthO-ybVz1IRN3c4gwyZ1235pb2QlQD2hqMIgJMskZg=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-11-28 18:06:00','2025-11-28 18:07:42'),(104,'','','885@gmail.com','scrypt:32768:8:1$dtFtQoxJz2p9D1s2$47749aad553d96e63727b4ddc2e28d45c2f24dc4a176c5fc0f549d12fb63e3ad0c0361443c0c7a2bf9e08d08b37f8332d1c514d50d22a5c0f3270f01f2f888a8',1,'2025-12-15 17:47:03','active','member',0,0,'2025-12-15',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLnTyUMJA0bBCZzwQwoVK0ZwaKV9DSxb9OVXlR3e4EL7Eyktg=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-11-28 18:16:37','2025-12-15 17:47:06'),(105,'Krystian','','krystian09536@gmail.com','scrypt:32768:8:1$x2re4v7K1Hz5HgJB$37e7e7363dbe4b39dab239bb2d72b3861e385336ad0f370bb2b4eb49e26742ee735019555746df18f639dcf0ff27d1c5f0b3e1fd0d308010ca7ec203da880960',1,'2025-11-28 20:15:57','active','member',0,0,'2025-11-28',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocKS1J7GrRB2PgPzHrP5w9kLu6x5ne0f3fh4GMyaaLfDBrxSjQ=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-11-28 20:11:41','2025-11-28 20:15:57'),(106,'Mujib','Azeez','gbolahunazeez1305@gmail.com','scrypt:32768:8:1$paTqtjkEgsBKplMT$76a137f8e1a4eac49f45c89996d19092e65925b96f3bdf76b96c5b3583ea033572c362633aaa6f83508e3b91c3ddc3d024625a18ad886348a382a4b69cdff081',1,'2025-12-01 17:59:40','active','member',0,0,'2025-12-01',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocIxMWhBoszfjmF0SCdP5rxcywBh0nBzRgttCFuna6MMY8vFGRk=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-01 17:52:28','2025-12-01 17:59:40'),(107,'','','-code-9723@github.oauth','scrypt:32768:8:1$z2fPoGuPiBevnfno$60496e581b5637349cc2ecf48abaf4469d7ff6fcd38efee475a6cce821dd59b5a2dd5e6ad619bde08f01e90a4014973e93425d5dfc54806988fcf3a93b46d1b7',0,'2025-12-10 23:48:27','active','member',0,0,'2025-12-10',0,100,0,'https://avatars.githubusercontent.com/u/122914650?v=4',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-04 22:34:09','2025-12-10 23:48:27'),(108,'Oskar','Oskar','oskarrro777@gmail.com','scrypt:32768:8:1$6y0jAlkicXxm7V6B$60c90cb6f01def48c0ee0a98fb992f4bc85384f63d6d369020b81c234239e904a04eb8a6a3513f4992e091b62e12480da24c9158fbd601b2ff7d38d8ccde4eb3',1,'2025-12-14 04:01:59','active','member',0,0,'2025-12-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocK8xcYC3FE4iyrYTx5LdbVNYUpYuJc3ijkknGYUUus2vKFOHF0=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-07 02:34:14','2025-12-14 04:01:59'),(109,'Yash','Rajput','yashrajput3768@gmail.com','scrypt:32768:8:1$3QPeeufmStK81zDe$6e92441e2a23cfe944c0ff6749f586e5e75c83add925b2cf770ea76bda8ba8d599bd98b07d4083ad74410064b87a77a9b4f4f3910b0935556ee41a846707efbe',1,'2025-12-07 04:48:48','active','member',0,0,'2025-12-07',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocJSqbCKXyBM4tByAmYYHEjEMzdT4SfaTWFcnBgsDAefKzPGPQ=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-07 04:45:40','2025-12-07 04:48:48'),(110,'Arise','','arise693@gmail.com','scrypt:32768:8:1$zY2nqbI7W7APhhTL$9307acc2c2971f680c6c8caa26a3cd37f120d147521390d719c18eac0c94ebedbba9d73f383728b1457f934f718e3e9548086472d3246f229935219a5f580957',1,'2025-12-07 17:21:07','active','member',0,0,'2025-12-07',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocJKsrCGIh5IA_alMRiewkYT1m7aOmkhiTb-xFvpe7NkUz0QAg=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-07 17:21:05','2025-12-07 17:21:07'),(111,'David','Jeremiah','ohiodavid30@gmail.com','scrypt:32768:8:1$O03u4zcJTc0FGd4O$12e52672c40aa1cc7e229df2fb9739c5bc196cc739b6009f302e18117d359c638bf758dee3de5827d7c8bfe260d65f877e0913763c1e4d5e763ff0dbdd5270be',1,'2025-12-07 19:53:34','active','member',0,0,'2025-12-07',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocKHjFIxmTfvWmrY2UPOwienUKkG8oWFwCrSh3MHUAMLZ4pzl2F_=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-07 17:21:11','2025-12-07 19:53:34'),(112,'Kayraopi','08','kayraopi@gmail.com','scrypt:32768:8:1$clLLGAnaSXWerMXw$3e0bb52f7a448a9773b047e96dce195e346da15d4116372a5b785b386d9791d6c076b92c3bb8e7237a591bcb71481ff37b97ca20dad30d6b1fdcdc1dd08eb68e',1,'2025-12-07 19:25:09','active','member',0,0,'2025-12-07',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLz0xSISqDMCMYJXlEH8dWVTblg2uoBsj48dbdw0YgjCtelObWr=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-07 19:25:08','2025-12-07 19:25:09'),(113,'Deep kumar','Patel','pateldeep555@gmail.com','scrypt:32768:8:1$lkrEboQraKOpj0bA$d905d3c222a64dc57c8c3d30451c410ebd803fa54669b82d742f4c40ceaf514bb073c93fdeb207545a48a0603c23233edd98cfb1babde473329aa96c913885c0',1,'2025-12-08 16:23:02','active','member',0,0,'2025-12-08',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLPx43oXsr676RGO5EaVnrT5lTuOmA5vOSSeRIpomz8bfnD5eS_=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-08 16:23:00','2025-12-08 16:23:02'),(114,'Cletus','Newman','cletusnewman@gmail.com','scrypt:32768:8:1$YGr8XsTnIMeEu5IY$d8e0c5c196d16fd70ab0a36722b1f3bfc9cc656302cb0eafffba454ab414cac53c90f74316e801366bb5af141cb06cb49131f1b89190aaca5fc4985950d50b14',1,'2025-12-09 12:15:12','active','member',0,0,'2025-12-09',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocKaTjXNHEGewmaSpOo2Xvm73oI7oxOEfl_zN0Px4WJP_ldulBjN=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-09 12:13:08','2025-12-09 12:15:12'),(115,'Manglam','Pandey','manglampandey911@gmail.com','scrypt:32768:8:1$0qIgtrz7GkVQZGhR$426457c23c35145d98985e174cb1c6cd01a267f3948a06b0be427c064ff9d2757acdcaf71421d7ae7e4ffc9827079b09d163c2fb97d33d346c0177f6a4155459',1,'2025-12-09 12:23:08','active','member',0,0,'2025-12-09',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLVWX-cEb-cs5FEoO4riIi-ErtZI6Hvh3fYvHm15sizp8UMy3U=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-09 12:23:08','2025-12-09 12:23:08'),(116,'Mr','Molian','lemangeurdepitta@gmail.com','scrypt:32768:8:1$xuOStDATkqrUuoaH$e5d4c3a17637b04a99483db5df2db057d98b6a4f096683375e2d4f6d8d1433fc07dc9f48893ef80d2b655239b8f0d7b5d7d935eab527eb8fdd500003c4783148',1,'2025-12-11 05:24:55','active','member',0,0,'2025-12-11',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocJ0pjYg3H6uVgoP2KRWjx0psCYFvM1GeMQF-1MyetoqSigJpjs6=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-11 05:24:54','2025-12-11 05:24:55'),(117,'Ahmed','Alaoui','ahmed@gmail.com','scrypt:32768:8:1$ZA5D7ju2AJVZTL56$a94cbe8a729205370f7fc6931ef22a6b00a6983f2c495f3c3251dc8e054c0891ed3db9a1e73fbb0e1c25cfbba2dfbc1d761ab8377883fd84f004e4d9b28bfb85',0,NULL,'active','member',0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-11 22:07:33','2025-12-11 22:07:33'),(118,'University','6','universallearn.2024@gmail.com','scrypt:32768:8:1$uXR6h3AwMm89CWEY$22a244614cb6e22033ff25c7674e6db913006148737e5912393a6ca2915c2e4dd481fe1f1548d2b05f2f882a206f3789d98e61bd66280f3c1a4de4c2d1f56531',0,'2025-12-15 05:26:07','active','member',0,0,'2025-12-15',0,100,0,'/api/users/uploads/20251215_052458_118_Gemini_Generated_Image_azbwe3azbwe3azbw.png',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2025-12-11 22:15:46','2025-12-15 05:26:07');*/
+-- INSERT INTO `users` VALUES (119,'Fatima','Abba','abbazarah@gmail.com','++2349027715996','scrypt:32768:8:1$4hjJkbyjmXCucon2$6b7f5be64eb418240d88fdd72aac6b08764ca0afe730623a4ab5af20813d17d3cece672e2b097cd178cdbf3d4b17e54b8c2b14fcbd029016f5cf58024ef7b424',1,'2026-01-14 20:30:18','active','member',NULL,0,0,0,'2026-01-14',0,100,0,'/uploads/20260113_144336_119_cbda08fd2a28df5adc317626622060a3.jpg',NULL,NULL,'{}','Nigeria','Yola',NULL,1,1,'public','en','Africa/Lagos','light','development',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 10:51:19','2026-01-14 20:30:18'),(120,'Oskar','Oskar','oskarrro777@gmail.com','++48507351830','scrypt:32768:8:1$RmfUsMGuq3rLMACw$41283c0256be02225775190b014abf76d2f41b86e3c3723a56b840c012794574ca6323c722c7c2e21d67ab35ffd371b1083fc5bba39cafdefa31e6367c2176c7',1,'2026-01-14 15:50:42','active','admin',NULL,0,0,0,'2026-01-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocK8xcYC3FE4iyrYTx5LdbVNYUpYuJc3ijkknGYUUus2vKFOHF0=s96-c',NULL,NULL,'{}','Poland','Bochnia',NULL,1,1,'public','en','Europe/Warsaw','light','development',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 11:15:41','2026-01-14 15:50:42'),(121,'Chinmaya','Bharadwaj H S','chinmayabharadwajhs@gmail.com','+9194875483','scrypt:32768:8:1$CKwILr17Ji0vIv51$1fef75bb0140652d26933603edef7207d0b8999d98172e8e86e6577fd2362a4c22c898c095db9d5bfdab1ff942034ff7061a3bd3b95de88014b2490c8c30bbed',1,'2026-01-14 17:16:51','active','member',NULL,0,0,0,'2026-01-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLvo1crlc_PxQfsYoFkyC77XgYmfoQOcQeyR5PjAj3NZKsP0Q=s96-c',NULL,NULL,'{}','India','Mangaluru',NULL,1,1,'public','en','Asia/Calcutta','light','development',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 12:08:43','2026-01-14 17:16:51'),(122,'Oskar','','oskarrro7777@gmail.com','+485073518300','scrypt:32768:8:1$iP38hKBRqMzfrEHe$a74ebc6f369e5aabd97f10abc08f255fef6b773e5150ea978940333d4f7a4efc04d201683daea8145e8f35b5723775a4082a441bf88873e0030e532ef45c70fc',1,'2026-01-13 12:57:28','active','admin',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocL3rDjPBcXnv2HB1AjOzmryAhi4OzlS1c4vGrA33C9ywrSgRw=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 12:57:28','2026-01-13 12:57:47'),(123,'Krystian','Śledziewski','krystian09536@gmail.com','++48690 518 727','scrypt:32768:8:1$zKkSHv1VSzL73FcW$f78f712221113e0e36341a0d79bee780b01ed5084c5032756747c11dc7eeee007390506f9240508787ffa89e057b2ebe00eb0470b33cc045c72e2b05ee3b322a',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 12:57:50','2026-01-13 12:58:46'),(124,'YASH','BHATNAGAR','yb99.official@gmail.com','++918178484774','scrypt:32768:8:1$6NFqNFVqVszOc4OR$0bfc39e7f60f57a45767f8ba35d97325e01e03373b2047f42b4b3797a0bb57c6d87f4367bd5e655c2f3a944d4c3c8b34906d121fde9314ab3e5c3420f3a234aa',1,'2026-01-13 13:09:18','active','member',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLuTzxIAmVLBkggSTO4bLjmC1ImyfnwxtFh0kfKlYJj2VLSXg=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:09:18','2026-01-13 13:10:21'),(125,'Sanskriti','Dhakad','dhakadsanskriti28@gmail.com',NULL,'scrypt:32768:8:1$m4nlhlHVhtrT7ypx$66e648ab64f3d20f5964dd4101b9bd5a54fa58dae4e0e616bf6795a941b50999d2573c97e372ac8c7676b998061e0d900eade6f274cb313564184123daf4370e',1,'2026-01-13 13:10:12','active','member',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocL92MdEUpbzW7d8FxV1Kxl9e1GwSdhQfgEqn7kttrMvXEvVH-0z5g=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:10:12','2026-01-13 13:10:12'),(126,'ayush','gupta','ayush160998@gmail.com',NULL,'scrypt:32768:8:1$C0RrB1e3egVnLpUN$9985bbd06c04cd74f31a777582a65f3eeddda1f8fd123741ec569d1be48456e9d88bd315718193dc24378f31fbf3303d5f7a8471d1f82c56066013ec7dd6608e',1,'2026-01-13 13:25:07','active','member',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocKuWhpqKCMQIFzZHiVEX8YkYhx0MQHUcyQ-eRab_neXHIiEtg=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:25:07','2026-01-13 13:25:07'),(127,'ayush','Gupta','ayush199816@gmail.com','++917409726481','scrypt:32768:8:1$T2Cwp1HXijKYwcm0$77560746c2da357198da460c29f0220cd6b551d22b33c07ce5ea123fa55b5ac9c8086d5608e70bcb8a773cb19e404e22e10a4572fe009eb781784e3777c0fe96',1,'2026-01-13 15:53:54','active','admin',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocJPm46M7yFLVX8F8RcgiJ_4PAuexyNjOtdRDP5N43MT_tPb-VwO=s96-c',NULL,NULL,'{}','India','Bareilly',NULL,1,1,'public','en','Asia/Calcutta','light','development',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:27:29','2026-01-13 15:53:54'),(128,'Ayush','Gupta','ayush16098@gmail.com',NULL,'scrypt:32768:8:1$EyZl3Og5lXsvNjpI$b15646f0dc47fecd1c6be1aa5169b5cc5a5d4232e1d4c92f8930e8660a1c7095965188d66e3a3c0ace8370a38a61432551eef3b7c2a12f0ef0b2ea7eb6e844ee',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:30:03','2026-01-13 13:30:03'),(129,'Ayush','Gupta','itsayushonly@gmail.com',NULL,'scrypt:32768:8:1$8imiDEKpvMpAZ37p$99e01cfce0a11f91345f072fcd95d1cd79de0d7c07aebb0c105b0e0d685f45f5dca2d595c805a56f7207c35e8f7dd7d105905cc96b12d5a441621d9c30895a23',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:30:37','2026-01-13 13:30:37'),(130,'Laurie','Breton','lauriebreton6@gmail.com',NULL,'scrypt:32768:8:1$PceVPBwkhsNpPCS1$154c71ac4e6137a96ddff37a6d0e56768693c560387710f3376483d6d58410d3b7548d7b8dfac467fc1249b3441031eef03b51fd6786f8727299e1f191a8f1fa',1,'2026-01-13 13:36:55','active','member',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocJWlyzOCacqLsg6wQtKA-sV-Z9sWKFQtzlCIX6AZW-TTGrRpIiD=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:36:55','2026-01-13 13:36:55'),(131,'Ivan','Gomez','ivandavidgomezsilva@gmail.com','+573024690359','scrypt:32768:8:1$3SwQjtEjsWynJOiW$98239287f43915ee55cf48ea0082401b99118002434b35101ac55b7b995f636401e4e4af21bf0505e9a6a8ef6269729d3ce55c6cf6dc5b00fc2b3c7cfb9a578a',1,'2026-01-14 08:25:22','active','admin',NULL,0,0,0,'2026-01-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLrIBUYVi0eJaYHI_MoIxv-h1LnvLbJ5Z7yZizPC4FCJXUHXqE=s96-c','',NULL,'{}','Colombia','Floridablanca',NULL,1,1,'public','en','America/Bogota','light','marketing',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 13:47:59','2026-01-14 08:25:22'),(132,'NANDAN','SHETTY','nandansshetty456@gmail.com','++919988989898','scrypt:32768:8:1$vdcLdP8g859CBB1g$58bbac2ffac97456663bae8c00755c40b9b5b4b8fd23a5a3a1a43f4f0ab25e292a7a00e1cd41795e64b9ee12ab886cd87455c8518cc7dceca2a857a9132e56fa',1,'2026-01-14 05:02:13','active','member',NULL,0,0,0,'2026-01-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocIf7AsUjULEuzR1c8CSltAO9LH7gxkEV62ByRGwQwVpYVomtQ=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 14:11:46','2026-01-14 05:02:13'),(133,'Bardawal','Parshuram','bardawalparshuram7@gmail.com','++919949540729','scrypt:32768:8:1$gYsEFhGF70YnNxWL$c0d7164d0a44c451f819b34d96dc20c53f495ca859b931dc62506fe7d0fa05cdf6f2af72fea439768276d46a75eb83edb90edafe89be80f91973f1fa389325ff',1,'2026-01-13 14:34:12','active','member',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocL58PdAvqTKDXRjbC79kzEecxK84laezM5yiNysU_Er8FRoVGY=s96-c',NULL,'Codetech IT Solutions','{}','India','Hyderabad, Telangana',NULL,1,1,'public','en','Indian/Chagos','light','development',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 14:34:12','2026-01-13 14:44:09'),(134,'Ivan','Marcos','info@meridianlib.com',NULL,'scrypt:32768:8:1$jmXQPMtM85hLPcsx$cb0ac01327a9d9db24023954e351c047bf53ceb04fbf4bc95761d0f257d0b7f8d182fb24c2cb492429f0aee9a906e45351854d84a3e19ef0434a7afc42cf9234',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 14:34:41','2026-01-13 14:34:41'),(135,'Laurie','Breton','laurieetc@gmail.com',NULL,'scrypt:32768:8:1$11ZjjHtP4l86B5En$676c62b84560045d8e5af9997aa27060c7ff7bfafc0a1b6eb7594bd7381c81b8cc740048ea48504c596a33d249947c4d79bc786dff331c52efb6b54ff37fed66',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 14:58:21','2026-01-13 14:58:21'),(136,'Ivan','Gomez','ivandavidgomezsilva@atmail.com',NULL,'scrypt:32768:8:1$y5gilOLrZt7LirsI$e71ccea527d98fbc9437ecff52d879526384f417eacc7721f7ef8d4a73aba31bbf7ba4de0885b982968fb70a6f15fcf379694404d545a70fb6537271fd2b9a00',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 16:07:08','2026-01-13 16:07:08'),(137,'Laurie','Breton','lauriebreton2005@icloud.com',NULL,'scrypt:32768:8:1$v2t2fCeuojhB6GTa$4bbed271ccfd165d1408414f5fb6d0b653bb018f01236fca0cf97c304a1f87b5b371e54767289cd16612054604947c13a96a0d8bf9fd11dbf37888709f2acd7c',0,'2026-01-13 16:30:40','active','member',NULL,0,0,0,'2026-01-13',0,100,0,'/uploads/20260113_170355_137_IMG_9667.jpeg','wakjsnefk',NULL,'{\"linkedin\": \"https://www.linkedin.com/in/laurie-breton-567694353/\", \"instagram\": \"https://www.instagram.com/laurie._.bee/\"}','Canada','Montreal',NULL,1,1,'public','en','America/Toronto','light','development',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 16:21:10','2026-01-13 17:44:22'),(138,'vishnu','teja','vishnuteja7055@gmail.com','++919346687054','scrypt:32768:8:1$pPaPZCzUp4HJTVfQ$db788771db3b18794889904f6ac7b0c5cb0e265b1f1499d71dcd5f714898e60fb03dcd44460469e3474a35a321c19d13c238ffc40deceac7feb4d1215d9791b7',1,'2026-01-13 16:24:23','active','member',NULL,0,0,0,'2026-01-13',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLL6gpnyGLA5IhDovcV3A6Z2lG35_7sbZcDlqkcRov6mN-vrw=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 16:23:15','2026-01-13 16:25:28'),(139,'Ivan','Gomez','i.gomezs2@uniandes.edu.co','+573024690358','scrypt:32768:8:1$WVngtiFsJcAzT9R7$d96e73003fe746ba1f430a6fec7f501391c3e8c5b72571248d9e8be8e60c1c8c8af24b7c88d8761787c9bd2f8d82574512d253efd4c5796b579d68600d4f457c',0,'2026-01-13 20:10:09','active','member',NULL,0,0,0,'2026-01-13',0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 16:24:16','2026-01-13 20:12:22'),(140,'Ivan','Marcos','info@meeridianlib.com',NULL,'scrypt:32768:8:1$oe8KR9d7ahskhAHW$205d400fa036c09f7c71a6404653d4779b6697a15a59e6f6c84ec69384992b8ac3b52fcaeb0f30afd73b741bb176633447ae001e26a13a8b0da3dd7b45831685',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-13 20:09:39','2026-01-13 20:09:39'),(141,'sdgfdfs','dsad','oskarkonstanciakpl@hotmail.com','++485073518300','scrypt:32768:8:1$b4xazf596zgZIUq0$b06701cbe3a3df2a903878113fe898a081f50ed0302957fd5fa46c952ecdf1659aa121895622093670b96574b4af77e8abac1df6b5030429aaf5898807f40dc7',0,'2026-01-14 16:40:54','active','member',NULL,0,0,0,'2026-01-14',0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-14 00:43:48','2026-01-14 16:40:54'),(142,'Srinilaa','Panneer Selvam ','psmn2013@gmail.com','++919345224499','scrypt:32768:8:1$WmnLj49OG20FRNd2$abaa773391012c946951e94f671d7c45c3178c4c79a8bed8f7449276776cefb5f04296b8f4770becf9cda230aae7cdc36771cf8aa48efe8146f30b2fc29ea50b',0,NULL,'active','member',NULL,0,0,0,NULL,0,100,0,NULL,NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-14 01:41:18','2026-01-14 01:42:44'),(143,'Thinura','Vithanage','thinu7007@gmail.com',NULL,'scrypt:32768:8:1$Eip6A6IZW5I5Lchm$7c4882187e1b3df0934a74e3d96305c85d1fd219926e46a7e5cfc466abaefcdd8df5909f8ae5e7c05a113434894e9adf7bf3c7a255465e97a22c04a340a2bb12',1,'2026-01-14 03:06:55','active','member',NULL,0,0,0,'2026-01-14',0,100,0,NULL,'Founder @ Aviyora | Building the system that helps Great, US SaaS startups reach their true potential ','Aviyora','{\"twitter\": \"https://x.com/thinuvc?s=21\", \"linkedin\": \"https://www.linkedin.com/in/thinura-vithanage?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app\"}','United States','San Francisco ',NULL,1,1,'public','en','America/Los_Angeles','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-14 03:06:55','2026-01-14 03:16:10'),(144,'Hans','Nduwabike','hansnduwabike@gmail.com',NULL,'scrypt:32768:8:1$rEvW2NmI0fBB3Ins$b74ccf2e2182420b8ad6dc6278661838540b2e4b69150f31b3504cb834aef2f0d59657b96053af5a64c736152c1093646224562e1233f71c1a7f419f703b8310',1,'2026-01-14 03:44:35','active','member',NULL,0,0,0,'2026-01-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocIdNP7H03-bBVVE2G_VGn66JBstOWTyS0BWG7cDHBhH7bWRghs=s96-c',NULL,NULL,'{}','Canada','Montreal',NULL,1,1,'public','en','America/Toronto','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-14 03:44:35','2026-01-14 03:47:23'),(145,'Ivan','Gomez','ivandavidgomezsilva@hotmail.com',NULL,'scrypt:32768:8:1$r8DYSo77CX02XF4x$15da7cafd8bec78b5e751be6b34c91dc4be7d5bdfe8cb5e335dd7105bc1fd0a228ffb90c00bb8dd933a1a6f5b6a8557b1b40bbf74562f2b470f663a866d67736',1,'2026-01-14 08:25:29','active','member',NULL,0,0,0,'2026-01-14',0,100,0,'https://avatars.githubusercontent.com/u/158605517?v=4',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-14 08:10:58','2026-01-14 08:25:29'),(146,'Krin','Gl','owlkoconut@gmail.com',NULL,'scrypt:32768:8:1$J0ARsvBSv2OUfF1b$e7986969023ebaef754ed09a369682f039682899df37f0784958e9c3925da9e78b331206ff73b713863aa09e46b4c369e3b2d9be4f4310f48b5692a3206b669a',1,'2026-01-14 20:53:43','active','member',NULL,0,0,0,'2026-01-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocLoTbecnJ_0w6_e4G7CEHnFmqaqjkOoVWGjsyT00svsMOHvH_hp=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-14 20:53:43','2026-01-14 20:53:43'),(147,'Sakif','Hussain','shachcha01@gmail.com','+8801781706940','scrypt:32768:8:1$sf9FFJrpYq2YX1lE$28e36445c84d8413d134cd06c1bf795ee89b2bfbec277245eabffae508f122cac10fb3290fe55363ded899c4fe86e80939e54646627a65fe0b44126ecb40fd67',1,'2026-01-14 21:22:32','active','member',NULL,0,0,0,'2026-01-14',0,100,0,'https://lh3.googleusercontent.com/a/ACg8ocJZL2FTB8Ic_Kci5TVRzUFtWjMEX0q2VqYP7QLELhPuYR8F3wJA=s96-c',NULL,NULL,'{}',NULL,NULL,NULL,1,1,'public','en','UTC','light','development',1,1,1,1,1,1,1,'weekly',0,'22:00','08:00','2026-01-14 21:22:32','2026-01-14 21:26:54');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
+
 
 CREATE TABLE `activities` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -232,6 +238,7 @@ CREATE TABLE `calendar_events` (
   `start_date` datetime NOT NULL,
   `end_date` datetime DEFAULT NULL,
   `all_day` tinyint(1) DEFAULT NULL,
+  `link` text,
   `category` enum('meeting','deadline','reminder','event') DEFAULT NULL,
   `color` varchar(20) DEFAULT NULL,
   `location` varchar(255) DEFAULT NULL,
@@ -268,6 +275,7 @@ DROP TABLE IF EXISTS `chat_conversations`;
 CREATE TABLE `chat_conversations` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(255) DEFAULT NULL,
+  `parent_startup_id` int DEFAULT NULL,
   `conversation_type` varchar(20) DEFAULT NULL,
   `created_by_id` int NOT NULL,
   `description` text,
@@ -308,6 +316,7 @@ CREATE TABLE `chat_messages` (
   `sender_timezone` varchar(50) DEFAULT NULL,
   `message_type` varchar(20) DEFAULT NULL,
   `metadata_data` json DEFAULT NULL,
+  `is_deleted` tinyint(1) DEFAULT 0,
   `is_edited` tinyint(1) DEFAULT NULL,
   `edited_at` datetime DEFAULT NULL,
   `reply_to_id` int DEFAULT NULL,
@@ -349,6 +358,11 @@ CREATE TABLE `conversation_participants` (
   `user_id` int NOT NULL,
   `joined_at` datetime DEFAULT NULL,
   `role` varchar(20) DEFAULT NULL,
+  `is_hidden` tinyint(1) DEFAULT '0',
+  `is_archived` tinyint(1) DEFAULT 0 NOT NULL,
+  `archived_at` datetime DEFAULT NULL,
+  `is_pinned` tinyint(1) DEFAULT 0 NOT NULL,
+  `pinned_at` datetime DEFAULT NULL,
   PRIMARY KEY (`conversation_id`,`user_id`),
   KEY `conversation_id` (`conversation_id`),
   KEY `user_id` (`user_id`),
@@ -517,6 +531,7 @@ CREATE TABLE `idea_comments` (
   `author_id` int NOT NULL,
   `author_first_name` varchar(100) DEFAULT NULL,
   `author_last_name` varchar(100) DEFAULT NULL,
+  `suggestion` boolean DEFAULT FALSE,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -551,6 +566,7 @@ CREATE TABLE `ideas` (
   `industry` varchar(100) NOT NULL,
   `stage` varchar(100) NOT NULL,
   `tags` json DEFAULT NULL,
+  `image_url` varchar(255) DEFAULT NULL,
   `privacy` enum('public','private') DEFAULT NULL,
   `creator_id` int NOT NULL,
   `creator_first_name` varchar(100) DEFAULT NULL,
@@ -593,6 +609,7 @@ CREATE TABLE `join_requests` (
   `message` text,
   `role` varchar(100) DEFAULT NULL,
   `status` enum('pending','approved','rejected') DEFAULT NULL,
+  `media_links` json DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -638,6 +655,7 @@ CREATE TABLE `knowledge` (
   `image_content_type` varchar(100) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `file_size_mb` float NOT NULL DEFAULT 0.0,
   PRIMARY KEY (`id`),
   KEY `author_id` (`author_id`),
   CONSTRAINT `knowledge_ibfk_1` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`)
@@ -728,17 +746,32 @@ DROP TABLE IF EXISTS `notifications`;
 CREATE TABLE `notifications` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,
-  `notification_type` varchar(50) DEFAULT NULL,
-  `title` varchar(255) DEFAULT NULL,
+  `actor_id` int DEFAULT NULL,
+  `notification_type` varchar(50) DEFAULT 'info',
+  `category` varchar(50) DEFAULT 'system',
+  `priority` varchar(20) DEFAULT 'medium',
+  `title` varchar(255),
   `message` text,
+  `entity_type` varchar(50) DEFAULT NULL,
+  `entity_id` int DEFAULT NULL,
   `data` json DEFAULT NULL,
-  `is_read` tinyint(1) DEFAULT NULL,
+  `link_url` varchar(500) DEFAULT NULL,
+  `is_read` tinyint(1) DEFAULT 0,
   `read_at` datetime DEFAULT NULL,
-  `created_at` datetime DEFAULT NULL,
-  `updated_at` datetime DEFAULT NULL,
+  `email_sent` tinyint(1) DEFAULT 0,
+  `email_sent_at` datetime DEFAULT NULL,
+  `push_sent` tinyint(1) DEFAULT 0,
+  `push_sent_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
-  CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  KEY `actor_id` (`actor_id`),
+  KEY `entity_type_id` (`entity_type`, `entity_id`),
+  KEY `is_read` (`is_read`),
+  KEY `created_at` (`created_at`),
+  CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `notifications_ibfk_2` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -905,11 +938,15 @@ CREATE TABLE `project_goals` (
   `milestones_total` int DEFAULT NULL,
   `is_on_track` tinyint(1) DEFAULT NULL,
   `next_milestone` varchar(255) DEFAULT NULL,
+  `start_date` datetime DEFAULT NULL,
   `target_date` datetime DEFAULT NULL,
   `completed_date` datetime DEFAULT NULL,
   `status` enum('active','completed','on_hold','cancelled') DEFAULT NULL,
+  `visible_by` varchar(50) DEFAULT 'team',
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `team_size` int DEFAULT 1,
+  `members_involved` json DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `startup_id` (`startup_id`),
   KEY `user_id` (`user_id`),
@@ -1096,6 +1133,7 @@ CREATE TABLE `startup_documents` (
   `file_url` varchar(500) DEFAULT NULL,
   `content_type` varchar(100) NOT NULL,
   `document_type` varchar(50) DEFAULT NULL,
+  `visible_by` varchar(50) DEFAULT 'public',
   `file_size` int DEFAULT NULL,
   `uploaded_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -1117,7 +1155,6 @@ UNLOCK TABLES;
 --
 -- Table structure for table `startup_members`
 --
-
 DROP TABLE IF EXISTS `startup_members`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1127,7 +1164,8 @@ CREATE TABLE `startup_members` (
   `user_id` int NOT NULL,
   `first_name` varchar(100) DEFAULT NULL,
   `last_name` varchar(100) DEFAULT NULL,
-  `role` enum('founder','contributor','investor','advisor','mentor','partner','admin','moderator','member','technical_lead','engineering_manager','backend_engineer','frontend_engineer','fullstack_engineer','mobile_engineer','software_architect','qa_engineer','test_automation_engineer','devops_engineer','cloud_engineer','sre','infrastructure_engineer','platform_engineer','cybersecurity_engineer','data_scientist','data_engineer','machine_learning_engineer','ai_engineer','mlops_engineer','data_analyst','ai_researcher','product_manager','product_owner','ux_designer','ui_designer','product_designer','ux_researcher','growth_engineer','growth_marketer','seo_specialist','content_strategist') DEFAULT NULL,
+  `role` varchar(100) DEFAULT NULL,
+  `admin` tinyint(1) DEFAULT NULL,
   `joined_at` datetime DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
@@ -1321,10 +1359,11 @@ CREATE TABLE `tasks` (
   `title` varchar(255) NOT NULL,
   `description` text,
   `priority` enum('low','medium','high') DEFAULT NULL,
-  `status` enum('today','in_progress','completed','overdue') DEFAULT NULL,
+  `status` enum('to_do','in_progress','completed','overdue') DEFAULT NULL,
   `tags` json DEFAULT NULL,
   `labels` json DEFAULT NULL,
   `due_date` datetime DEFAULT NULL,
+  `urgent` tinyint(1) DEFAULT NULL,
   `completed_date` datetime DEFAULT NULL,
   `estimated_hours` float DEFAULT NULL,
   `actual_hours` float DEFAULT NULL,
@@ -1334,6 +1373,7 @@ CREATE TABLE `tasks` (
   `progress_percentage` int DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `visible_by` varchar(50) DEFAULT 'all',
   PRIMARY KEY (`id`),
   KEY `assigned_to` (`assigned_to`),
   KEY `created_by` (`created_by`),
@@ -1731,6 +1771,7 @@ CREATE TABLE `transactions` (
   `stripe_payment_intent_id` varchar(255) UNIQUE,
   `stripe_checkout_session_id` varchar(255) UNIQUE,
   `type` varchar(50) DEFAULT 'subscription',
+  `donation_message` text DEFAULT NULL,
   `amount` int,
   `currency` varchar(50),
   `status` varchar(50),
@@ -1739,3 +1780,435 @@ CREATE TABLE `transactions` (
   CONSTRAINT `fk_transactions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_profiles`
+
+DROP TABLE IF EXISTS `builder_profiles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_profiles` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `title` varchar(255) DEFAULT NULL,
+  `bio` text,
+  `hourly_rate` float DEFAULT NULL,
+  `rating` float DEFAULT 0.0,
+  `review_count` int DEFAULT 0,
+  `completed_projects` int DEFAULT 0,
+  `total_earnings` float DEFAULT 0.0,
+  `total_equity_earned` float DEFAULT 0.0,
+  `on_time_delivery_rate` float DEFAULT 100.0,
+  `preferred_work_type` json DEFAULT NULL,
+  `industries_interested` json DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_builder_profiles_user_id` (`user_id`),
+  KEY `idx_builder_profiles_user_id` (`user_id`),
+  CONSTRAINT `fk_builder_profiles_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_skills`
+
+DROP TABLE IF EXISTS `builder_skills`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_skills` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `level` varchar(50) DEFAULT NULL,
+  `years_of_experience` int DEFAULT NULL,
+  `is_verified` tinyint(1) DEFAULT 0,
+  `verified_by_user_id` int DEFAULT NULL,
+  `verification_date` datetime DEFAULT NULL,
+  `endorsement_count` int DEFAULT 0,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_builder_skills_profile_id` (`profile_id`),
+  KEY `idx_builder_skills_verified_by` (`verified_by_user_id`),
+  CONSTRAINT `fk_builder_skills_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_builder_skills_verified_by` FOREIGN KEY (`verified_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_portfolio`
+
+DROP TABLE IF EXISTS `builder_portfolio`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_portfolio` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `description` text,
+  `url` varchar(500) DEFAULT NULL,
+  `image_url` varchar(500) DEFAULT NULL,
+  `project_type` varchar(100) DEFAULT NULL,
+  `skills_used` json DEFAULT NULL,
+  `likes` int DEFAULT 0,
+  `views` int DEFAULT 0,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_builder_portfolio_profile_id` (`profile_id`),
+  CONSTRAINT `fk_builder_portfolio_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `builder_applications`
+
+DROP TABLE IF EXISTS `builder_applications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `builder_applications` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `status` enum('pending','under_review','accepted','rejected','withdrawn') DEFAULT 'pending',
+  `role_applied_for` varchar(255) DEFAULT NULL,
+  `cover_letter` text,
+  `expected_commitment` varchar(100) DEFAULT NULL,
+  `proposed_rate` float DEFAULT NULL,
+  `last_message` text,
+  `last_message_date` datetime DEFAULT NULL,
+  `applied_date` datetime DEFAULT CURRENT_TIMESTAMP,
+  `review_date` datetime DEFAULT NULL,
+  `withdrawn_date` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_builder_applications_profile_id` (`profile_id`),
+  KEY `idx_builder_applications_startup_id` (`startup_id`),
+  KEY `idx_builder_applications_status` (`status`),
+  KEY `idx_builder_applications_applied_date` (`applied_date`),
+  CONSTRAINT `fk_builder_applications_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_builder_applications_startup_id` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+-- Table structure for table `saved_startups`
+
+DROP TABLE IF EXISTS `saved_startups`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `saved_startups` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `profile_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `notes` text,
+  `is_interested` tinyint(1) DEFAULT 1,
+  `saved_date` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_builder_startup_save` (`profile_id`,`startup_id`),
+  KEY `idx_saved_startups_profile_id` (`profile_id`),
+  KEY `idx_saved_startups_startup_id` (`startup_id`),
+  KEY `idx_saved_startups_saved_date` (`saved_date`),
+  CONSTRAINT `fk_saved_startups_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `builder_profiles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_saved_startups_startup_id` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `builder_profiles` WRITE;
+/*!40000 ALTER TABLE `builder_profiles` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_profiles` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `builder_skills` WRITE;
+/*!40000 ALTER TABLE `builder_skills` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_skills` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `builder_portfolio` WRITE;
+/*!40000 ALTER TABLE `builder_portfolio` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_portfolio` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `builder_applications` WRITE;
+/*!40000 ALTER TABLE `builder_applications` DISABLE KEYS */;
+/*!40000 ALTER TABLE `builder_applications` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `saved_startups` WRITE;
+/*!40000 ALTER TABLE `saved_startups` DISABLE KEYS */;
+/*!40000 ALTER TABLE `saved_startups` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `user_social`;
+CREATE TABLE `user_social` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `user_id` INT NOT NULL UNIQUE,
+  `followers_count` INT DEFAULT 0,
+  `following_count` INT DEFAULT 0,
+  `follower_ids` JSON DEFAULT NULL,
+  `following_ids` JSON DEFAULT NULL,
+  `total_likes_given` INT DEFAULT 0,
+  `total_likes_received` INT DEFAULT 0,
+  `total_shares` INT DEFAULT 0,
+  `total_views` INT DEFAULT 0,
+  `saved_post_ids` JSON DEFAULT NULL,
+  `saved_idea_ids` JSON DEFAULT NULL,
+  `saved_startup_ids` JSON DEFAULT NULL,
+  `liked_post_ids` JSON DEFAULT NULL,
+  `liked_idea_ids` JSON DEFAULT NULL,
+  `liked_startup_ids` JSON DEFAULT NULL,
+  `liked_comment_ids` JSON DEFAULT NULL,
+  `stories_count` INT DEFAULT 0,
+  `archived_story_ids` JSON DEFAULT NULL,
+  `story_highlights` JSON DEFAULT NULL,
+  `posts_count` INT DEFAULT 0,
+  `pinned_post_ids` JSON DEFAULT NULL,
+  `pref_suggested_accounts` BOOLEAN DEFAULT TRUE,
+  `pref_suggested_content` BOOLEAN DEFAULT TRUE,
+  `pref_suggested_hashtags` BOOLEAN DEFAULT TRUE,
+  `interest_tags` JSON DEFAULT NULL,
+  `preferred_content_types` JSON DEFAULT NULL,
+  `blocked_keywords` JSON DEFAULT NULL,
+  `match_preferences` JSON DEFAULT NULL,
+  `blocked_user_ids` JSON DEFAULT NULL,
+  `muted_user_ids` JSON DEFAULT NULL,
+  `profile_visibility` ENUM('public', 'private') DEFAULT 'public',
+  `allow_messages_from` VARCHAR(50) DEFAULT 'everyone',
+  `allow_collaboration_requests` BOOLEAN DEFAULT TRUE,
+  `engagement_rate` FLOAT DEFAULT 0.0,
+  `reputation_score` FLOAT DEFAULT 0.0,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+DROP TABLE IF EXISTS `idea_likes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `idea_likes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `idea_id` int NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `idea_id` (`idea_id`),
+  CONSTRAINT `idea_likes_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `idea_likes_ibfk_2` FOREIGN KEY (`idea_id`) REFERENCES `ideas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `idea_likes` WRITE;
+/*!40000 ALTER TABLE `idea_likes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `idea_likes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+-- Table structure for table `user_wallets`
+
+DROP TABLE IF EXISTS `user_wallets`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_wallets` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `sf_coins` int DEFAULT 0,
+  `credits` int DEFAULT 0,
+  `premium_gems` int DEFAULT 0,
+  `event_tokens` int DEFAULT 0,
+  `total_coins_earned` int DEFAULT 0,
+  `total_coins_spent` int DEFAULT 0,
+  `daily_earnings` int DEFAULT 0,
+  `daily_earning_limit` int DEFAULT 1000,
+  `last_earning_reset` datetime DEFAULT CURRENT_TIMESTAMP,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_user_wallet` (`user_id`),
+  KEY `idx_user_wallets_user_id` (`user_id`),
+  CONSTRAINT `fk_user_wallets_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `user_wallets` WRITE;
+/*!40000 ALTER TABLE `user_wallets` DISABLE KEYS */;
+/*!40000 ALTER TABLE `user_wallets` ENABLE KEYS */;
+UNLOCK TABLES;
+
+-- Table structure for table `wallet_transactions`
+
+DROP TABLE IF EXISTS `wallet_transactions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wallet_transactions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `wallet_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `transaction_type` varchar(20) NOT NULL,
+  `currency_type` varchar(20) NOT NULL,
+  `amount` int NOT NULL,
+  `balance_before` int NOT NULL,
+  `balance_after` int NOT NULL,
+  `xp_amount` int DEFAULT 0,
+  `exchange_rate` float DEFAULT 0,
+  `reference_type` text,
+  `reference_id` varchar(255),
+  `description` text,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_wallet_transactions_wallet_id` (`wallet_id`),
+  KEY `idx_wallet_transactions_user_id` (`user_id`),
+  KEY `idx_wallet_transactions_created_at` (`created_at`),
+  CONSTRAINT `fk_wallet_transactions_wallet_id` FOREIGN KEY (`wallet_id`) REFERENCES `user_wallets` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_wallet_transactions_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `wallet_transactions` WRITE;
+/*!40000 ALTER TABLE `wallet_transactions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `wallet_transactions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+-- Table structure for table `event_token_balances`
+
+DROP TABLE IF EXISTS `event_token_balances`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `event_token_balances` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `wallet_id` int NOT NULL,
+  `event_key` varchar(255) NOT NULL,
+  `balance` int DEFAULT 0,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_event_token_balances_user_id` (`user_id`),
+  KEY `idx_event_token_balances_wallet_id` (`wallet_id`),
+  KEY `idx_event_token_balances_event_key` (`event_key`),
+  CONSTRAINT `fk_event_token_balances_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_event_token_balances_wallet_id` FOREIGN KEY (`wallet_id`) REFERENCES `user_wallets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `event_token_balances` WRITE;
+/*!40000 ALTER TABLE `event_token_balances` DISABLE KEYS */;
+/*!40000 ALTER TABLE `event_token_balances` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `errors`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `errors` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `error_message` varchar(500) NOT NULL,
+  `error_from_backend` varchar(255) DEFAULT NULL,
+  `stack` text,
+  `page` varchar(255) DEFAULT NULL,
+  `component` varchar(255) DEFAULT NULL,
+  `timestamp` datetime DEFAULT CURRENT_TIMESTAMP,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_errors_timestamp` (`timestamp`),
+  KEY `idx_errors_created_at` (`created_at`),
+  KEY `idx_errors_error_from_backend` (`error_from_backend`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `errors` WRITE;
+/*!40000 ALTER TABLE `errors` DISABLE KEYS */;
+/*!40000 ALTER TABLE `errors` ENABLE KEYS */;
+UNLOCK TABLES;
+
+
+DROP TABLE IF EXISTS `startup_views`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `startup_views` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `viewed_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `startup_id` (`startup_id`),
+  CONSTRAINT `startup_views_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `startup_views_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `startup_views`
+--
+
+LOCK TABLES `startup_views` WRITE;
+/*!40000 ALTER TABLE `startup_views` DISABLE KEYS */;
+/*!40000 ALTER TABLE `startup_views` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `idea_comment_likes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `idea_comment_likes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `comment_id` int NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `comment_id` (`comment_id`),
+  CONSTRAINT `idea_comment_likes_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `idea_comment_likes_ibfk_2` FOREIGN KEY (`comment_id`) REFERENCES `idea_comments` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `idea_comment_likes` WRITE;
+/*!40000 ALTER TABLE `idea_comment_likes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `idea_comment_likes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `pitch_decks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pitch_decks` (
+  `id` varchar(36) NOT NULL,
+  `user_id` int NOT NULL,
+  `startup_id` int DEFAULT NULL,
+  `title` varchar(255) NOT NULL,
+  `template_type` varchar(100) NOT NULL,
+  `theme_type` varchar(100) NOT NULL,
+  `slides_json` json NOT NULL,
+  `credits_used` int DEFAULT 20,
+  `status` varchar(50) DEFAULT 'draft',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `startup_id` (`startup_id`),
+  KEY `status` (`status`),
+  CONSTRAINT `pitch_decks_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `pitch_decks_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `pitch_decks` WRITE;
+/*!40000 ALTER TABLE `pitch_decks` DISABLE KEYS */;
+/*!40000 ALTER TABLE `pitch_decks` ENABLE KEYS */;
+UNLOCK TABLES;
+--
+-- Table structure for table `sessions` (Flask-Session)
+--
+
+DROP TABLE IF EXISTS `sessions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sessions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_id` varchar(255) DEFAULT NULL,
+  `data` blob,
+  `expiry` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `session_id` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `sessions` WRITE;
+/*!40000 ALTER TABLE `sessions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sessions` ENABLE KEYS */;
+UNLOCK TABLES;
+

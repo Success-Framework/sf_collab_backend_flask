@@ -107,6 +107,7 @@ class PostType(enum.Enum):
     social = "social"
     image = "image"
     video = "video"
+    text = "text"
 
 class ConnectionStatus(enum.Enum):
     connected = "connected"

@@ -1,5 +1,6 @@
 from .routes import (
-    ai_routes,
+    builder_routes,
+    ai_routes,  # Commented - requires chromadb/pytorch
     auth_routes,
     user_routes,
     profile_routes,
@@ -36,7 +37,7 @@ from .routes import (
     suggestion_routes,
     task_routes,
     user_achievement_routes,
-    
+    outreach_routes,
     # gemini_route,
     pdf_signing_routes,
     # background_remover,
@@ -58,7 +59,14 @@ from .routes import (
     application_routes,
     contribution_ideas_routes,
     contribution_polls_routes,
-    payment_routes
+    connection_routes,
+    payment_routes, 
+    user_social_routes,
+    dashboard_routes,
+    video_gen_routes,
+    pitch_deck_routes,
+    wallet_routes, 
+    store_routes,
     
     #! removed background_remover_route,
     #! removed anime_converter_route
@@ -66,6 +74,8 @@ from .routes import (
     #! removed business_plan_route,
     #! removed qwen_chat_route
 )
+
+
 
 blueprints = [ 
 { "blueprint": main_routes.main_bp, "url_prefix": '/'},
@@ -91,7 +101,7 @@ blueprints = [
 { "blueprint": join_request_routes.join_requests_bp, "url_prefix": '/api/join-requests'},
 { "blueprint": knowledge_bookmark_routes.knowledge_bookmarks_bp, "url_prefix": '/api/knowledge-bookmarks'},
 { "blueprint": knowledge_comment_routes.knowledge_comments_bp, "url_prefix": '/api/knowledge-comments'},
-{ "blueprint": notification_routes.notifications_bp, "url_prefix": '/api/notifications'},
+{ "blueprint": notification_routes.notification_bp, "url_prefix": '/api/notifications'},
 { "blueprint": post_routes.posts_bp, "url_prefix": '/api/posts'},
 { "blueprint": post_comment_routes.post_comments_bp, "url_prefix": '/api/post-comments'},
 { "blueprint": post_like_routes.post_likes_bp, "url_prefix": '/api/post-likes'},
@@ -123,5 +133,14 @@ blueprints = [
 { "blueprint": application_routes.applications_bp, "url_prefix": '/api/applications' },
 { "blueprint": contribution_ideas_routes.bp, "url_prefix": '/api/contribution-ideas'},
 { "blueprint": contribution_polls_routes.poll_bp, "url_prefix": '/api/contribution-polls'},
-{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' }
+{ "blueprint": builder_routes.builder_bp, "url_prefix": '/api/builder'},
+{ "blueprint": payment_routes.payment_bp, "url_prefix": '/api/payments' },
+{ "blueprint": outreach_routes.outreach_bp, "url_prefix": "/api/outreach" },
+{"blueprint": connection_routes.connections_bp, "url_prefix": "/api/connections"},
+{ "blueprint": user_social_routes.user_social_bp, "url_prefix": '/api/user-social' },
+{ "blueprint": dashboard_routes.dashboard_bp, "url_prefix": '/api/dashboard' },
+{ "blueprint": video_gen_routes.video_bp, "url_prefix": '/api/video' },
+{"blueprint": pitch_deck_routes.pitch_decks_bp, "url_prefix":"/api/pitch-decks"},
+{ "blueprint": wallet_routes.wallet_bp, "url_prefix": '/api/wallet'},
+{ "blueprint": store_routes.store_bp, "url_prefix": '/api/store'},
 ]

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.models.post import Post
+from app.models.user import User
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
@@ -74,16 +75,20 @@ def create_post():
     """Create new post"""
     data = request.get_json()
     
-    required_fields = ['user_id', 'author_id', 'author_first_name', 'author_last_name', 'content']
+    required_fields = ['user_id', 'author_id', 'content']
     if not all(field in data for field in required_fields):
         return error_response('Missing required fields')
     
     try:
+        user = User.query.get(data['user_id'])
+        if not user:
+            return error_response('User not found', 404)
+        
         post = Post(
             user_id=data['user_id'],
             author_id=data['author_id'],
-            author_first_name=data['author_first_name'],
-            author_last_name=data['author_last_name'],
+            author_first_name=data.get('author_first_name', user.first_name),
+            author_last_name=data.get('author_last_name', user.last_name),
             content=data['content'],
             type=data.get('type', 'professional'),
             tags=data.get('tags', [])

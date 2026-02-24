@@ -28,6 +28,7 @@ def get_current_user_startup_role(startup_id: int) -> str:
 
     # Creator always has owner rights
     if startup.creator_id == user_id:
+        print(f"User {user_id} is creator of startup {startup_id}")
         return 'owner'
 
     membership = (
@@ -42,11 +43,16 @@ def get_current_user_startup_role(startup_id: int) -> str:
     if not membership:
         return 'none'
 
-    # Special elevated member role
-    if membership.role == 'founder':
+    if membership.admin:
+        return 'admin'
+    # Special elevated member role - handle both enum and string
+    role_value = membership.role.value if hasattr(membership.role, 'value') else membership.role
+    if role_value == 'founder':
+        print(f"User {user_id} is founder of startup {startup_id}")
         return 'founder'
 
     # Default member access
+    print(f"User {user_id} is regular member of startup {startup_id}")
     return 'member'
 
 
@@ -74,6 +80,7 @@ def can_manage_documents(startup_id: int) -> bool:
 def can_manage_members(startup_id: int) -> bool:
     """Only owner + founder"""
     role = get_current_user_startup_role(startup_id)
+    print(f"can_manage_members for startup {startup_id}: role = {role}")
     return role in {'owner', 'founder'}
 
 

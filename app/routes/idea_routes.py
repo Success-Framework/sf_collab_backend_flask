@@ -1,15 +1,40 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 from app.models.idea import Idea
-from app.models.ideaComment import IdeaComment
+from app.models.user import User
 from app.services.achievement_service import AchievementService
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.models.ideaLike import IdeaLike
+from app.models.waitlist import Waitlist
+import datetime
+import json
+from app.utils.upload_to_s3 import upload_file_to_s3
+from app.models.notification import Notification
+# Import notification helpers
+from app.notifications.helpers import (
+    notify_idea_submitted,
+    notify_idea_voted,
+    notify_idea_status_changed,
+    notify_idea_feedback
+)
 
 ideas_bp = Blueprint('ideas', __name__)
 
+
+def get_user_full_name(user_id):
+    """Helper to get user's full name"""
+    user = User.query.get(user_id)
+    if user:
+        return f"{user.first_name or ''} {user.last_name or ''}".strip() or "Someone"
+    return "Someone"
+
+
 @ideas_bp.route('', methods=['GET'])
+@jwt_required()
 def get_ideas():
     """Get all ideas with filtering"""
+    current_user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     industry = request.args.get('industry', type=str)
@@ -35,7 +60,7 @@ def get_ideas():
     result = paginate(query, page, per_page)
     
     return success_response({
-        'ideas': [idea.to_dict() for idea in result['items']],
+        'ideas': [idea.to_dict(current_user_id) for idea in result['items']],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],
@@ -44,9 +69,12 @@ def get_ideas():
         }
     })
 
+
 @ideas_bp.route('/<int:idea_id>', methods=['GET'])
+@jwt_required()
 def get_idea(idea_id):
     """Get single idea by ID"""
+    current_user_id = get_jwt_identity()
     idea = Idea.query.get(idea_id)
     if not idea:
         return error_response('Idea not found', 404)
@@ -57,36 +85,80 @@ def get_idea(idea_id):
     include_comments = request.args.get('include_comments', 'false').lower() == 'true'
     
     return success_response({
-        'idea': idea.to_dict(include_comments=include_comments)
+        'idea': idea.to_dict(user_id=current_user_id, include_comments=include_comments)
     })
 
+
 @ideas_bp.route('', methods=['POST'])
+@jwt_required()
 def create_idea():
     """Create new idea"""
-    data = request.get_json()
+    user_id = get_jwt_identity()
     
-    required_fields = ['title', 'description', 'project_details', 'industry', 'stage', 'creator_id']
-    if not all(field in data for field in required_fields):
+    # Get form data
+    title = request.form.get('title')
+    description = request.form.get('description')
+    project_details = request.form.get('projectDetails')
+    industry = request.form.get('industry')
+    stage = request.form.get('stage')
+    tags = request.form.get('tags')
+    image_file = request.files.get('image')
+    creator_first_name = request.form.get('creator_first_name')
+    creator_last_name = request.form.get('creator_last_name')
+    
+    required_fields = {'title', 'description', 'projectDetails', 'industry', 'stage'}
+    if not all(request.form.get(field) for field in required_fields):
         return error_response('Missing required fields')
     
     try:
+        # Parse tags from JSON string
+        tags_list = json.loads(tags) if tags else []
+        
         idea = Idea(
-            title=data['title'],
-            description=data['description'],
-            project_details=data['project_details'],
-            industry=data['industry'],
-            stage=data['stage'],
-            tags=data.get('tags', []),
-            creator_id=data['creator_id'],
-            creator_first_name=data.get('creator_first_name'),
-            creator_last_name=data.get('creator_last_name')
+            title=title,
+            description=description,
+            project_details=project_details,
+            industry=industry,
+            stage=stage,
+            tags=tags_list,
+            creator_id=user_id,
+            creator_first_name=creator_first_name,
+            creator_last_name=creator_last_name,
         )
         
+        # Handle image upload if provided
+        if image_file:
+            image_url = upload_file_to_s3(image_file)
+            idea.image_url = image_url 
+        
         db.session.add(idea)
+        db.session.flush()
+
+        # Award points to waitlist user if they exist
+        waitlist_user = Waitlist.query.filter_by(email=User.query.get(user_id).email).first()
+        if waitlist_user:
+            # Check if they already got points today
+            today = datetime.datetime.utcnow().date()
+            last_activity_date = waitlist_user.last_activity_at.date() if waitlist_user.last_activity_at else None
+            
+            if last_activity_date != today:
+                waitlist_user.add_points(Waitlist.POINTS_PER_IDEA, 'idea')
         db.session.commit()
         
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Idea Submitted (4.3)
+        # ════════════════════════════════════════════════════════════
+        try:
+            notify_idea_submitted(
+                user_id=user_id,
+                idea_title=title,
+                idea_id=idea.id
+            )
+        except Exception as e:
+            print(f"⚠️ Idea submission notification failed: {e}")
+        
         # Check achievements for idea creation
-        AchievementService.check_achievements(data['creator_id'], 'ideas_created')
+        AchievementService.check_achievements(user_id, 'ideas_created')
         
         return success_response({
             'idea': idea.to_dict()
@@ -95,14 +167,19 @@ def create_idea():
         db.session.rollback()
         return error_response(f'Failed to create idea: {str(e)}', 500)
 
+
 @ideas_bp.route('/<int:idea_id>', methods=['PUT'])
+@jwt_required()
 def update_idea(idea_id):
     """Update idea"""
+    current_user_id = get_jwt_identity()
+    
     idea = Idea.query.get(idea_id)
     if not idea:
         return error_response('Idea not found', 404)
     
     data = request.get_json()
+    old_stage = idea.stage
     
     try:
         if 'title' in data:
@@ -120,6 +197,21 @@ def update_idea(idea_id):
         
         db.session.commit()
         
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Idea Status Changed (4.3)
+        # ════════════════════════════════════════════════════════════
+        if 'stage' in data and old_stage != data['stage']:
+            try:
+                notify_idea_status_changed(
+                    user_id=idea.creator_id,
+                    idea_title=idea.title,
+                    idea_id=idea.id,
+                    old_status=old_stage or 'draft',
+                    new_status=data['stage']
+                )
+            except Exception as e:
+                print(f"⚠️ Idea status change notification failed: {e}")
+        
         return success_response({
             'idea': idea.to_dict()
         }, 'Idea updated successfully')
@@ -127,15 +219,61 @@ def update_idea(idea_id):
         db.session.rollback()
         return error_response(f'Failed to update idea: {str(e)}', 500)
 
+
 @ideas_bp.route('/<int:idea_id>/like', methods=['POST'])
+@jwt_required()
 def like_idea(idea_id):
-    """Like an idea"""
+    """Like/vote for an idea"""
+    current_user_id = get_jwt_identity()
+    
     idea = Idea.query.get(idea_id)
     if not idea:
         return error_response('Idea not found', 404)
-    
+    liked = False
     try:
-        idea.increment_likes()
+        ideas = IdeaLike.query.filter_by(user_id=current_user_id).all()
+        if any(like.idea_id == idea_id for like in ideas):
+            IdeaLike.query.filter_by(user_id=current_user_id, idea_id=idea_id).delete()
+            idea.likes = IdeaLike.query.filter_by(idea_id=idea_id).count()
+            liked = False
+        else:
+            new_like = IdeaLike(user_id=current_user_id, idea_id=idea_id)
+            db.session.add(new_like)
+            idea.likes = IdeaLike.query.filter_by(idea_id=idea_id).count()
+            liked = True
+        db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Idea Voted/Liked (4.3)
+        # ════════════════════════════════════════════════════════════
+        # Only notify if not self-like
+        if idea.creator_id != current_user_id:
+            try:
+                voter_name = get_user_full_name(current_user_id)
+                # Prevent SPAM: Only send notification if user hasn't already liked today
+                last_like = IdeaLike.query.filter_by(user_id=current_user_id, idea_id=idea_id).first()
+                today = datetime.datetime.utcnow().date()
+                if last_like and last_like.created_at.date() == today:
+                    print("User has already liked this idea today, skipping notification")
+                elif liked:
+                    notify_idea_voted(
+                        user_id=idea.creator_id,
+                        voter_id=current_user_id,
+                        voter_name=voter_name,
+                        idea_title=idea.title,
+                        idea_id=idea.id
+                    )
+                else:
+                    # Remove notification
+                    Notification.query.filter_by(
+                        user_id=idea.creator_id,
+                        actor_id=current_user_id,
+                        verb='liked',
+                        target_id=idea.id
+                    ).delete()
+                    db.session.commit()
+            except Exception as e:
+                print(f"⚠️ Idea vote notification failed: {e}")
         
         # Check achievements for likes received
         AchievementService.check_achievements(idea.creator_id, 'likes_received')
@@ -145,6 +283,53 @@ def like_idea(idea_id):
         }, 'Idea liked successfully')
     except Exception as e:
         return error_response(f'Failed to like idea: {str(e)}', 500)
+
+
+@ideas_bp.route('/<int:idea_id>/feedback', methods=['POST'])
+@jwt_required()
+def add_idea_feedback(idea_id):
+    """Add feedback to an idea"""
+    current_user_id = get_jwt_identity()
+    
+    idea = Idea.query.get(idea_id)
+    if not idea:
+        return error_response('Idea not found', 404)
+    
+    data = request.get_json()
+    feedback_content = data.get('feedback')
+    
+    if not feedback_content:
+        return error_response('Feedback content is required', 400)
+    
+    try:
+        # Add feedback logic here (store in idea.feedback or separate model)
+        # This is a placeholder - implement based on your model structure
+        
+        db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Idea Feedback Received (4.3)
+        # ════════════════════════════════════════════════════════════
+        if idea.creator_id != current_user_id:
+            try:
+                feedback_giver_name = get_user_full_name(current_user_id)
+                notify_idea_feedback(
+                    user_id=idea.creator_id,
+                    feedback_giver_id=current_user_id,
+                    feedback_giver_name=feedback_giver_name,
+                    idea_title=idea.title,
+                    idea_id=idea.id
+                )
+            except Exception as e:
+                print(f"⚠️ Idea feedback notification failed: {e}")
+        
+        return success_response({
+            'idea': idea.to_dict()
+        }, 'Feedback added successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to add feedback: {str(e)}', 500)
+
 
 @ideas_bp.route('/<int:idea_id>/team-members', methods=['POST'])
 def add_team_member(idea_id):
@@ -175,12 +360,20 @@ def add_team_member(idea_id):
     except Exception as e:
         return error_response(f'Failed to add team member: {str(e)}', 500)
 
+
 @ideas_bp.route('/<int:idea_id>', methods=['DELETE'])
+@jwt_required()
 def delete_idea(idea_id):
     """Delete idea"""
+    current_user_id = get_jwt_identity()
+    
     idea = Idea.query.get(idea_id)
     if not idea:
         return error_response('Idea not found', 404)
+    
+    # Check ownership
+    if int(idea.creator_id) != int(current_user_id):
+        return error_response('Unauthorized to delete this idea', 403)
     
     try:
         db.session.delete(idea)
@@ -189,3 +382,12 @@ def delete_idea(idea_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to delete idea: {str(e)}', 500)
+
+
+@ideas_bp.route('/images/<string:filename>', methods=['GET'])
+def get_idea_image(filename):
+    """Serve idea image files"""
+    from flask import send_from_directory
+    from app import UPLOAD_FOLDER
+    print(UPLOAD_FOLDER, "filename:", filename)
+    return send_from_directory(UPLOAD_FOLDER, filename)

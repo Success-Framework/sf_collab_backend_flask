@@ -15,43 +15,44 @@ class JoinRequest(db.Model):
     message = db.Column(db.Text)
     role = db.Column(db.String(100), default='member')
     status = db.Column(Enum(JoinRequestStatus), default=JoinRequestStatus.pending)
-    
+    media_links = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     target_startup = db.relationship('Startup', back_populates='join_requests', foreign_keys=[startup_id])
     request_user = db.relationship('User', back_populates='join_requests', foreign_keys=[user_id])
-    
+    startup = db.relationship('Startup', foreign_keys=[startup_id])
     # HELPER FUNCTIONS
     
-    def approve(self, reviewer_id=None):
-        """Approve join request"""
+    def approve(self):
         self.status = JoinRequestStatus.approved
         self.updated_at = datetime.utcnow()
-        
-        # Add user to startup members
-        from models.startUpMember import StartupMember
+
+        from app.models.startUpMember import StartupMember
         member = StartupMember(
             startup_id=self.startup_id,
             user_id=self.user_id,
             first_name=self.first_name,
             last_name=self.last_name,
-            role=self.role
+            role=self.role,
+            joined_at=datetime.utcnow()
         )
-        db.session.add(member)
+        try:
         
-        # Update startup member count
-        if self.startup:
-            self.startup.update_member_count()
-        
-        db.session.commit()
+            from app.models.chatConversation import ChatConversation
+            ChatConversation.add_to_startup_chat(member.member_user, self.target_startup)
+            db.session.add(member)
+        except Exception as e:
+          print("Error adding member to chat conversation:", e)
+          pass
         return member
     
     def reject(self, reviewer_id=None):
         """Reject join request"""
         self.status = JoinRequestStatus.rejected
         self.updated_at = datetime.utcnow()
+        db.session.delete(self)
         db.session.commit()
     
     def cancel(self):
@@ -72,6 +73,8 @@ class JoinRequest(db.Model):
         return value.value if hasattr(value, "value") else value
         
     def to_dict(self):
+        startup = self.target_startup
+        user = self.request_user
         return {
             'id': self.id,
             'startupId': self.startup_id,
@@ -87,14 +90,16 @@ class JoinRequest(db.Model):
             'isPending': self.is_pending(),
             'duration': str(self.get_duration()),
             'startup': {
-                'id': self.startup.id,
-                'name': self.startup.name,
-                'industry': self.startup.industry
-            } if self.startup else None,
+                'id': startup.id,
+                'name': startup.name,
+                'industry': startup.industry,
+                'roles': startup.roles
+            } if startup else None,
             'user': {
-                'id': self.user.id,
-                'firstName': self.user.first_name,
-                'lastName': self.user.last_name,
-                'email': self.user.email
-            } if self.user else None
+                'id': user.id,
+                'firstName': user.first_name,
+                'lastName': user.last_name,
+                'email': user.email
+            } if user else None,
+            'mediaLinks': self.media_links
         }

@@ -2,24 +2,37 @@ from flask import Blueprint, request, jsonify
 from app.models.joinRequest import JoinRequest
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
-
+from app.models.startUpMember import StartupMember
+from flask_jwt_extended import jwt_required, get_jwt_identity
 join_requests_bp = Blueprint('join_requests', __name__)
 
 @join_requests_bp.route('', methods=['GET'])
+@jwt_required()
 def get_join_requests():
-    """Get all join requests with filtering"""
+    """Get all join requests for a user with filtering"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     startup_id = request.args.get('startup_id', type=int)
+    search = request.args.get('search', type=str)
     user_id = request.args.get('user_id', type=int)
     status = request.args.get('status', type=str)
+
+    if not user_id:
+        user_id = get_jwt_identity()
+
+    query = JoinRequest.query.filter(JoinRequest.user_id == user_id)
     
-    query = JoinRequest.query
-    
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                JoinRequest.first_name.ilike(search_pattern),
+                JoinRequest.last_name.ilike(search_pattern),
+                JoinRequest.startup_name.ilike(search_pattern)
+            )
+        )
     if startup_id:
         query = query.filter(JoinRequest.startup_id == startup_id)
-    if user_id:
-        query = query.filter(JoinRequest.user_id == user_id)
     if status:
         from app.models.Enums import JoinRequestStatus
         query = query.filter(JoinRequest.status == JoinRequestStatus(status))
@@ -37,6 +50,7 @@ def get_join_requests():
     })
 
 @join_requests_bp.route('/<int:request_id>', methods=['GET'])
+@jwt_required()
 def get_join_request(request_id):
     """Get single join request by ID"""
     join_request = JoinRequest.query.get(request_id)
@@ -46,6 +60,7 @@ def get_join_request(request_id):
     return success_response({'join_request': join_request.to_dict()})
 
 @join_requests_bp.route('', methods=['POST'])
+@jwt_required()
 def create_join_request():
     """Create new join request"""
     data = request.get_json()
@@ -83,7 +98,20 @@ def create_join_request():
         
         db.session.add(join_request)
         db.session.commit()
-        
+        try:
+            # Notify user about bulk creation
+            from app.notifications.helpers import notify_info
+            current_user_id = get_jwt_identity()
+            notify_info(
+                user_id=current_user_id,
+                message=f"Join request submitted successfully for startup {startup.name}."
+            )
+            notify_info(
+                user_id=startup.creator_id,
+                message=f"New join request submitted for your startup {startup.name}."
+            )
+        except Exception as e:
+            print(f"⚠️ Bulk event notification failed: {e}")
         return success_response({
             'join_request': join_request.to_dict()
         }, 'Join request submitted successfully', 201)
@@ -92,6 +120,7 @@ def create_join_request():
         return error_response(f'Failed to create join request: {str(e)}', 500)
 
 @join_requests_bp.route('/<int:request_id>/approve', methods=['POST'])
+@jwt_required()
 def approve_join_request(request_id):
     """Approve join request"""
     join_request = JoinRequest.query.get(request_id)
@@ -117,6 +146,7 @@ def approve_join_request(request_id):
         return error_response(f'Failed to approve join request: {str(e)}', 500)
 
 @join_requests_bp.route('/<int:request_id>/reject', methods=['POST'])
+@jwt_required()
 def reject_join_request(request_id):
     """Reject join request"""
     join_request = JoinRequest.query.get(request_id)
@@ -136,6 +166,7 @@ def reject_join_request(request_id):
         return error_response(f'Failed to reject join request: {str(e)}', 500)
 
 @join_requests_bp.route('/<int:request_id>/cancel', methods=['POST'])
+@jwt_required()
 def cancel_join_request(request_id):
     """Cancel join request (by user)"""
     join_request = JoinRequest.query.get(request_id)
@@ -154,6 +185,7 @@ def cancel_join_request(request_id):
         return error_response(f'Failed to cancel join request: {str(e)}', 500)
 
 @join_requests_bp.route('/<int:request_id>', methods=['DELETE'])
+@jwt_required()
 def delete_join_request(request_id):
     """Delete join request"""
     join_request = JoinRequest.query.get(request_id)

@@ -72,9 +72,10 @@ def create_milestone():
         db.session.rollback()
         return error_response(f'Failed to create milestone: {str(e)}', 500)
 
-@milestones_bp.route('/<int:milestone_id>/complete', methods=['POST'])
-def complete_milestone(milestone_id):
+@milestones_bp.route('/complete', methods=['POST'])
+def complete_milestone():
     """Mark milestone as completed"""
+    milestone_id = request.get_json().get('milestone_id')
     milestone = GoalMilestone.query.get(milestone_id)
     if not milestone:
         return error_response('Milestone not found', 404)
@@ -87,9 +88,10 @@ def complete_milestone(milestone_id):
     except Exception as e:
         return error_response(f'Failed to complete milestone: {str(e)}', 500)
 
-@milestones_bp.route('/<int:milestone_id>/uncomplete', methods=['POST'])
-def uncomplete_milestone(milestone_id):
+@milestones_bp.route('/uncomplete', methods=['POST'])
+def uncomplete_milestone():
     """Mark milestone as not completed"""
+    milestone_id = request.get_json().get('milestone_id')
     milestone = GoalMilestone.query.get(milestone_id)
     if not milestone:
         return error_response('Milestone not found', 404)

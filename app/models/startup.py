@@ -3,6 +3,7 @@ from app.extensions import db
 from sqlalchemy import Enum, JSON
 from .Enums import StartupStage
 import os
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 
 class Startup(db.Model):
     __tablename__ = 'startups'
@@ -33,10 +34,10 @@ class Startup(db.Model):
     logo_url = db.Column(db.String(500))
     banner_url = db.Column(db.String(500))
     
-    tech_stack = db.Column(db.JSON, nullable=False, default=list)
+    roles = db.Column(MutableDict.as_mutable(JSON), default=dict)
+    tech_stack = db.Column(MutableList.as_mutable(JSON), default=list)
     
     positions = db.Column(db.Integer, default=0)
-    roles = db.Column(JSON, default={})
     
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     creator_first_name = db.Column(db.String(100))
@@ -69,7 +70,7 @@ class Startup(db.Model):
         foreign_keys='JoinRequest.startup_id')
     
     startup_bookmarks = db.relationship('StartupBookmark',
-        back_populates='bookmarked_startup',
+        back_populates='startup',
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='StartupBookmark.startup_id')
@@ -109,11 +110,20 @@ class Startup(db.Model):
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='StartupDocument.startup_id')
-    
+    startup_views = db.relationship('StartupView',
+        back_populates='startup',
+        lazy='dynamic',
+        cascade='all, delete-orphan')
     # HELPER FUNCTIONS
-    def increment_views(self):
+    def increment_views(self, user_id):
         """Increment view count"""
-        self.views += 1
+        isViewed = StartupView.query.filter_by(startup_id=self.id, user_id=user_id).first()
+        if not isViewed:
+            new_view = StartupView(startup_id=self.id, user_id=user_id)
+            self.views += 1
+            db.session.add(new_view)
+            
+        
         db.session.commit()
     
     def update_member_count(self):
@@ -141,9 +151,25 @@ class Startup(db.Model):
         """Remove a member from the startup"""
         member = self.startup_members.filter_by(user_id=user_id, is_active=True).first()
         if member:
-            member.is_active = False
+            db.session.delete(member)
             self.update_member_count()
-    
+            db.session.commit()
+            return True
+        return False
+    def remove_member_by_id(self, member_id):
+        member = self.startup_members.filter_by(
+            id=member_id,
+            is_active=True
+        ).first()
+
+        if not member:
+            return False
+
+        db.session.delete(member)
+        self.update_member_count()
+        db.session.commit()
+        return True
+
     def update_stage(self, new_stage):
         """Update startup stage"""
         self.stage = StartupStage(new_stage)
@@ -266,5 +292,30 @@ class Startup(db.Model):
             'memberCount': self.member_count,
             'views': self.views,
             'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat()
+            'updatedAt': self.updated_at.isoformat(),
+            # 'startupViews': [view.to_dict() for view in self.startup_views]
+            
         }
+        
+
+
+class StartupView(db.Model):
+  __tablename__ = 'startup_views'
+  
+  id = db.Column(db.Integer, primary_key=True)
+  user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+  startup_id = db.Column(db.Integer, db.ForeignKey('startups.id'), nullable=False)
+  viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
+  
+  # Relationships
+  user = db.relationship('User', back_populates='startup_views')
+  startup = db.relationship('Startup', back_populates='startup_views')
+  
+  
+  def to_dict(self):
+    return {
+      'id': self.id,
+      'user_id': self.user_id,
+      'startup_id': self.startup_id,
+      'viewed_at': self.viewed_at.isoformat()
+    }

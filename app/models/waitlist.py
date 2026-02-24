@@ -31,8 +31,9 @@ class Waitlist(db.Model):
     POINTS_PER_SMALL_CONTRIBUTION = 10
     POINTS_PER_CONTRIBUTION = 25
     POINTS_PER_LARGE_CONTRIBUTION = 50
+    POINTS_PER_IDEA = 10
     POINTS_PER_ACTIVITY = 1
-    POINTS_PER_STARTUP = 30
+    POINTS_PER_STARTUP = 15
     ACTIVITY_INTERVAL = timedelta(minutes=30)
     DISCOUNT_RANKS = {
         (1, 500): 25,
@@ -73,10 +74,10 @@ class Waitlist(db.Model):
     # Constants (business rules)
     # -------------------------
     MAX_MVP = 1000
-    MAX_V1 = 2500
+    MAX_V1 = 10000
 
-    JAN_10_DEADLINE = datetime(2026, 1, 10, 23, 59, 59)
-    FEB_7_DEADLINE = datetime(2026, 2, 7, 23, 59, 59)
+    MVP_DEADLINE = datetime(2026, 2, 27, 23, 59, 59)
+    V1_DEADLINE = datetime(2026, 3, 5, 23, 59, 59)
 
     def register_activity(self):
         now = datetime.utcnow()
@@ -99,7 +100,7 @@ class Waitlist(db.Model):
     @hybrid_property
     def total_points_value(self) -> int:
         return (
-            (self.referral_points or 0) * 2
+            self.referral_points or 0
             + (self.contribution_points or 0)
             + (self.activity_points or 0)
         )
@@ -107,7 +108,7 @@ class Waitlist(db.Model):
     @total_points_value.expression
     def total_points_value(cls):
         return (
-            (cls.referral_points * 2)
+            (cls.referral_points * 5)
             + cls.contribution_points
             + cls.activity_points
         )
@@ -154,9 +155,9 @@ class Waitlist(db.Model):
     def get_max_allowed() -> int:
         now = datetime.utcnow()
 
-        if now <= Waitlist.JAN_10_DEADLINE:
+        if now <= Waitlist.MVP_DEADLINE:
             return Waitlist.MAX_MVP
-        elif now <= Waitlist.FEB_7_DEADLINE:
+        elif now <= Waitlist.V1_DEADLINE:
             return Waitlist.MAX_V1
         return 10**9  # effectively unlimited
 
@@ -189,7 +190,7 @@ class Waitlist(db.Model):
         db.session.flush()  # assigns ID without committing
 
         position = user.get_position()
-        user.activity_points += max(0, int((Waitlist.MAX_V1 - position) / 50)) # max 2500 / 50 = 50 points
+        # user.activity_points += max(0, int((Waitlist.MAX_V1 - position) / 50)) # max 2500 / 50 = 50 points
 
         db.session.commit()
         return True, "Successfully joined waitlist", {
@@ -199,22 +200,29 @@ class Waitlist(db.Model):
     # -------------------------
     # Points mutation
     # -------------------------
-    def add_points(self, points: int, category: str):
+    def add_points(self, points: int = 0, category: str = ""):
         if category == "referral":
             self.referral_points += points
-            # (need to change information + logic; for each 5 successful referrals, they should get a bonus of 25 points)
+            # Bonus: 25 points for every 5 successful referrals
             if self.referral_points % 5 == 0:
-                self.contribution_points += 25  # bonus points for every 5 referrals
-        elif category in ["contribution", "small_contribution", "medium_contribution", "large_contribution"]:
-            self.contribution_points += points
+                self.referral_points += Waitlist.POINTS_PER_REFERRAL * 5
+        elif category == "small_contribution":
+            self.contribution_points += Waitlist.POINTS_PER_SMALL_CONTRIBUTION
+        elif category == "contribution":
+            self.contribution_points += Waitlist.POINTS_PER_CONTRIBUTION
+        elif category == "large_contribution":
+            self.contribution_points += Waitlist.POINTS_PER_LARGE_CONTRIBUTION
+        elif category == "idea":
+            self.contribution_points += Waitlist.POINTS_PER_IDEA
         elif category == "activity":
-            self.activity_points += points
+            self.activity_points += Waitlist.POINTS_PER_ACTIVITY
         elif category == "new_startup":
-            self.activity_points += points
+            self.activity_points += Waitlist.POINTS_PER_STARTUP
         elif category == "custom":
             self.contribution_points += points
         else:
             raise ValueError("Invalid point category")
+        self.last_activity_at = datetime.utcnow()
 
         db.session.commit()
     @staticmethod

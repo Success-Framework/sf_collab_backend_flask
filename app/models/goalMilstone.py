@@ -21,11 +21,12 @@ class GoalMilestone(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    project_goal = db.relationship('ProjectGoal', back_populates='milestones', foreign_keys=[goal_id])
+    goal = db.relationship('ProjectGoal', back_populates='milestones', foreign_keys=[goal_id])
     milestone_owner = db.relationship('User', back_populates='goal_milestones', foreign_keys=[user_id])
     
     # HELPER FUNCTIONS
-    
+
+
     def complete(self):
         """Mark milestone as completed"""
         self.is_completed = True
@@ -33,9 +34,8 @@ class GoalMilestone(db.Model):
         
         # Update parent goal progress
         if self.goal:
-            self.goal.complete_milestone()
-        
-        db.session.commit()
+            self.goal.milestones_completed += 1
+            self.goal.update_progress()
     
     def uncomplete(self):
         """Mark milestone as not completed"""
@@ -46,8 +46,6 @@ class GoalMilestone(db.Model):
         if self.goal:
             self.goal.milestones_completed = max(0, self.goal.milestones_completed - 1)
             self.goal.update_progress()
-        
-        db.session.commit()
     
     def update_order(self, new_order):
         """Update milestone order"""

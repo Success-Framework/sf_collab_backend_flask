@@ -28,6 +28,8 @@ class Knowledge(db.Model):
     # Image storage
     image_buffer = db.Column(db.LargeBinary, nullable=True)
     image_content_type = db.Column(db.String(100), nullable=True)
+
+    file_size_mb = db.Column(db.Float, nullable=True)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -130,6 +132,7 @@ class Knowledge(db.Model):
             'contentPreview': self.content_preview,
             'category': self.category,
             'fileUrl': self.file_url,
+            'fileSizeMb': self.file_size_mb,
             'tags': self.tags or [],
             'author': {
                 'id': self.author_id,

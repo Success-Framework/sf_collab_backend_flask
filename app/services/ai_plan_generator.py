@@ -3,6 +3,20 @@ import os
 import re
 
 
+
+_client = None
+
+def get_groq_client():
+    global _client
+    if _client is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return None
+        _client = Groq(api_key=api_key)
+    return _client
+
+
+
 SECTION_PROMPTS = {
     "executive_summary": """
 Write an investor-ready executive summary.

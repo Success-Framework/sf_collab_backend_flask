@@ -1,10 +1,13 @@
 from flask import Blueprint, request, jsonify
 from app.models.knowledge import Knowledge
+from app.models.user import User
+from app.utils import plans_utils as plan_utils
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 
 knowledge_bp = Blueprint('knowledge', __name__)
-
+# For now it is a good idea to mix content from SForger and external sources.
+# In the future, we might want to separate them.
 @knowledge_bp.route('', methods=['GET'])
 def get_knowledge_posts():
     """Get all knowledge posts with filtering"""
@@ -14,7 +17,7 @@ def get_knowledge_posts():
     author_id = request.args.get('author_id', type=int)
     search = request.args.get('search', type=str)
     include_comments = request.args.get('include_comments', 'false').lower() == 'true'
-    
+    include_external = request.args.get('include_external', 'true').lower() == 'true'
     query = Knowledge.query
     
     if category:
@@ -27,7 +30,8 @@ def get_knowledge_posts():
             (Knowledge.title_description.ilike(f'%{search}%')) |
             (Knowledge.content_preview.ilike(f'%{search}%'))
         )
-    
+    # if include_external: 
+        
     result = paginate(query.order_by(Knowledge.created_at.desc()), page, per_page)
     
     return success_response({
@@ -66,12 +70,18 @@ def create_knowledge_post():
         return error_response('Missing required fields')
     
     try:
+        file_size_mb = data.get('file_size_mb', 0)
+        can_upload, error_message = plan_utils.can_upload_file(data['author_id'], file_size_mb)
+        if not can_upload:
+            return error_response(error_message, 500)
+
         knowledge = Knowledge(
             title=data['title'],
             title_description=data['title_description'],
             content_preview=data['content_preview'],
             category=data['category'],
             file_url=data.get('file_url'),
+            file_size_mb=file_size_mb,
             tags=data.get('tags', []),
             author_id=data['author_id'],
             author_first_name=data['author_first_name'],
@@ -79,6 +89,11 @@ def create_knowledge_post():
         )
         
         db.session.add(knowledge)
+
+        user = User.query.get(data['author_id'])
+        if user:
+            user.increase_storage_used(file_size_mb)
+        
         db.session.commit()
         
         return success_response({
@@ -106,12 +121,24 @@ def update_knowledge_post(knowledge_id):
             knowledge.content_preview = data['content_preview']
         if 'category' in data:
             knowledge.category = data['category']
-        if 'file_url' in data:
-            knowledge.file_url = data['file_url']
         if 'tags' in data:
             knowledge.tags = data['tags']
         if 'status' in data:
             knowledge.update_status(data['status'])
+        if 'file_url' in data and 'file_size_mb' in data:
+            new_file_size_mb = data['file_size_mb']
+            old_file_size_mb = knowledge.file_size_mb or 0
+            can_upload, error_message = plan_utils.can_update_file(knowledge.author_id, new_file_size_mb - old_file_size_mb)
+            if not can_upload:
+                return error_response(error_message, 500)
+            
+            # Update storage usage
+            user = User.query.get(knowledge.author_id)
+            if user:
+                user.update_storage_used(old_file_size_mb or 0, new_file_size_mb)
+
+            knowledge.file_size_mb = new_file_size_mb
+            knowledge.file_url = data['file_url']
         
         db.session.commit()
         
@@ -181,6 +208,10 @@ def delete_knowledge_post(knowledge_id):
         return error_response('Knowledge post not found', 404)
     
     try:
+        user = User.query.get(knowledge.author_id)
+        if user:
+            user.delete_storage_used(knowledge.file_size_mb or 0, 0)
+            db.session.update(user)
         db.session.delete(knowledge)
         db.session.commit()
         return success_response(message='Knowledge post deleted successfully')
