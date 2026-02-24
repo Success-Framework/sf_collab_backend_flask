@@ -35,7 +35,7 @@ def create_pitch_deck():
 
     title = data.get("title", "Untitled Deck")
     template_type = data.get("template_type", "saas")
-    theme_type = data.get("theme_type", "minimal_light")
+    theme_type = data.get("theme_type", "startup")
 
     # Temporary empty slides
     slides_json = {
@@ -126,7 +126,7 @@ def generate_pitch_deck():
 
     title = data.get("title")
     template_type = data.get("template_type", "saas")
-    theme_type = data.get("theme_type", "minimal_light")
+    theme_type = data.get("theme_type", "startup")
     startup_data = data.get("startup_data")
 
     if not title or not startup_data:

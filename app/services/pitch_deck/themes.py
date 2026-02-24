@@ -52,4 +52,4 @@ def get_theme(theme_type: str):
     Returns theme configuration.
     Defaults to minimal_light.
     """
-    return THEMES.get(theme_type, THEMES["minimal_light"])
+    return THEMES.get(theme_type, THEMES["startup"])
