@@ -66,6 +66,42 @@ class ChatConversation(db.Model):
         except Exception:
             return False
 
+    def is_archived_for_user(self, user_id):
+        """Check if this conversation is archived for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT is_archived FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return bool(result.is_archived) if result else False
+        except Exception:
+            return False
+
+    def is_pinned_for_user(self, user_id):
+        """Check if this conversation is pinned for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT is_pinned FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return bool(result.is_pinned) if result else False
+        except Exception:
+            return False
+
+    def get_pinned_at_for_user(self, user_id):
+        """Get when this conversation was pinned for a specific user"""
+        uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
+        try:
+            result = db.session.execute(
+                db.text('SELECT pinned_at FROM conversation_participants WHERE conversation_id = :cid AND user_id = :uid'),
+                {'cid': self.id, 'uid': uid}
+            ).first()
+            return result.pinned_at.isoformat() if result and result.pinned_at else None
+        except Exception:
+            return None
+
     def hide_for_user(self, user_id):
         """Soft-hide conversation for a user (stays participant, just hidden from their list)"""
         uid = user_id.id if hasattr(user_id, 'id') else int(user_id)
@@ -356,6 +392,9 @@ class ChatConversation(db.Model):
             'message_count': self.messages.count(),
             'unread_count': self.get_unread_message_count(for_user.id) if for_user else 0,
             'is_hidden': self.is_hidden_for_user(for_user.id) if for_user else False,
+            'is_archived': self.is_archived_for_user(for_user.id) if for_user else False,
+            'is_pinned': self.is_pinned_for_user(for_user.id) if for_user else False,
+            'pinned_at': self.get_pinned_at_for_user(for_user.id) if for_user else None,
             'parent_startup_id': self.parent_startup_id
         }
         
@@ -409,7 +448,13 @@ conversation_participants = db.Table('conversation_participants',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('joined_at', db.DateTime, default=datetime.utcnow),
     db.Column('role', db.String(20), default='member'),
-    db.Column('is_hidden', db.Boolean, default=False)
+    db.Column('is_hidden', db.Boolean, default=False),
+    # ── Archive support (per-user, per-conversation) ──────────────────────────
+    db.Column('is_archived', db.Boolean, default=False, nullable=False),
+    db.Column('archived_at', db.DateTime, nullable=True)
+    # ── Pin support (per-user) ──────────────────────────────────────────────
+    ,db.Column('is_pinned', db.Boolean, default=False, nullable=False)
+    ,db.Column('pinned_at', db.DateTime, nullable=True)
 )
 
 conversation_user_reads = db.Table('conversation_user_reads',
