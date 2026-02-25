@@ -599,7 +599,7 @@ def send_message(conversation_id):
             
             # Notify all participants except sender
             for participant in conversation.participants:
-                if participant.id != current_user_id:
+                if int(participant.id) != int(current_user_id):
                     # Use appropriate notification based on conversation type
                     if conversation.conversation_type == 'group':
                         notify_group_message(
@@ -629,7 +629,7 @@ def send_message(conversation_id):
             mentions = extract_mentions(original_content)
             for username in mentions:
                 mentioned_user = get_user_by_username(username)
-                if mentioned_user and mentioned_user.id != current_user_id:
+                if mentioned_user and int(mentioned_user.id) != int(current_user_id):
                     # Check if mentioned user is part of the conversation
                     if mentioned_user in conversation.participants:
                         notify_mention_in_chat(

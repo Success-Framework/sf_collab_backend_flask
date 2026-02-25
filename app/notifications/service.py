@@ -46,7 +46,9 @@ class NotificationService:
         """
         try:
             # Don't notify yourself
-            if actor_id and actor_id == user_id:
+            # IMPORTANT: actor_id comes from JWT (string) while user_id may be int or string.
+            # Always cast both to int before comparing to avoid "5" != 5 false-negative.
+            if actor_id is not None and int(actor_id) == int(user_id):
                 logger.debug(f"Skipping self-notification for user {user_id}")
                 return None
             
@@ -142,7 +144,8 @@ class NotificationService:
         """
         try:
             # Don't notify yourself
-            if actor_id and actor_id == user_id:
+            # IMPORTANT: same int() cast as create_notification to handle JWT string vs DB int
+            if actor_id is not None and int(actor_id) == int(user_id):
                 return None
             
             notification = Notification(
@@ -330,6 +333,17 @@ class NotificationService:
             })
             
             db.session.commit()
+            
+            # Emit real-time event so all open Bell/Page components sync instantly
+            try:
+                from app.extensions import socketio
+                socketio.emit(
+                    'notifications_marked_read',
+                    {'unread_count': 0, 'category': category},
+                    room=f'user_{user_id}'
+                )
+            except Exception as emit_err:
+                logger.warning(f"Could not emit notifications_marked_read: {emit_err}")
             
             logger.info(f"Marked {count} notifications as read for user {user_id}")
             return count
