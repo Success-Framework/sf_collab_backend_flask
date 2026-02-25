@@ -43,11 +43,10 @@ class JoinRequest(db.Model):
             from app.models.chatConversation import ChatConversation
             ChatConversation.add_to_startup_chat(self.request_user, self.target_startup)
             db.session.add(member)
-            db.session.commit()
+            return member
         except Exception as e:
           print("Error adding member to chat conversation:", e)
-          pass
-        return member
+          raise e
     
     def reject(self, reviewer_id=None):
         """Reject join request"""
