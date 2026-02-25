@@ -13,7 +13,7 @@ def get_current_user_startup_role(startup_id: int) -> str:
     user_id = get_jwt_identity()
     if not user_id:
         return 'none'
-
+    user_id = int(user_id)  # Ensure user_id is an integer
     user = User.query.get(user_id)
     if not user:
         return 'none'
