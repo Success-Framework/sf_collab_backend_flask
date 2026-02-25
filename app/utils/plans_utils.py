@@ -160,8 +160,8 @@ def can_create_task_or_milestone(user: User) -> bool:
   current_tasks_milestones = user.created_tasks.count() + user.project_goals.count()
   return current_tasks_milestones < plan_limits["max_tasks_milestones"]
 
-def can_upload_file(user: User, old_file_size_mb: float, new_file_size_mb: float) -> bool:
-  """Check if user can upload a file of given size"""
+def can_update_file(user: User, old_file_size_mb: float, new_file_size_mb: float) -> bool:
+  """Check if user can update a file of given size"""
   plan_limits = get_plan_limits(user)
   
   if new_file_size_mb > plan_limits["max_file_size_mb"]:
@@ -170,8 +170,8 @@ def can_upload_file(user: User, old_file_size_mb: float, new_file_size_mb: float
     return False, "Total storage limit exceeded"
   return True
 
-def can_update_file(user: User, file_size_mb: float) -> bool:
-  """Check if user can update a file of given size"""
+def can_upload_file(user: User, file_size_mb: float) -> bool:
+  """Check if user can upload a file of given size"""
   plan_limits = get_plan_limits(user)
   
   if file_size_mb > plan_limits["max_file_size_mb"]:
