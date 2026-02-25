@@ -230,7 +230,7 @@ class Startup(db.Model):
     def add_document(self, filename, file_path, content_type, document_type='general', file_url=None):
         """Add a document to the startup"""
         from app.models.startup_document import StartupDocument
-        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024) if os.path.exists(file_path) else 0
         
         # Generate file_url if not provided
         if not file_url:
@@ -244,7 +244,7 @@ class Startup(db.Model):
             file_url=file_url,
             content_type=content_type,
             document_type=document_type,
-            file_size=file_size
+            file_size_mb=file_size_mb
         )
         db.session.add(document)
         db.session.commit()
