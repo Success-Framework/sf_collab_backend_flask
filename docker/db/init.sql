@@ -2235,3 +2235,32 @@ LOCK TABLES `plan_versions` WRITE;
 /*!40000 ALTER TABLE `plan_versions` DISABLE KEYS */;
 /*!40000 ALTER TABLE `plan_versions` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `startup_invitations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `startup_invitations` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `startup_id` int NOT NULL,
+  `invited_user_id` int NOT NULL,
+  `invited_by_id` int DEFAULT NULL,
+  `role` varchar(100) NOT NULL,
+  `status` enum('pending','accepted','rejected','expired') DEFAULT 'pending',
+  `expires_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `responded_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_startup_invitation` (`startup_id`,`invited_user_id`),
+  KEY `startup_id` (`startup_id`),
+  KEY `invited_user_id` (`invited_user_id`),
+  KEY `invited_by_id` (`invited_by_id`),
+  CONSTRAINT `startup_invitations_ibfk_1` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `startup_invitations_ibfk_2` FOREIGN KEY (`invited_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `startup_invitations_ibfk_3` FOREIGN KEY (`invited_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `startup_invitations` WRITE;
+/*!40000 ALTER TABLE `startup_invitations` DISABLE KEYS */;
+/*!40000 ALTER TABLE `startup_invitations` ENABLE KEYS */;
+UNLOCK TABLES;

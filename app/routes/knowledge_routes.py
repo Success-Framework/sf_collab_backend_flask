@@ -138,7 +138,7 @@ def update_knowledge_post(knowledge_id):
                 user.update_storage_used(old_file_size_mb or 0, new_file_size_mb)
 
             knowledge.file_size_mb = new_file_size_mb
-            knowledge.file_url = data['file_url']s
+            knowledge.file_url = data['file_url']
         
         db.session.commit()
         
