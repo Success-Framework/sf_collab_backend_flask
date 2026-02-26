@@ -895,7 +895,7 @@ CREATE TABLE `posts` (
   `author_first_name` varchar(100) DEFAULT NULL,
   `author_last_name` varchar(100) DEFAULT NULL,
   `content` text NOT NULL,
-  `type` enum('professional','social','image','video') DEFAULT NULL,
+  `type` enum('professional','social','image','video','text') DEFAULT NULL,
   `tags` json DEFAULT NULL,
   `likes` int DEFAULT NULL,
   `comments_count` int DEFAULT NULL,
