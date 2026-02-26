@@ -268,6 +268,26 @@ class NotificationService:
             notification.read_at = datetime.utcnow()
             db.session.commit()
             
+            # Emit real-time event so other open tabs/windows sync instantly.
+            # The frontend's notification_read handler uses this to update the
+            # badge with the authoritative server count rather than guessing.
+            try:
+                from app.extensions import socketio
+                unread_count = Notification.query.filter_by(
+                    user_id=user_id, is_read=False
+                ).count()
+                socketio.emit(
+                    'notification_read',
+                    {
+                        'notificationId': notification_id,
+                        'notification_id': notification_id,
+                        'unread_count': unread_count,
+                    },
+                    room=f'user_{user_id}'
+                )
+            except Exception as emit_err:
+                logger.warning(f"Could not emit notification_read: {emit_err}")
+            
             logger.info(f"Marked notification {notification_id} as read")
             return True
             

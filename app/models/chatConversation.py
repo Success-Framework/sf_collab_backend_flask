@@ -386,7 +386,16 @@ class ChatConversation(db.Model):
                 'role': self.get_participant_role(user),
                 'lastName': user.last_name,
                 'profilePicture': user.profile_picture,
-                'timezone': user.get_timezone()
+                'timezone': user.get_timezone(),
+                # FIX 5: expose last_seen so the frontend can show accurate
+                # "last seen X mins ago" after a page reload, without relying
+                # solely on the live socket disconnect event.
+                'last_seen': user.last_seen.isoformat() if getattr(user, 'last_seen', None) else (
+                    user.last_login.isoformat() if getattr(user, 'last_login', None) else None
+                ),
+                'lastSeen': user.last_seen.isoformat() if getattr(user, 'last_seen', None) else (
+                    user.last_login.isoformat() if getattr(user, 'last_login', None) else None
+                ),
             } for user in self.participants],
             'last_message': self.get_last_message_preview(for_user),
             'message_count': self.messages.count(),

@@ -418,3 +418,35 @@ def emit_user_left_conversation(conversation_id, user_id, user_name):
         },
         room=f"conversation_{conversation_id}",
     )
+
+
+@socketio.on('join_notifications')
+def handle_join_notifications(data):
+    """
+    (Re)join the personal notification room.
+
+    NotificationContext emits this on every socket connect/reconnect.
+    handle_connect already joins user_{id}, but this handler covers the case
+    where the React component mounts AFTER the connect event already fired
+    (e.g. hot reload, lazy providers) and the room join in handle_connect is
+    therefore already done and the component's onConnect callback wasn't
+    registered yet — making the emit here a safe explicit re-join.
+    """
+    sid = request.sid
+    if sid not in socket_sessions:
+        return
+
+    user_id = socket_sessions[sid]['user_id']
+
+    # Security: only allow joining your own room
+    requested_id = (data or {}).get('user_id')
+    if requested_id and str(requested_id) != str(user_id):
+        logging.warning(
+            f"join_notifications: user {user_id} tried to join room for {requested_id}"
+        )
+        return
+
+    room = f"user_{user_id}"
+    join_room(room)
+    emit('notifications_room_joined', {'user_id': user_id, 'room': room})
+    logging.info(f"User {user_id} (re)joined notification room")
