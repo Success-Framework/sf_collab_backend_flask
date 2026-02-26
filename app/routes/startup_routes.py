@@ -13,13 +13,13 @@ from app.notifications.helpers import notify_access_request_pending
 from app.utils.plans_utils import can_create_project, can_add_collaborator, can_upload_file
 from app.models.startUpMember import StartupMember
 from app.models.chatConversation import ChatConversation
-
+from app.models.startupInvitation import StartupInvitation, InvitationStatus
 from app.models.waitlist import Waitlist
 import os 
 from sqlalchemy import func
 from io import BytesIO
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import uuid
 import shutil
@@ -136,11 +136,16 @@ def get_startups():
     my_startups = request.args.get('my_startups', 'false').lower() == 'true'
     min_funding = request.args.get('min_funding', type=float)
     max_funding = request.args.get('max_funding', type=float)
-    query = Startup.query
+    builder = request.args.get('builder', 'false').lower() == 'true'
+    query = Startup.query.filter(Startup.status != 'deleted')  # Exclude deleted startups
     
 
     
-
+    if builder:
+        print("Builder filter applied - showing startups where user is a member or creator")
+        query = query.join(Startup.startup_members).filter(
+            (StartupMember.user_id == current_user_id) & (Startup.creator_id != current_user_id) # Show startups where user is a member but not the creator
+        )
     if page == 1:
         query = query.order_by(Startup.created_at.desc())
     else:
@@ -206,10 +211,12 @@ def get_top_startups():
 def get_startup(startup_id):
     current_user_id = get_jwt_identity()
     startup = Startup.query.get_or_404(startup_id)
+    if startup.status == 'deleted':
+        return error_response('Startup not found', 404)
     startup.increment_views(current_user_id)
 
     role = get_current_user_startup_role(startup_id)
-
+    
     if role == 'none' or not role:
         # Very limited view for normal logged-in users
         data = {
@@ -686,10 +693,10 @@ def add_startup_member(startup_id):
     if not can_add_collaborator(current_user):
         return error_response('Collaborator addition limit reached for your plan', 403)
     data = request.get_json()
-    required_fields = ['user_id', 'first_name', 'last_name']
-    if not all(field in data for field in required_fields):
-        return error_response('Missing required fields: user_id, first_name, last_name')
-    
+    required_fields = ['user_id', 'first_name', 'last_name', 'role']
+    for field in required_fields:
+        if field not in data:
+            return error_response(f'Missing required field: {field}', 400)
     try:
         member = startup.add_member(
             data['user_id'],
@@ -741,9 +748,12 @@ def delete_startup(startup_id):
         if os.path.exists(startup_upload_dir):
             shutil.rmtree(startup_upload_dir)
         # Delete from database
-        StartupDocument.query.filter_by(startup_id=startup_id).delete()
+        # StartupDocument.query.filter_by(startup_id=startup_id).delete()
+        
         ChatConversation.delete_startup_chat(startup_id)
-        db.session.delete(startup)
+        
+        # db.session.delete(startup)
+        startup.status = 'deleted'
         db.session.commit()
         return success_response(message='Startup deleted successfully')
     except Exception as e:
@@ -1334,7 +1344,7 @@ def has_startup_access(user_id, startup_id):
     """Check if user has access to view startup data"""
     # Admin users can access all startups
     current_user = User.query.get(user_id)
-    if current_user and current_user.role == 'admin':
+    if current_user and (current_user.role == 'admin' or current_user.admin):
         return True
     
     # Check if user is a member of the startup
@@ -1349,7 +1359,7 @@ def has_startup_management_access(user_id, startup_id):
     """Check if user has permission to manage startup data"""
     # Admin users can manage all startups
     current_user = User.query.get(user_id)
-    if current_user and current_user.role == 'admin':
+    if current_user and (current_user.role == 'admin' or current_user.admin):
         return True
     # Check if user is the creator or has admin/manager role in the startup
     startup = Startup.query.get(startup_id)
@@ -1567,3 +1577,302 @@ def change_member_role(startup_id, member_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to change member role: {str(e)}', 500)
+
+# STARTUP INVITATIONS CRUD
+@startups_bp.route('/<int:startup_id>/invitations', methods=['GET'])
+@jwt_required()
+def get_startup_invitations(startup_id):
+    """Get all invitations for a startup (only for managers)"""
+    current_user_id = get_jwt_identity()
+    
+    if not can_manage_members(startup_id, current_user_id):
+        return error_response(
+            "Only the startup owner or founders can view invitations",
+            403
+        )
+    
+    startup = Startup.query.get_or_404(startup_id)
+    
+    status_filter = request.args.get('status', 'all')
+    valid_statuses = ['pending', 'accepted', 'rejected', 'expired', 'all']
+    if status_filter not in valid_statuses:
+        status_filter = 'pending'
+    
+    query = startup.invitations
+    if status_filter != 'all':
+        query = query.filter_by(status=InvitationStatus(status_filter))
+    
+    invitations = query.order_by(StartupInvitation.created_at.desc()).all()
+    
+    return success_response({
+        'invitations': [inv.to_dict() for inv in invitations],
+        'count': len(invitations),
+        'filter': status_filter
+    })
+@startups_bp.route('/<int:startup_id>/invitations', methods=['POST'])
+@jwt_required()
+def create_startup_invitation(startup_id):
+    """Send invitation to a non-member user to join startup"""
+    
+    current_user_id = get_jwt_identity()
+    
+    if not can_manage_members(startup_id, current_user_id):
+        return error_response(
+            "Only the startup owner or founders can send invitations",
+            403
+        )
+    
+    startup = Startup.query.get_or_404(startup_id)
+    data = request.get_json() or {}
+    
+    required_fields = ['user_id', 'role']
+    
+    for field in required_fields:
+        if field not in data:
+            return error_response(f'{field} is required', 400)
+    
+    invited_user_id = data['user_id']
+    role = data['role']
+    expires_in_days = data.get('expires_in_days', 7)  # Default expiration
+    
+    invited_user = User.query.get(invited_user_id)
+    if not invited_user:
+        return error_response('User not found', 404)
+    
+    # Check if user is already a member
+    existing_member = StartupMember.query.filter_by(
+        startup_id=startup_id,
+        user_id=invited_user_id
+    ).first()
+    if existing_member:
+        return error_response('User is already a member of this startup', 400)
+    
+    # Check if invitation already exists and is pending
+    existing_invitation = StartupInvitation.query.filter_by(
+        startup_id=startup_id,
+        invited_user_id=invited_user_id,
+        status=InvitationStatus.pending
+    ).first()
+    if existing_invitation:
+        return error_response('An active invitation already exists for this user', 409)
+    
+    try:
+        expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+        
+        invitation = StartupInvitation(
+            startup_id=startup_id,
+            invited_user_id=invited_user_id,
+            invited_by_id=current_user_id,
+            role=role,
+            expires_at=expires_at,
+            status=InvitationStatus.pending
+        )
+        
+        db.session.add(invitation)
+        db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Invited to Startup
+        # ════════════════════════════════════════════════════════════
+        try:
+            notify_info(
+                user_id=invited_user_id,
+                message=f"You have been invited to join {startup.name} as a {role}.",
+                link_url=f"/startup-details/{startup.id}"
+            )
+        except Exception as e:
+            print(f"⚠️ Startup invitation notification failed: {e}")
+        
+        return success_response({
+            'invitation': invitation.to_dict()
+        }, 'Invitation sent successfully', 201)
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to create invitation: {str(e)}', 500)
+@startups_bp.route('/<int:startup_id>/invitations/<int:invitation_id>/accept', methods=['POST'])
+@jwt_required()
+def accept_startup_invitation(startup_id, invitation_id):
+    """Accept a startup invitation and add user as member"""
+    
+    current_user_id = get_jwt_identity()
+    
+    invitation = StartupInvitation.query.filter_by(
+        id=invitation_id,
+        startup_id=startup_id,
+        invited_user_id=current_user_id,
+        status=InvitationStatus.pending
+    ).first()
+    if not invitation:
+        return error_response("Invitation not found or already processed", 404)
+    
+    # Check if invitation has expired
+    if invitation.expires_at and datetime.utcnow() > invitation.expires_at:
+        invitation.status = InvitationStatus.expired
+        db.session.commit()
+        return error_response("This invitation has expired", 410)
+    
+    startup = Startup.query.get(startup_id)
+    invited_user = User.query.get(current_user_id)
+    
+    try:
+        # Add user as member with the role from invitation
+        new_member = startup.add_member(
+            current_user_id,
+            invited_user.first_name,
+            invited_user.last_name,
+            invitation.role
+        )
+        
+        # Update invitation status
+        invitation.status = InvitationStatus.accepted
+        invitation.responded_at = datetime.utcnow()
+        
+        # Add to startup chat
+        ChatConversation.add_to_startup_chat(invited_user, startup)
+        
+        db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Invitation Accepted
+        # ════════════════════════════════════════════════════════════
+        try:
+            notify_added_to_startup(
+                user_id=current_user_id,
+                startup_name=startup.name,
+                startup_id=startup.id,
+                role=invitation.role
+            )
+            
+            # Notify the inviter
+            notify_info(
+                user_id=invitation.invited_by_id,
+                message=f"{invited_user.first_name} {invited_user.last_name} accepted your invitation to join {startup.name}.",
+                link_url=f"/startup-details/{startup.id}"
+            )
+        except Exception as e:
+            print(f"⚠️ Invitation acceptance notification failed: {e}")
+        
+        return success_response({
+            'message': "Invitation accepted. You are now a member of the startup.",
+            'new_member': {
+                'userId': new_member.user_id,
+                'role': new_member.role,
+                'joinedAt': new_member.joined_at.isoformat() if hasattr(new_member, 'joined_at') else None
+            }
+        }, status=200)
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to accept invitation: {str(e)}", 500)
+@startups_bp.route('/<int:startup_id>/invitations/<int:invitation_id>/reject', methods=['POST'])
+@jwt_required()
+def reject_startup_invitation(startup_id, invitation_id):
+    """Reject a startup invitation"""
+    
+    current_user_id = get_jwt_identity()
+    
+    invitation = StartupInvitation.query.filter_by(
+        id=invitation_id,
+        startup_id=startup_id,
+        invited_user_id=current_user_id,
+        status=InvitationStatus.pending
+    ).first()
+    
+    if not invitation:
+        return error_response("Invitation not found or already processed", 404)
+    
+    startup = Startup.query.get(startup_id)
+    invited_user = User.query.get(current_user_id)
+    
+    try:
+        invitation.status = InvitationStatus.rejected
+        invitation.responded_at = datetime.utcnow()
+        db.session.commit()
+        
+        # ════════════════════════════════════════════════════════════
+        # ✨ NOTIFICATION: Invitation Rejected
+        # ════════════════════════════════════════════════════════════
+        try:
+            notify_info(
+                user_id=invitation.invited_by_id,
+                message=f"{invited_user.first_name} {invited_user.last_name} declined your invitation to join {startup.name}."
+            )
+        except Exception as e:
+            print(f"⚠️ Invitation rejection notification failed: {e}")
+        
+        return success_response({
+            "message": "Invitation rejected successfully",
+            "invitation_id": invitation_id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to reject invitation: {str(e)}", 500)
+@startups_bp.route('/<int:startup_id>/invitations/<int:invitation_id>', methods=['DELETE'])
+@jwt_required()
+def cancel_startup_invitation(startup_id, invitation_id):
+    """Cancel a pending invitation (only by the inviter or managers)"""
+    
+    current_user_id = get_jwt_identity()
+    
+    if not can_manage_members(startup_id, current_user_id):
+        return error_response(
+            "Only the startup owner or founders can cancel invitations",
+            403
+        )
+    
+    invitation = StartupInvitation.query.filter_by(
+        id=invitation_id,
+        startup_id=startup_id,
+        status=InvitationStatus.pending
+    ).first()
+    
+    if not invitation:
+        return error_response("Invitation not found or already processed", 404)
+    
+    try:
+        invited_user = User.query.get(invitation.invited_user_id)
+        
+        db.session.delete(invitation)
+        db.session.commit()
+        
+        try:
+            if invited_user:
+                notify_info(
+                    user_id=invitation.invited_user_id,
+                    message=f"Your invitation to join a startup has been cancelled."
+                )
+        except Exception as e:
+            print(f"⚠️ Invitation cancellation notification failed: {e}")
+        
+        return success_response(message='Invitation cancelled successfully')
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to cancel invitation: {str(e)}", 500)
+@startups_bp.route('/invitations', methods=['GET'])
+@jwt_required()
+def get_my_invitations():
+    """Get all invitations for the current user"""
+    
+    current_user_id = get_jwt_identity()
+    
+    status_filter = request.args.get('status', 'pending')
+    
+    valid_statuses = ['pending', 'accepted', 'rejected', 'expired', 'all']
+    if status_filter not in valid_statuses:
+        status_filter = 'pending'
+    
+    query = StartupInvitation.query.filter_by(invited_user_id=current_user_id)
+
+    if status_filter != 'all':
+        query = query.filter_by(status=InvitationStatus(status_filter))
+
+    invitations = query.order_by(StartupInvitation.created_at.desc()).all()
+
+    return success_response({
+        'invitations': [inv.to_dict() for inv in invitations],
+        'count': len(invitations),
+        'filter': status_filter
+    })
