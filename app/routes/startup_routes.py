@@ -680,7 +680,7 @@ def add_startup_member(startup_id):
         return error_response('Startup not found', 404)
     
     # Check if user is authorized to add members
-    if not can_manage_members(startup_id):
+    if not can_manage_members(startup_id, current_user_id):
         return error_response("Only owner or founder can add members", 403)
     current_user = User.query.get(current_user_id)
     if not can_add_collaborator(current_user):
@@ -849,8 +849,9 @@ def upload_document(startup_id):
     """Upload additional documents to startup"""
     current_user_id = get_jwt_identity()
     
-    startup = Startup.query.get_or_404(startup_id)
-    if not can_manage_documents(startup_id):
+
+
+    if not can_manage_documents(startup_id, current_user_id):
         return error_response("Only owner or founder can upload documents", 403)
     # Check if user is authorized to upload documents
     if not has_startup_management_access(current_user_id, startup_id):
@@ -918,9 +919,9 @@ def delete_document(startup_id, document_id):
     current_user_id = get_jwt_identity()
     
     document = StartupDocument.query.filter_by(id=document_id, startup_id=startup_id).first_or_404()
-    
+
     # Check if user is authorized to delete documents
-    if not can_manage_documents(startup_id):
+    if not can_manage_documents(startup_id, current_user_id):
         return error_response("Only owner or founder can delete documents", 403)
     
     try:
@@ -1032,7 +1033,8 @@ def get_join_requests(startup_id):
     Get all join requests for a startup (pending + processed)
     Only owner or founder members can see this
     """
-    if not can_manage_members(startup_id):
+    current_user_id = get_jwt_identity()
+    if not can_manage_members(startup_id, current_user_id):
         return error_response(
             "Only the startup owner or founders can view join requests", 
             403
@@ -1085,7 +1087,6 @@ def send_join_request(startup_id):
         current_user_id = get_jwt_identity()
         startup = Startup.query.get_or_404(startup_id)
 
-        print(f"Join Request - User ID: {current_user_id}, Startup ID: {startup_id}")
         current_user = User.query.get(current_user_id)
         if not current_user:
             print(f"User {current_user_id} not found")
@@ -1186,10 +1187,10 @@ def accept_join_request(startup_id, request_id):
     """
     Accept a pending join request and automatically add the user as a member
     """
-    from app.models.joinRequest import JoinRequest, JoinRequestStatus
-    from app.models.startup import Startup
+    from app.models.joinRequest import JoinRequestStatus
     
-    if not can_manage_members(startup_id):
+    current_user_id = get_jwt_identity()
+    if not can_manage_members(startup_id, current_user_id):
         return error_response(
             "Only the startup owner or founders can accept join requests", 
             403
@@ -1253,10 +1254,8 @@ def reject_join_request(startup_id, request_id):
     """
     Reject a pending join request
     """
-    from app.models.joinRequest import JoinRequest, JoinRequestStatus
-    from app.models.startup import Startup
-    
-    if not can_manage_members(startup_id):
+    current_user_id = get_jwt_identity()
+    if not can_manage_members(startup_id, current_user_id):
         return error_response(
             "Only the startup owner or founders can reject join requests", 
             403
@@ -1362,8 +1361,8 @@ def has_startup_management_access(user_id, startup_id):
         user_id=user_id, 
         startup_id=startup_id
     ).first()
-    
-    if not membership or not membership.role:
+    admin = membership.admin if membership else False
+    if not membership or not membership.role or (membership.role.value if hasattr(membership.role, 'value') else membership.role) not in ['owner', 'founder', 'manager'] and not admin:
         return False
     membership_role_value = membership.role.value if hasattr(membership.role, 'value') else membership.role
 
@@ -1394,7 +1393,7 @@ def remove_startup_member(startup_id, member_id):
     current_user = get_jwt_identity()
     startup = Startup.query.get_or_404(startup_id)
 
-    if not can_manage_members(startup_id):
+    if not can_manage_members(startup_id, current_user):
         return error_response('Unauthorized', 403)
 
     # Get member info before removal for notification

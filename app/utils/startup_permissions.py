@@ -68,18 +68,30 @@ def can_view_basic_info() -> bool:
 def can_view_full_details(startup_id: int) -> bool:
     """Members, founders, owners"""
     role = get_current_user_startup_role(startup_id)
+    
     return role in {'owner', 'founder', 'member'}
 
 
-def can_manage_documents(startup_id: int) -> bool:
+def can_manage_documents(startup_id: int, user_id: int = None) -> bool:
     """Only owner + founder"""
     role = get_current_user_startup_role(startup_id)
+    if user_id:
+        current_user_member = StartupMember.query.filter_by(startup_id=startup_id, user_id=user_id).first()
+        if current_user_member and current_user_member.admin:
+            print(f"User {user_id} is admin member of startup {startup_id}, granting manage documents access")
+            return True
+    print(f"can_manage_documents for startup {startup_id}: role = {role}")
     return role in {'owner', 'founder'}
 
 
-def can_manage_members(startup_id: int) -> bool:
+def can_manage_members(startup_id: int, user_id: int = None) -> bool:
     """Only owner + founder"""
     role = get_current_user_startup_role(startup_id)
+    if user_id:
+        current_user_member = StartupMember.query.filter_by(startup_id=startup_id, user_id=user_id).first()
+        if current_user_member and current_user_member.admin:
+            print(f"User {user_id} is admin member of startup {startup_id}, granting manage members access")
+            return True
     print(f"can_manage_members for startup {startup_id}: role = {role}")
     return role in {'owner', 'founder'}
 
