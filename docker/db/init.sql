@@ -1134,7 +1134,7 @@ CREATE TABLE `startup_documents` (
   `content_type` varchar(100) NOT NULL,
   `document_type` varchar(50) DEFAULT NULL,
   `visible_by` varchar(50) DEFAULT 'public',
-  `file_size` int DEFAULT NULL,
+  `file_size_mb` float NOT NULL DEFAULT 0.0,
   `uploaded_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `startup_id` (`startup_id`),

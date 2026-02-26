@@ -10,7 +10,7 @@ from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from app.models.userRole import UserRole
 from app.notifications.helpers import notify_access_request_pending
-from app.utils.plans_utils import can_create_project, can_add_collaborator
+from app.utils.plans_utils import can_create_project, can_add_collaborator, can_upload_file
 from app.models.startUpMember import StartupMember
 from app.models.chatConversation import ChatConversation
 
@@ -406,26 +406,36 @@ def register_startup():
 
         # Handle document uploads to file system
         try:
+            user = User.query.get(current_user_id)
             document_files = files.getlist('documents')
             for doc_file in document_files:
                 try:
                     if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
-                        if validate_file_size(doc_file):
-                            filename = secure_filename(doc_file.filename)
-                            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                            unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
-                            doc_path = os.path.join(startup_upload_dir, unique_filename)
-                            doc_file.save(doc_path)
-                            
-                            file_url = f"/startups/{startup.id}/documents/{unique_filename}"
-                            
-                            startup.add_document(
-                                filename=doc_file.filename,
-                                file_path=doc_path,
-                                file_url=file_url,
-                                content_type=doc_file.content_type,
-                                document_type=data.get('document_type', 'general')
-                            )
+                        # Check if the storage limit of user's current plan allows file upload
+                        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+                        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+                        if not can_upload:
+                            return error_response(error_message, 500)
+
+                        filename = secure_filename(doc_file.filename)
+                        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                        unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
+                        doc_path = os.path.join(startup_upload_dir, unique_filename)
+                        doc_file.save(doc_path)
+                        
+                        file_url = f"/startups/{startup.id}/documents/{unique_filename}"
+
+                        if user:
+                            user.increase_storage_used(file_size_mb)
+                                                
+                        startup.add_document(
+                            filename=doc_file.filename,
+                            file_path=doc_path,
+                            file_url=file_url,
+                            content_type=doc_file.content_type,
+                            document_type=data.get('document_type', 'general')
+                        )
+
                 except Exception as e:
                     print(f"⚠️ [REGISTER_STARTUP] Individual document upload error: {str(e)}")
                     # Continue with other documents
@@ -602,26 +612,34 @@ def update_startup(startup_id):
                         os.remove(doc.file_path)
                     db.session.delete(doc)
 
+        user = User.query.get(current_user_id)
         document_files = files.getlist('documents')
         
         for doc_file in document_files:
             if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
-                if validate_file_size(doc_file):
-                    filename = secure_filename(doc_file.filename)
-                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                    unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
-                    doc_path = os.path.join(startup_upload_dir, unique_filename)
-                    doc_file.save(doc_path)
-                    
-                    file_url = f"/startups/{startup.id}/documents/{unique_filename}"
-                    
-                    startup.add_document(
-                        filename=doc_file.filename,
-                        file_path=doc_path,
-                        file_url=file_url,
-                        content_type=doc_file.content_type,
-                        document_type=data.get('document_type', 'general')
-                    )
+                # Check if the storage limit of user's current plan allows file update
+                file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+                can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+                if not can_upload:
+                    return error_response(error_message, 500)
+                
+                filename = secure_filename(doc_file.filename)
+                timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
+                doc_path = os.path.join(startup_upload_dir, unique_filename)
+                doc_file.save(doc_path)
+                
+                file_url = f"/startups/{startup.id}/documents/{unique_filename}"
+                
+                if user:
+                    user.increase_storage_used(file_size_mb)
+                startup.add_document(
+                    filename=doc_file.filename,
+                    file_path=doc_path,
+                    file_url=file_url,
+                    content_type=doc_file.content_type,
+                    document_type=data.get('document_type', 'general')
+                )
         
         db.session.commit()
         return success_response({'startup': startup.to_dict()}, 'Startup updated successfully')
@@ -723,8 +741,9 @@ def delete_startup(startup_id):
         if os.path.exists(startup_upload_dir):
             shutil.rmtree(startup_upload_dir)
         # Delete from database
-        db.session.delete(startup)
+        StartupDocument.query.filter_by(startup_id=startup_id).delete()
         ChatConversation.delete_startup_chat(startup_id)
+        db.session.delete(startup)
         db.session.commit()
         return success_response(message='Startup deleted successfully')
     except Exception as e:
@@ -851,6 +870,12 @@ def upload_document(startup_id):
         return error_response('File size too large')
     
     try:
+        # Check if the storage limit of user's current plan allows file upload
+        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+        if not can_upload:
+            return error_response(error_message, 500)
+
         # Create startup upload directory if it doesn't exist
         startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup_id))
         os.makedirs(startup_upload_dir, exist_ok=True)
@@ -871,8 +896,13 @@ def upload_document(startup_id):
             file_url=file_url,  # Set the file_url
             content_type=document_file.content_type,
             document_type=request.form.get('document_type', 'general'),
-            file_size=os.path.getsize(doc_path) if os.path.exists(doc_path) else 0
+            file_size_mb=file_size_mb
         )
+
+        user = User.query.get(current_user_id)
+        if user:
+            user.increase_storage_used(file_size_mb)
+        
         db.session.add(document)
         db.session.commit()
         
@@ -898,7 +928,11 @@ def delete_document(startup_id, document_id):
         if os.path.exists(document.file_path):
             os.remove(document.file_path)
         
-        # Delete from database
+        # Delete from database, and decrease user's storage used
+        user = User.query.get(current_user_id)
+        if user:
+            user.decrease_storage_used(document.file_size_mb or 0)
+            
         db.session.delete(document)
         db.session.commit()
         return success_response(message='Document deleted successfully')
