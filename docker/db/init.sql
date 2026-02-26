@@ -2212,3 +2212,26 @@ LOCK TABLES `sessions` WRITE;
 /*!40000 ALTER TABLE `sessions` ENABLE KEYS */;
 UNLOCK TABLES;
 
+
+DROP TABLE IF EXISTS `plan_versions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `plan_versions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `plan_id` int NOT NULL,
+  `version_number` int NOT NULL,
+  `trigger_type` varchar(50) DEFAULT NULL,
+  `summary` text,
+  `health_score` int DEFAULT NULL,
+  `health_status` varchar(30) DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `plan_id` (`plan_id`),
+  CONSTRAINT `plan_versions_ibfk_1` FOREIGN KEY (`plan_id`) REFERENCES `business_plans` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `plan_versions` WRITE;
+/*!40000 ALTER TABLE `plan_versions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `plan_versions` ENABLE KEYS */;
+UNLOCK TABLES;
