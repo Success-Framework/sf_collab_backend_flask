@@ -268,11 +268,10 @@ class NotificationService:
             notification.read_at = datetime.utcnow()
             db.session.commit()
             
-            # Emit real-time event so other open tabs/windows sync instantly.
-            # The frontend's notification_read handler uses this to update the
-            # badge with the authoritative server count rather than guessing.
+            # Emit real-time event so bell + other open tabs sync instantly
             try:
                 from app.extensions import socketio
+                # Get updated unread count for this user
                 unread_count = Notification.query.filter_by(
                     user_id=user_id, is_read=False
                 ).count()

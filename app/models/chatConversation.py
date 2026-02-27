@@ -8,7 +8,7 @@ class ChatConversation(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=True)  # For group chats
-    conversation_type = db.Column(db.String(20), default='direct')  # direct, group, startup, general
+    conversation_type = db.Column(db.String(20), default='direct')  # direct, group, team, startup, general
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     parent_startup_id = db.Column(db.Integer, db.ForeignKey('startups.id'), nullable=True)  # For startup-specific chats
     # Group chat properties
@@ -231,48 +231,100 @@ class ChatConversation(db.Model):
             db.session.commit()
     @staticmethod
     def add_to_startup_chat(user, startup):
-        """Add user to startup chat conversation"""
+        """Add user to startup group chat. Creates the chat if it doesn't exist.
+        
+        Uses conversation_type='team' to match the frontend filter.
+        Emits 'conversation_added' socket event so the UI updates instantly.
+        """
         import logging
         logger = logging.getLogger(__name__)
-        
-        logger.info(f"Adding user to startup chat - user_id: {user.id} (type: {type(user.id).__name__}), startup_id: {startup.id} (type: {type(startup.id).__name__})")
+
         try:
-        
-            startup_chat = ChatConversation.query.filter_by(conversation_type='startup', parent_startup_id=startup.id).first()
-            logger.debug(f"Existing startup_chat found: {startup_chat is not None} (type: {type(startup_chat).__name__})")
-        except:
+            # Accept both old 'startup' rows and new 'team' rows to handle migrations
+            from sqlalchemy import or_
+            startup_chat = ChatConversation.query.filter(
+                or_(
+                    ChatConversation.conversation_type == 'team',
+                    ChatConversation.conversation_type == 'startup'
+                ),
+                ChatConversation.parent_startup_id == startup.id
+            ).first()
+        except Exception:
             logger.exception("Error querying for startup chat")
             startup_chat = None
+
         if startup_chat:
-            logger.info(f"Adding participant to existing startup chat - conversation_id: {startup_chat.id} (type: {type(startup_chat.id).__name__})")
-            startup_chat.add_participant(user, role='member')
-            db.session.commit()
-            logger.info("Participant added successfully")
+            # ── Already exists: add user if not already a participant ──────
+            if not startup_chat.is_user_participant(user.id):
+                startup_chat.add_participant(user, role='member')
+                db.session.commit()
+                logger.info(f"User {user.id} added to startup chat {startup_chat.id}")
+                # Push the conversation to the new member in real-time
+                try:
+                    from app.socket_events import emit_to_user
+                    chat_data = startup_chat.to_dict(for_user=user)
+                    emit_to_user(str(user.id), 'conversation_added', {'conversation': chat_data})
+                except Exception as se:
+                    logger.warning(f"Could not emit conversation_added (add): {se}")
+            else:
+                logger.info(f"User {user.id} is already in startup chat {startup_chat.id}")
         else:
-            logger.info(f"Creating new startup chat - name: '{startup.name}' (type: {type(startup.name).__name__}), created_by_id: {user.id} (type: {type(user.id).__name__})")
+            # ── Create new startup chat with conversation_type='team' ──────
             startup_chat = ChatConversation(
                 name=f'{startup.name} Chat',
-                conversation_type='startup',
-                parent_startup_id=startup.id,   
+                conversation_type='team',   # 'team' matches the frontend filter
+                parent_startup_id=startup.id,
                 created_by_id=user.id
             )
             db.session.add(startup_chat)
+            db.session.flush()  # get the id before adding participant
+            startup_chat.add_participant(user, role='admin')
             db.session.commit()
-            logger.info(f"Startup chat created successfully - conversation_id: {startup_chat.id} (type: {type(startup_chat.id).__name__})")
+            logger.info(f"Created startup chat {startup_chat.id} for startup {startup.id}")
+            # Push to creator so it appears immediately
+            try:
+                from app.socket_events import emit_to_user
+                chat_data = startup_chat.to_dict(for_user=user)
+                emit_to_user(str(user.id), 'conversation_added', {'conversation': chat_data})
+            except Exception as se:
+                logger.warning(f"Could not emit conversation_added (create): {se}")
     @staticmethod
     def remove_from_startup_chat(user, startup_id):
-        """Remove user from startup chat conversation"""
-        startup_chat = ChatConversation.query.filter_by(conversation_type='startup', parent_startup_id=startup_id).first()
+        """Remove user from startup chat and notify their UI in real-time."""
+        from sqlalchemy import or_
+        startup_chat = ChatConversation.query.filter(
+            or_(
+                ChatConversation.conversation_type == 'team',
+                ChatConversation.conversation_type == 'startup'
+            ),
+            ChatConversation.parent_startup_id == startup_id
+        ).first()
 
         if startup_chat:
             startup_chat.remove_participant(user)
+            db.session.commit()
+            # Notify the removed user so their chat list updates instantly
+            try:
+                from app.socket_events import emit_to_user
+                emit_to_user(str(user.id), 'conversation_removed', {
+                    'conversation_id': startup_chat.id
+                })
+            except Exception as se:
+                import logging
+                logging.getLogger(__name__).warning(f"Could not emit conversation_removed: {se}")
     @staticmethod
     def delete_startup_chat(startup_id):
-        """Remove startup chat conversation (e.g. when startup is deleted)"""
-        startup_chat = ChatConversation.query.filter_by(conversation_type='startup', parent_startup_id=startup_id).first()
-
-        if startup_chat:
-            db.session.delete(startup_chat)
+        """Remove startup chat (when startup is deleted). Handles both old 'startup' and new 'team' rows."""
+        from sqlalchemy import or_
+        chats = ChatConversation.query.filter(
+            or_(
+                ChatConversation.conversation_type == 'team',
+                ChatConversation.conversation_type == 'startup'
+            ),
+            ChatConversation.parent_startup_id == startup_id
+        ).all()
+        for chat in chats:
+            db.session.delete(chat)
     def is_user_participant(self, user_id):
         """Check if user is a participant in this conversation"""
         return any(str(participant.id) == str(user_id) for participant in self.participants)
@@ -387,14 +439,12 @@ class ChatConversation(db.Model):
                 'lastName': user.last_name,
                 'profilePicture': user.profile_picture,
                 'timezone': user.get_timezone(),
-                # FIX 5: expose last_seen so the frontend can show accurate
-                # "last seen X mins ago" after a page reload, without relying
-                # solely on the live socket disconnect event.
-                'last_seen': user.last_seen.isoformat() if getattr(user, 'last_seen', None) else (
-                    user.last_login.isoformat() if getattr(user, 'last_login', None) else None
-                ),
-                'lastSeen': user.last_seen.isoformat() if getattr(user, 'last_seen', None) else (
-                    user.last_login.isoformat() if getattr(user, 'last_login', None) else None
+                'last_seen': (
+                    user.last_seen.isoformat()
+                    if hasattr(user, 'last_seen') and user.last_seen
+                    else user.last_login.isoformat()
+                    if hasattr(user, 'last_login') and user.last_login
+                    else None
                 ),
             } for user in self.participants],
             'last_message': self.get_last_message_preview(for_user),
