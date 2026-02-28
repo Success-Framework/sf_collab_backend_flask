@@ -152,8 +152,7 @@ class DataType:
     self.resources = resources
     self.feedback = feedback
     self.metadata = metadata
-
-def thank_email_template(data: DataType, see_email_template: bool = False) -> str:
+def thank_email_template(data: Dict, see_email_template: bool = False) -> str:
   return f"""
     <html>
       <head>
@@ -180,7 +179,7 @@ def thank_email_template(data: DataType, see_email_template: bool = False) -> st
     </html>
     """
 
-def verification_code_email_template(data: DataType, see_email_template: bool = False) -> str:
+def verification_code_email_template(data: Dict, see_email_template: bool = False) -> str:
   return f"""
     <html>
       <head>
@@ -198,13 +197,13 @@ def verification_code_email_template(data: DataType, see_email_template: bool = 
   <p>Thank you for signing up with {brand_name}! To complete your registration, please use the verification code below:</p>
   <h2>{data['metadata'].get('verification_code', '000000')}</h2>
   <p>This code is valid for the next 15 minutes. If you did not request this verification, please ignore this email.</p>
-  <p>If you have any questions or need assistance, feel free to reply to this email or <a href="mailto:{support_email}">contact us here</a>.</p>
   {footer}
       </div>
       </body>
     </html>
     """
-def password_reset_email_template(data: DataType, see_email_template: bool = False) -> str:
+
+def password_reset_email_template(data: Dict, see_email_template: bool = False) -> str:
   return f"""
     <html>
       <head>
@@ -222,14 +221,13 @@ def password_reset_email_template(data: DataType, see_email_template: bool = Fal
   <p>We received a request to reset your password for your {brand_name} account.</p>
   <p>Please click the button below to reset your password:</p>
   <a target='_blank' href="{data['metadata'].get('reset_link', '#')}"><button class='button'>Reset Password</button></a>
-  <p>If you did not request a password reset, please ignore this email or contact us to let us know.</p>
-  <p>If you have any questions or need assistance, feel free to reply to this email or <a href="mailto:{support_email}">contact us here</a>.</p>
   {footer}
       </div>
       </body>
     </html>
     """
-def welcome_email_template(data: DataType, see_email_template: bool = False) -> str:
+
+def welcome_email_template(data: Dict, see_email_template: bool = False) -> str:
   return f"""
     <html>
       <head>
@@ -248,15 +246,13 @@ def welcome_email_template(data: DataType, see_email_template: bool = False) -> 
   <p>As a member, you'll have access to a wealth of resources, insights, and connections designed to help you succeed.</p>
   <p>To get started, we recommend exploring our platform and taking advantage of the tools available to you.</p>
   <a target='_blank' href="{frontend_url}/dashboard"><button class='button'>Go to Your Dashboard</button></a>
-  <p>If you have any questions or need assistance, feel free to reply to this email or <a href="mailto:{support_email}">contact us here</a>.</p>
   {footer}
       </div>
       </body>
     </html>
     """
-# Additional templates can be defined similarly...
 
-def contact_form_email_template(data: DataType, see_email_template: bool = False) -> str:
+def contact_form_email_template(data: Dict, see_email_template: bool = False) -> str:
   return f"""
     <html>
       <head>
