@@ -374,6 +374,24 @@ def get_social_profile(user_id):
   
   return success_response({'social': social.to_dict()})
 
+@user_social_bp.route('/<int:user_id>', methods=['POST'])
+@jwt_required()
+def create_social_profile(user_id):
+  """Create user's social profile"""
+  print("Creating social profile for user_id:", user_id)
+
+  user_social = UserSocial(
+    user_id=user_id
+    )
+  try:
+    db.session.add(user_social)
+    db.session.commit()
+  except Exception as e:
+    db.session.rollback()
+    return error_response(f'Failed to create social profile: {str(e)}', 500)
+  
+  return success_response({'social': user_social.to_dict()})
+
 @user_social_bp.route('/<int:user_id>/privacy', methods=['PUT'])
 @jwt_required()
 def update_privacy_settings(user_id):
