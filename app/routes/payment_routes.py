@@ -186,6 +186,74 @@ def get_checkout_session(session_id):
     return jsonify(session)
 
 
+# ─────────────────────────────────────────────────────────────────
+# CROWDFUNDING INTEREST ENDPOINT
+# Crowdfunding payments are disabled. This endpoint logs user interest
+# so we can notify them when crowdfunding launches.
+# No payment is created. No campaign is started.
+# ─────────────────────────────────────────────────────────────────
+@payment_bp.route("/crowdfunding-interest", methods=["POST"])
+@jwt_required()
+def register_crowdfunding_interest():
+    """
+    Log that the current user is interested in crowdfunding.
+    Stores interest in the database (user metadata).
+    Returns 409 if already registered, 200 on success.
+    """
+    try:
+        current_user_id = int(get_jwt_identity())
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return error_response("User not found", 404)
+
+        # Use a JSON field on the user to store interest flags.
+        # If your User model has a 'preferences' or 'metadata' JSON column, use that.
+        # Otherwise we store it in a generic way via the notification log.
+        # We check if interest is already recorded to avoid duplicates.
+        if not hasattr(user, 'preferences') or user.preferences is None:
+            user.preferences = {}
+
+        preferences = dict(user.preferences) if user.preferences else {}
+
+        if preferences.get("crowdfunding_interest"):
+            # Already registered — return 409 so frontend can handle gracefully
+            return jsonify({
+                "success": True,
+                "already_registered": True,
+                "message": "You have already registered your interest in crowdfunding."
+            }), 409
+
+        # Mark interest
+        preferences["crowdfunding_interest"] = True
+        preferences["crowdfunding_interest_at"] = str(db.func.now())
+        user.preferences = preferences
+
+        db.session.commit()
+
+        # Optionally send a confirmation notification
+        try:
+            from app.notifications.helpers import notify_general
+            notify_general(
+                user_id=current_user_id,
+                title="Crowdfunding Interest Registered 🚀",
+                message="Thanks for your interest! We'll notify you the moment crowdfunding goes live.",
+                notification_type="system"
+            )
+        except Exception:
+            pass  # Non-critical — don't fail the request
+
+        return success_response(
+            {"registered": True},
+            "Your interest in crowdfunding has been registered! We'll notify you when it launches.",
+            200
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to register interest: {str(e)}", 500)
+
+
 # @payment_bp.route("/record-transaction", methods=["POST"])
 # @jwt_required()
 # def record_transaction():
