@@ -4,11 +4,9 @@ import os
 import re
 from flask import current_app
 from pptx import Presentation
-# from pptx.chart.data import ChartData
-# from pptx.enum.chart import XL_CHART_TYPE
-# from pptx.util import Inches
-# from app.config import Config
-# from pptx.enum.shapes import PP_PLACEHOLDER
+from pptx.chart.data import ChartData
+from pptx.enum.chart import XL_CHART_TYPE
+from pptx.util import Inches
 # from app.services.pitch_deck.themes import get_theme
 
 TEMPLATE_MAP = {
@@ -25,62 +23,38 @@ class PitchDeckPPTBuilder:
         self.deck_json = deck_json
         self.deck_id = deck_id
 
+        base_upload_folder = current_app.config.get("UPLOAD_FOLDER")
+
         TEMPLATE_MAP = {
             "creative": "creative.pptx",
             "startup": "startup.pptx",
             "corporate": "corporate.pptx"
         }
 
+# Use default if invalid
         template_filename = TEMPLATE_MAP.get(theme_type, "startup.pptx")
 
-# Get project root safely
-        project_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../..")
-)
-        # base_uplaod_folder = "uploads/pitch-deck-gen/"
-
         template_path = os.path.join(
-            project_root,
-            "app",
-            "uploads",
-            "pitch-deck-gen",
+            base_upload_folder,
+            "pitch_deck_templates",
             template_filename
         )
-
-        # print("Project root:", Config.PITCH_DECK_TEMPLATE_FOLDER)
-        print("Template path:", template_path)
 
         if not os.path.exists(template_path):
             raise Exception(f"Template file not found at: {template_path}")
 
         self.prs = Presentation(template_path)
-        
 
 
-
-        self.output_folder = os.path.join(project_root,"app","uploads","pitch-deck-gen","output")
+        self.output_folder = os.path.join(base_upload_folder, "pitch_decks")
         os.makedirs(self.output_folder, exist_ok=True)
-
-    # --------------------------------------------------
-
-    # app/services/pitch_deck/ppt_builder.py
-
 
     # --------------------------------------------------
 
     def build(self):
 
-        slides = self.prs.slides
-        ai_slides = self.deck_json.get("slides", [])
-
-        for index, ai_slide in enumerate(ai_slides):
-
-            if index >= len(slides):
-                break  # do not add new slides
-
-            template_slide = slides[index]
-
-            self._inject_content(template_slide, ai_slide)
+        for slide_data in self.deck_json["slides"]:
+            self._add_slide(slide_data)
 
         filename = f"{self.deck_id}.pptx"
         filepath = os.path.join(self.output_folder, filename)
@@ -90,44 +64,44 @@ class PitchDeckPPTBuilder:
 
     # --------------------------------------------------
 
-    def _inject_content(self, slide, ai_slide):
+    def _add_slide(self, slide_data):
 
-        title = ai_slide.get("title", "")
-        bullets = ai_slide.get("bullets", [])
-        slide_type = ai_slide.get("type")
+        slide_type = slide_data.get("type")
 
-        text_shapes = []
+        # Layout assumptions:
+        # 0 = Cover
+        # 1 = Title + Content
 
-        # Collect all text shapes
-        for shape in slide.shapes:
-            if shape.has_text_frame:
-                text_shapes.append(shape)
+        if slide_type == "cover":
+            slide_layout = self.prs.slide_layouts[0]
+        else:
+            slide_layout = self.prs.slide_layouts[1]
 
-        # Replace first big text as title
-        if text_shapes:
-            text_shapes[0].text_frame.clear()
-            text_shapes[0].text = title
+        slide = self.prs.slides.add_slide(slide_layout)
 
-        # Replace Lorem ipsum or bullet placeholders
-        bullet_index = 0
+        # Cover Slide
+        if slide_type == "cover":
+            slide.placeholders[0].text = slide_data.get("title", "")
 
-        for shape in text_shapes[1:]:
+            bullets = slide_data.get("bullets", [])
+            if len(bullets) > 0 and len(slide.placeholders) > 1:
+                slide.placeholders[1].text = bullets[0]
 
-            if bullet_index >= len(bullets):
-                break
+            return
 
-            if "Lorem ipsum" in shape.text or shape.text.strip() == "":
-                shape.text_frame.clear()
-                shape.text = bullets[bullet_index]
-                bullet_index += 1
+        # Title
+        slide.placeholders[0].text = slide_data.get("title", "")
 
-        # Handle financial slide chart update
+        # Financial Slide
         if slide_type == "financials":
-            self._update_chart(slide, bullets)
+            self._add_financial_chart(slide, slide_data.get("bullets", []))
+        else:
+            bullets = slide_data.get("bullets", [])[:3]
+            slide.placeholders[1].text = "\n".join(bullets)
 
     # --------------------------------------------------
 
-    def _update_chart(self, slide, bullets):
+    def _add_financial_chart(self, slide, bullets):
 
         years = []
         values = []
@@ -138,16 +112,28 @@ class PitchDeckPPTBuilder:
                 years.append(match.group(1))
                 values.append(float(match.group(2)))
 
-        if not years or not values:
-            return
+        if len(values) < 3:
+            years = ["Year 1", "Year 2", "Year 3"]
+            values = [100, 300, 800]
 
-        for shape in slide.shapes:
-            if shape.has_chart:
-                chart = shape.chart
-                chart_data = chart.chart_data
+        chart_data = ChartData()
+        chart_data.categories = years[:3]
+        chart_data.add_series("Revenue", values[:3])
 
-                for i, point in enumerate(values[:len(chart.series[0].points)]):
-                    chart.series[0].points[i].data_label.text_frame.text = ""
-                    chart.series[0].values[i] = point
+        # Replace content placeholder with chart
+        content = slide.placeholders[1]
+        left = content.left
+        top = content.top
+        width = content.width
+        height = content.height
 
-                break
+        slide.shapes._spTree.remove(content._element)
+
+        slide.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED,
+            left,
+            top,
+            width,
+            height,
+            chart_data
+        )

@@ -85,9 +85,8 @@ class Config:
     # ------------------------
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads","chat_files")
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads", "chat_files")
     AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads", "chat_avatars")
-    PITCH_DECK_TEMPLATE_FOLDER = os.path.join(BASE_DIR, "uploads", "pitch_deck_templates")
 
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS = {
