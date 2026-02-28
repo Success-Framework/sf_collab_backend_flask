@@ -9,10 +9,10 @@ class AINewsArticle(db.Model):
 
     # Core content
     title = db.Column(db.String(500), nullable=False)
-    url = db.Column(db.String(1000), nullable=False, unique=True)  # unique prevents duplicates
+    url = db.Column(db.String(750), nullable=False, unique=True)  # unique prevents duplicates (hash of URL can be used for more efficient lookup)
     summary = db.Column(db.Text, nullable=True)
     author = db.Column(db.String(255), nullable=True)
-    image_url = db.Column(db.String(1000), nullable=True)
+    image_url = db.Column(db.String(750), nullable=True)
 
     # Categorization
     source = db.Column(db.String(100), nullable=False)        # e.g. "openai", "techcrunch"

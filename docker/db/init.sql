@@ -2271,10 +2271,10 @@ DROP TABLE IF EXISTS `ai_news_articles`;
 CREATE TABLE `ai_news_articles` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(500) NOT NULL,
-  `url` varchar(1000) NOT NULL,
+  `url` varchar(750) NOT NULL,
   `summary` text,
   `author` varchar(255) DEFAULT NULL,
-  `image_url` varchar(1000) DEFAULT NULL,
+  `image_url` varchar(750) DEFAULT NULL,
   `source` varchar(100) NOT NULL,
   `source_label` varchar(100) DEFAULT NULL,
   `category` varchar(100) DEFAULT NULL,
