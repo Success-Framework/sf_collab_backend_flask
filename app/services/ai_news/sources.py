@@ -10,6 +10,7 @@
 #   active     - enable/disable without deleting
 # ============================================================
 
+
 SOURCES = [
 
     # ── Official AI Lab Blogs (RSS) ──────────────────────────────
@@ -21,15 +22,17 @@ SOURCES = [
         "category": "AI Research",
         "impact": 10,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "anthropic",
         "label": "Anthropic News",
-        "url": "https://www.anthropic.com/rss.xml",
+        "url": "https://www.anthropic.com/news/rss",  # fixed
         "type": "rss",
         "category": "AI Research",
         "impact": 10,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "deepmind",
@@ -39,6 +42,7 @@ SOURCES = [
         "category": "AI Research",
         "impact": 10,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "googleblog",
@@ -48,15 +52,17 @@ SOURCES = [
         "category": "AI Research",
         "impact": 9,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "metaai",
         "label": "Meta AI Blog",
-        "url": "https://ai.meta.com/blog/rss/",
+        "url": "https://engineering.fb.com/feed/",  # fixed — Meta AI blog has no public RSS, FB Engineering does
         "type": "rss",
         "category": "AI Research",
         "impact": 9,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "huggingface",
@@ -66,6 +72,7 @@ SOURCES = [
         "category": "AI Tools",
         "impact": 8,
         "active": True,
+        "max_articles": 30,  # HF posts frequently, allow a bit more
     },
     {
         "key": "microsoft_ai",
@@ -75,6 +82,7 @@ SOURCES = [
         "category": "AI Research",
         "impact": 8,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "nvidia",
@@ -84,6 +92,7 @@ SOURCES = [
         "category": "AI Hardware",
         "impact": 8,
         "active": True,
+        "max_articles": 20,
     },
 
     # ── Tech News (RSS) ──────────────────────────────────────────
@@ -95,6 +104,7 @@ SOURCES = [
         "category": "Tech News",
         "impact": 7,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "venturebeat",
@@ -104,33 +114,37 @@ SOURCES = [
         "category": "Tech News",
         "impact": 7,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "theverge",
         "label": "The Verge AI",
-        "url": "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml",
+        "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",  # fixed
         "type": "rss",
         "category": "Tech News",
         "impact": 7,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "wired",
         "label": "Wired AI",
-        "url": "https://www.wired.com/feed/tag/artificial-intelligence/latest/rss",
+        "url": "https://www.wired.com/feed/category/artificial-intelligence/latest/rss",  # fixed
         "type": "rss",
         "category": "Tech News",
         "impact": 7,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "mit_review",
         "label": "MIT Technology Review",
-        "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
+        "url": "https://www.technologyreview.com/feed/",  # fixed — topic-specific feed was broken
         "type": "rss",
         "category": "AI Research",
         "impact": 8,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "ainews",
@@ -140,35 +154,39 @@ SOURCES = [
         "category": "Tech News",
         "impact": 6,
         "active": True,
+        "max_articles": 20,
     },
 
     # ── Research & Community (RSS) ───────────────────────────────
     {
         "key": "arxiv",
         "label": "ArXiv CS.AI",
-        "url": "https://rss.arxiv.org/rss/cs.AI",
+        "url": "https://rss.arxiv.org/rss/cs.AI",  # correct, may be rate-limiting us
         "type": "rss",
         "category": "AI Research",
         "impact": 8,
         "active": True,
+        "max_articles": 30,
     },
     {
         "key": "paperswithcode",
         "label": "Papers With Code",
-        "url": "https://paperswithcode.com/rss.xml",
+        "url": "https://paperswithcode.com/latest.rss",  # fixed
         "type": "rss",
         "category": "AI Research",
         "impact": 7,
         "active": True,
+        "max_articles": 20,
     },
     {
         "key": "deeplearningai",
         "label": "DeepLearning.AI — The Batch",
-        "url": "https://www.deeplearning.ai/the-batch/rss/",
+        "url": "https://www.deeplearning.ai/the-batch/feed/",  # fixed
         "type": "rss",
         "category": "AI Education",
         "impact": 7,
         "active": True,
+        "max_articles": 10,
     },
     {
         "key": "importai",
@@ -178,6 +196,7 @@ SOURCES = [
         "category": "AI Research",
         "impact": 8,
         "active": True,
+        "max_articles": 10,
     },
 ]
 

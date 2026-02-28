@@ -17,6 +17,7 @@ import json
 from app.services.email_service import EmailService
 from flask_session import Session
 import stripe
+from app.services.ai_news.scheduler import start_scheduler
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
@@ -222,7 +223,12 @@ def create_app(config_name=None):
     # Register all blueprints
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
-
+    
+    # Start AI news scheduler
+    print("Starting AI news scheduler...")
+    start_scheduler(app)
+    print("✓ Scheduler started")
+    
     @app.route('/uploads/<path:filename>')
     def uploaded_file(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
