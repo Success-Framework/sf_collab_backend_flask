@@ -6,7 +6,6 @@ from email.utils import parsedate_to_datetime
 import requests
 import feedparser
 from bs4 import BeautifulSoup
-
 from app.extensions import db
 from app.models.aiNews import AINewsArticle
 from .sources import get_active_sources
