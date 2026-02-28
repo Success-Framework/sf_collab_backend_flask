@@ -2264,3 +2264,37 @@ LOCK TABLES `startup_invitations` WRITE;
 /*!40000 ALTER TABLE `startup_invitations` DISABLE KEYS */;
 /*!40000 ALTER TABLE `startup_invitations` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `ai_news_articles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ai_news_articles` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `title` varchar(500) NOT NULL,
+  `url` varchar(1000) NOT NULL,
+  `summary` text,
+  `author` varchar(255) DEFAULT NULL,
+  `image_url` varchar(1000) DEFAULT NULL,
+  `source` varchar(100) NOT NULL,
+  `source_label` varchar(100) DEFAULT NULL,
+  `category` varchar(100) DEFAULT NULL,
+  `tags` text,
+  `impact_score` int DEFAULT 5,
+  `published_at` datetime DEFAULT NULL,
+  `scraped_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `is_active` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_url` (`url`),
+  KEY `idx_source` (`source`),
+  KEY `idx_category` (`category`),
+  KEY `idx_published_at` (`published_at`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_is_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `ai_news_articles` WRITE;
+/*!40000 ALTER TABLE `ai_news_articles` DISABLE KEYS */;
+/*!40000 ALTER TABLE `ai_news_articles` ENABLE KEYS */;
+UNLOCK TABLES;

@@ -52,3 +52,4 @@ from .virtual_product import VirtualProduct
 from .product_purchase import ProductPurchase
 from .user_inventory import UserInventory
 from .EventTokenBalance import EventTokenBalance
+from .aiNews import AINewsArticle
