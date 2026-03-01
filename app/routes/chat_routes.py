@@ -230,28 +230,6 @@ def get_conversation(conversation_id):
         logging.error(f"Error getting conversation {conversation_id}: {str(e)}")
         return error_response(f"Failed to load conversation: {str(e)}", 500)
 
-@chat_bp.route("/conversations/<int:startup_id>", methods=["GET"])
-@jwt_required()
-def get_conversation(startup_id):
-    try:
-        current_user_id = get_jwt_identity()
-
-        user = User.query.get(current_user_id)
-        conversation = ChatConversation.query.filter_by(parent_startup_id=startup_id).first()
-
-        if not user or not conversation:
-            return error_response("User or conversation not found", 404)
-
-        if not conversation.is_user_participant(current_user_id):
-            return error_response("Access denied", 403)
-
-        return success_response({"conversation": conversation.to_dict(for_user=user)})
-
-    except Exception as e:
-        logging.error(f"Error getting conversation for startup id:{startup_id}: {str(e)}")
-        return error_response(f"Failed to load conversation: {str(e)}", 500)
-
-
 @chat_bp.route("/conversations/with-user", methods=["POST"])
 @jwt_required()
 def get_or_create_direct_conversation():
