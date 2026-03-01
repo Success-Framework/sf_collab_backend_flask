@@ -232,7 +232,7 @@ def get_conversation(conversation_id):
 
 @chat_bp.route("/conversations/<int:startup_id>", methods=["GET"])
 @jwt_required()
-def get_conversation(startup_id):
+def get_startup_conversation(startup_id):
     try:
         current_user_id = get_jwt_identity()
 
