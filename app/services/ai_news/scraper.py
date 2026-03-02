@@ -154,7 +154,7 @@ def _scrape_rss(source):
 
     logger.info(f"[{key}] Fetched {len(feed.entries)} entries from {label}")
 
-    for entry in feed.entries:
+    for entry in feed.entries[:source.get("max_articles", 20)]:
         url = getattr(entry, "link", "").strip()
         title = getattr(entry, "title", "").strip()
 
