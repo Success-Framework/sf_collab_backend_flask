@@ -97,7 +97,8 @@ def create_app(config_name=None):
     app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
     app.config['HUGGINGFACE_API_KEY'] = os.getenv('HUGGINGFACE_API_KEY', '')
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
-
+    app.config['HF_PROXY_URL'] = os.getenv("HF_PROXY_URL")
+    app.config['HF_PROXY_KEY'] = os.getenv("HF_PROXY_KEY")
     # STRIPE Configuration
     stripe.api_key = os.getenv('STRIPE_SECRET_KEY', '')
     app.config['STRIPE_SECRET_KEY'] = os.getenv('STRIPE_SECRET_KEY', '')
