@@ -308,12 +308,15 @@ def update_task(task_id):
     if not task:
         return error_response('Task not found', 404)
     
-    if task.user_id != current_user_id and task.assigned_to != current_user_id:
-        if task.startup_id:
-            if not has_startup_access(current_user_id, task.startup_id):
-                return error_response('Unauthorized to update this task', 403)
-        else:
-            return error_response('Unauthorized to update this task', 403)
+    # Allow: task owner, assignee, any startup member, or admin
+    _upd_user = User.query.get(current_user_id)
+    _is_admin = bool(_upd_user and _upd_user.role == 'admin')
+    _is_member = bool(task.startup_id and has_startup_access(current_user_id, task.startup_id))
+    if (task.user_id != current_user_id
+            and task.assigned_to != current_user_id
+            and not _is_member
+            and not _is_admin):
+        return error_response('Unauthorized to update this task', 403)
     
     data = request.get_json()
     old_status = task.status
@@ -555,58 +558,7 @@ def delete_task(task_id):
         return error_response(f'Failed to delete task: {str(e)}', 500)
 
 
-@tasks_bp.route('/stats', methods=['GET'])
-@jwt_required()
-def get_task_stats():
-    """Get task statistics for dashboard"""
-    current_user_id = int(get_jwt_identity())
-    
-    user_id = request.args.get('user_id', type=int)
-    startup_id = request.args.get('startup_id', type=int)
-    time_range = request.args.get('time_range', '30d')
-    
-    if not user_id:
-        user_id = current_user_id
-    
-    if user_id != current_user_id:
-        return error_response('Unauthorized to view other users stats', 403)
-    
-    now = datetime.utcnow()
-    if time_range == '7d':
-        start_date = now - timedelta(days=7)
-    elif time_range == '90d':
-        start_date = now - timedelta(days=90)
-    elif time_range == 'month':
-        start_date = datetime(now.year, now.month, 1)
-    else:
-        start_date = now - timedelta(days=30)
-    
-    query = Task.query.filter(
-        Task.user_id == user_id,
-        Task.created_at >= start_date
-    )
-    
-    if startup_id:
-        query = query.filter(Task.startup_id == startup_id)
-    
-    tasks = query.all()
-    
-    total_tasks = len(tasks)
-    completed_tasks = len([t for t in tasks if t.status == 'completed'])
-    in_progress_tasks = len([t for t in tasks if t.status == 'in_progress'])
-    overdue_tasks = len([t for t in tasks if t.is_overdue()])
-    
-    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
-    
-    return success_response({
-        'stats': {
-            'total_tasks': total_tasks,
-            'completed_tasks': completed_tasks,
-            'in_progress_tasks': in_progress_tasks,
-            'overdue_tasks': overdue_tasks,
-            'completion_rate': round(completion_rate, 1)
-        }
-    })
+
 
 
 @tasks_bp.route('/my-tasks', methods=['GET'])

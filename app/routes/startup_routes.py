@@ -1344,7 +1344,7 @@ def has_startup_access(user_id, startup_id):
     """Check if user has access to view startup data"""
     # Admin users can access all startups
     current_user = User.query.get(user_id)
-    if current_user and (current_user.role == 'admin' or current_user.admin):
+    if current_user and current_user.role == 'admin':
         return True
     
     # Check if user is a member of the startup
@@ -1359,7 +1359,7 @@ def has_startup_management_access(user_id, startup_id):
     """Check if user has permission to manage startup data"""
     # Admin users can manage all startups
     current_user = User.query.get(user_id)
-    if current_user and (current_user.role == 'admin' or current_user.admin):
+    if current_user and current_user.role == 'admin':
         return True
     # Check if user is the creator or has admin/manager role in the startup
     startup = Startup.query.get(startup_id)
