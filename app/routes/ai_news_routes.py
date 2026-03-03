@@ -33,7 +33,7 @@ def standard_response(success=True, data=None, error=None, code=200):
 #   search       (str) search in title
 # ─────────────────────────────────────────────────────────────────────────────
 
-@ai_news_bp.route("/news", methods=["GET"])
+@ai_news_bp.route("/ainews", methods=["GET"])
 @jwt_required()
 def get_news():
     try:
@@ -92,7 +92,7 @@ def get_news():
 # Returns all unique categories present in the DB
 # ─────────────────────────────────────────────────────────────────────────────
 
-@ai_news_bp.route("/news/categories", methods=["GET"])
+@ai_news_bp.route("/ainews/categories", methods=["GET"])
 @jwt_required()
 def get_categories():
     try:
@@ -115,7 +115,7 @@ def get_categories():
 # Returns all configured sources with their status info
 # ─────────────────────────────────────────────────────────────────────────────
 
-@ai_news_bp.route("/news/sources", methods=["GET"])
+@ai_news_bp.route("/ainews/sources", methods=["GET"])
 @jwt_required()
 def get_sources():
     try:
@@ -152,7 +152,7 @@ def get_sources():
 # Returns a single article by ID
 # ─────────────────────────────────────────────────────────────────────────────
 
-@ai_news_bp.route("/news/<int:article_id>", methods=["GET"])
+@ai_news_bp.route("/ainews/<int:article_id>", methods=["GET"])
 @jwt_required()
 def get_article(article_id):
     try:
@@ -174,7 +174,7 @@ def get_article(article_id):
 #   — omit to scrape all active sources
 # ─────────────────────────────────────────────────────────────────────────────
 
-@ai_news_bp.route("/news/scrape", methods=["POST"])
+@ai_news_bp.route("/ainews/scrape", methods=["POST"])
 @jwt_required()
 def trigger_scrape():
     try:
