@@ -38,13 +38,13 @@ class PostLike(db.Model):
             'timeSinceLike': str(self.get_time_since_like()),
             'isRecent': self.is_recent(),
             'user': {
-                'id': self.user.id,
-                'firstName': self.user.first_name,
-                'lastName': self.user.last_name,
-                'profilePicture': self.user.profile_picture
-            } if self.user else None,
+                'id': self.like_owner.id,
+                'firstName': self.like_owner.first_name,
+                'lastName': self.like_owner.last_name,
+                'profilePicture': self.like_owner.profile_picture
+            } if self.like_owner else None,
             'post': {
-                'id': self.post.id,
-                'content': self.post.content[:100] + '...' if len(self.post.content) > 100 else self.post.content
-            } if self.post else None
+                'id': self.liked_post.id,
+                'content': self.liked_post.content[:100] + '...' if len(self.liked_post.content) > 100 else self.liked_post.content
+            } if self.liked_post else None
         }
