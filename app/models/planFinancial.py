@@ -7,7 +7,11 @@ class PlanFinancial(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('business_plans.id'), nullable=False)
-
+    
+    scenario = db.Column(
+        db.String(20),
+        default="base"   # base | best | worst
+    )
     revenue_inputs = db.Column(JSON, default={})
     expense_inputs = db.Column(JSON, default={})
     assumptions = db.Column(JSON, default={})

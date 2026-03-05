@@ -22,6 +22,9 @@ from app.services.ai_assistant.ingest import ingest_document
 from app.services.ai_assistant.rag import ask_assistant
 from app.services.ai_image_gen import generate_image
 from app.utils.ai_helpers import get_groq_client, get_openai_client, extract_text_from_response, get_response, generate_pdf_from_markdown, get_vision_response
+from app.services.ai_core.ai_service import AIService
+from app.services.ai_core.response_builder import build_refusal
+
 # Load environment variables
 load_dotenv()
 
@@ -39,7 +42,7 @@ Path(QWN_UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
 
 # Available models
 AVAILABLE_MODELS = [
-    "openai/gpt-oss-20b",
+    # "openai/gpt-oss-20b",
     "qwen/qwen3-32b"
 ]
 
@@ -745,15 +748,15 @@ def qwen_chat():
         if not data or 'messages' not in data:
             return standard_response(False, None, 'Missing messages in request', 400)
 
-        GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
+        # GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
         groq_client = get_groq_client()
         messages = data.get('messages', [])
         temperature = data.get('temperature', 0.7)
         max_tokens = data.get('max_tokens', 2048)
         model = data.get('model', AVAILABLE_MODELS[0])
 
-        if not GROQ_API_KEY:
-            return standard_response(False, None, 'Groq API key not configured', 500)
+        # if not GROQ_API_KEY:
+        #     return standard_response(False, None, 'Groq API key not configured', 500)
 
         # ---- Convert messages[] → prompt ----
         prompt_lines = []
@@ -766,22 +769,40 @@ def qwen_chat():
         final_prompt = "\n".join(prompt_lines) + "\nAssistant:"
 
         # ---- Call Groq ----
+        # --- GUARDRAIL PREPROCESS ---
+        guardrail_check = AIService.preprocess_input("chat", final_prompt)
+        if guardrail_check:
+            return standard_response(True, guardrail_check)
+
+        # --- BUILD SAFE MESSAGES ---
+        messages = AIService.build_messages(
+            feature="chat",
+            user_input=final_prompt
+        )
+
+        # --- CALL MODEL ---
         completion = groq_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant."},
-                {"role": "user", "content": final_prompt}
-            ],
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        response_text = completion.choices[0].message.content
+
+        # --- GUARDRAIL POSTPROCESS ---
+        post_guardrail = AIService.postprocess_output(response_text)
+        if post_guardrail:
+            return standard_response(True, post_guardrail)
+
+        result = AIService.generate(
+            feature="chat",
+            user_input=final_prompt,
             temperature=temperature,
             max_tokens=max_tokens
         )
 
-        response_text = completion.choices[0].message.content
-
-        return standard_response(True, {
-            "response": response_text,
-            "model": model
-        })
+        return standard_response(True, result)    
 
     except Exception as e:
         logging.exception("Qwen chat error")
@@ -885,7 +906,7 @@ def generate_logo():
 
     total_cost = COST_PER_IMAGE * IMAGE_COUNT
 
-    if user.credits < total_cost:
+    if not user.wallet or (user.wallet.credits or 0) < total_cost:
         return jsonify({"error": "Not enough credits"}), 402
     
     client = get_openai_client()
@@ -1011,7 +1032,10 @@ def generate_logo():
             "base64": img.b64_json
         })
 
-    user.credits -= total_cost
+    user.wallet.spend_credits(
+        amount=total_cost,
+        description=f"Generated {IMAGE_COUNT} logo images"
+    )
     db.session.commit()
 
     return jsonify({
@@ -1098,7 +1122,7 @@ def text_to_image():
 
     COST_PER_IMAGE = 10
 
-    if user.credits < COST_PER_IMAGE:
+    if not user.wallet or (user.wallet.credits or 0) < COST_PER_IMAGE:
         return standard_response(False, None, "Not enough credits", 402)
 
     try:
@@ -1106,7 +1130,10 @@ def text_to_image():
     except Exception as e:
         return standard_response(False, None, str(e), 500)
 
-    user.credits -= COST_PER_IMAGE
+    user.wallet.spend_credits(
+        amount=COST_PER_IMAGE,
+        description="Generated AI image"
+    )
     db.session.commit()
 
     return standard_response(True, {

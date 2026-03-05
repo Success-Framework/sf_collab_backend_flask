@@ -12,6 +12,7 @@ import logging
 import json
 from datetime import datetime
 from app.models.notification import Notification
+from app.models.user import User
 logger = logging.getLogger(__name__)
 
 notification_bp = Blueprint('notifications', __name__)
@@ -566,6 +567,9 @@ def create_announcement():
             return '', 200
         user_id = get_jwt_identity()
         data = request.get_json() or {}
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
 
         required_fields = ['title', 'message']
         if not all(field in data for field in required_fields):
@@ -608,7 +612,9 @@ def create_newsletter():
             return '', 200
         user_id = get_jwt_identity()
         data = request.get_json() or {}
-
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
         required_fields = ['title', 'content']
         if not all(field in data for field in required_fields):
             return error_response("Missing required fields: title, content", 400)
@@ -629,3 +635,118 @@ def create_newsletter():
     except Exception as e:
         logger.error(f"Error creating newsletter: {e}", exc_info=True)
         return error_response(f"Failed to create newsletter: {str(e)}", 500)
+@notification_bp.route('/broadcasts/<int:announcement_id>', methods=['PUT', 'PATCH'])
+@jwt_required()
+def update_announcement(announcement_id):
+    """Update an announcement by ID"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
+        announcement = notification_service.update_announcement(
+            announcement_id=announcement_id,
+            title=data.get('title'),
+            message=data.get('message'),
+            priority=data.get('priority'),
+            link_url=data.get('link_url'),
+            metadata=data.get('data'),
+            actor_id=user_id
+        )
+        if announcement:
+            return success_response({"announcement": announcement.to_dict()}, "Announcement updated successfully")
+        return error_response("Announcement not found", 404)
+    except Exception as e:
+        logger.error(f"Error updating announcement: {e}", exc_info=True)
+        return error_response(f"Failed to update announcement: {str(e)}", 500)
+@notification_bp.route('/broadcasts/<int:announcement_id>', methods=['DELETE'])
+@jwt_required()
+def delete_announcement(announcement_id):
+    """Delete a single announcement by ID"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
+        success = notification_service.delete_announcement(announcement_id, user_id)
+        if success:
+            return success_response({'message': 'Announcement deleted'})
+        return error_response('Announcement not found', 404)
+    except Exception as e:
+        logger.error(f"Error deleting announcement: {e}", exc_info=True)
+        return error_response(f"Failed to delete announcement: {str(e)}", 500)
+@notification_bp.route('/broadcasts', methods=['DELETE'])
+@jwt_required()
+def clear_all_announcements():
+    """Clear/delete all announcements"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
+        count = notification_service.clear_all_announcements(user_id)
+        return success_response({
+            'message': f'Cleared {count} announcements',
+            'count': count
+        })
+    except Exception as e:
+        logger.error(f"Error clearing announcements: {e}", exc_info=True)
+        return error_response(f"Failed to clear announcements: {str(e)}", 500)
+@notification_bp.route('/bulletins/<int:newsletter_id>', methods=['PUT', 'PATCH'])
+@jwt_required()
+def update_newsletter(newsletter_id):
+    """Update a newsletter by ID"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
+        newsletter = notification_service.update_newsletter(
+            newsletter_id=newsletter_id,
+            title=data.get('title'),
+            content=data.get('content'),
+            link_url=data.get('link_url'),
+            metadata=data.get('data'),
+            actor_id=user_id
+        )
+        if newsletter:
+            return success_response({"newsletter": newsletter.to_dict()}, "Newsletter updated successfully")
+        return error_response("Newsletter not found", 404)
+    except Exception as e:
+        logger.error(f"Error updating newsletter: {e}", exc_info=True)
+        return error_response(f"Failed to update newsletter: {str(e)}", 500)
+@notification_bp.route('/bulletins/<int:newsletter_id>', methods=['DELETE'])
+@jwt_required()
+def delete_newsletter(newsletter_id):
+    """Delete a single newsletter by ID"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
+        success = notification_service.delete_newsletter(newsletter_id, user_id)
+        if success:
+            return success_response({'message': 'Newsletter deleted'})
+        return error_response('Newsletter not found', 404)
+    except Exception as e:
+        logger.error(f"Error deleting newsletter: {e}", exc_info=True)
+        return error_response(f"Failed to delete newsletter: {str(e)}", 500)
+@notification_bp.route('/bulletins', methods=['DELETE'])
+@jwt_required()
+def clear_all_newsletters():
+    """Clear/delete all newsletters"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user or not user.is_admin():
+            return error_response("Unauthorized: Admin access required", 403)
+        count = notification_service.clear_all_newsletters(user_id)
+        return success_response({
+            'message': f'Cleared {count} newsletters',
+            'count': count
+        })
+    except Exception as e:
+        logger.error(f"Error clearing newsletters: {e}", exc_info=True)
+        return error_response(f"Failed to clear newsletters: {str(e)}", 500)

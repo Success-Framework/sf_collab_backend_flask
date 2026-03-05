@@ -17,6 +17,7 @@ import json
 from app.services.email_service import EmailService
 from flask_session import Session
 import stripe
+from app.services.ai_news.scheduler import start_scheduler
 
 WEBHOOK_SECRET = b'sFcollab_2025_secretKey!'
 
@@ -96,7 +97,8 @@ def create_app(config_name=None):
     app.config['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
     app.config['HUGGINGFACE_API_KEY'] = os.getenv('HUGGINGFACE_API_KEY', '')
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
-
+    app.config['HF_PROXY_URL'] = os.getenv("HF_PROXY_URL")
+    app.config['HF_PROXY_KEY'] = os.getenv("HF_PROXY_KEY")
     # STRIPE Configuration
     stripe.api_key = os.getenv('STRIPE_SECRET_KEY', '')
     app.config['STRIPE_SECRET_KEY'] = os.getenv('STRIPE_SECRET_KEY', '')
@@ -117,8 +119,6 @@ def create_app(config_name=None):
     @app.before_request
     def start_request_timer():
         g.start_time = time.time()
-        if request.method == "OPTIONS":
-            return make_response()  # Let CORS preflight requests pass through quickly
         
 
     @app.after_request
@@ -194,17 +194,13 @@ def create_app(config_name=None):
         app.config["SESSION_SQLALCHEMY"] = db
         app.config["SESSION_SQLALCHEMY_TABLE"] = "sessions"
 
-    sess.init_app(app)
-   
-    # Create sessions table if it doesn't exist
-    with app.app_context():
-        try:
-            # Try to create the sessions table
-            from app.models.notification import Notification 
-            db.create_all()
-            print("✓ Sessions table ready")
-        except Exception as e:
-            print(f"Warning: Could not create sessions table: {e}")
+    try:
+        sess.init_app(app)
+    except Exception as e:
+        if "already exists" in str(e):
+            print(f"⚠ Sessions table race (harmless): {type(e).__name__}: {e}")
+        else:
+            raise
     
     # auth_routes.init_oauth(app)
     socketio.init_app(app)
@@ -228,7 +224,12 @@ def create_app(config_name=None):
     # Register all blueprints
     for blueprint in blueprints:
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
-
+    
+    # Start AI news scheduler
+    print("Starting AI news scheduler...")
+    start_scheduler(app)
+    print("✓ Scheduler started")
+    
     @app.route('/uploads/<path:filename>')
     def uploaded_file(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)

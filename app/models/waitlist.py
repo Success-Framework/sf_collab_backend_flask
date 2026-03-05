@@ -200,7 +200,7 @@ class Waitlist(db.Model):
     # -------------------------
     # Points mutation
     # -------------------------
-    def add_points(self, points: int, category: str):
+    def add_points(self, points: int = 0, category: str = ""):
         if category == "referral":
             self.referral_points += points
             # Bonus: 25 points for every 5 successful referrals

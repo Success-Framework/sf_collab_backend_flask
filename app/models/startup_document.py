@@ -11,7 +11,7 @@ class StartupDocument(db.Model):
     file_url = db.Column(db.String(500))  # Add this field
     content_type = db.Column(db.String(100), nullable=False)
     document_type = db.Column(db.String(50), default='general')
-    file_size = db.Column(db.Integer)  # Size in bytes
+    file_size_mb = db.Column(db.Float)  # Size in mb
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
     visible_by = db.Column(db.String(50), default='all')  # 'public', 'team', 'private'
     # Relationship
@@ -23,7 +23,7 @@ class StartupDocument(db.Model):
             'filename': self.filename,
             'content_type': self.content_type,
             'document_type': self.document_type,
-            'file_size': self.file_size,
+            'file_size_mb': self.file_size_mb,
             'uploaded_at': self.uploaded_at.isoformat(),
             'download_url': f'/api/startups/{self.startup_id}/documents/{self.id}/download',
             "file_url":self.file_url or f'/api/startups/{self.startup_id}/documents/{self.id}/download',

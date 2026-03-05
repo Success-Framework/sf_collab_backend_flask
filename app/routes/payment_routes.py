@@ -395,9 +395,10 @@ def stripe_webhook():
                 plan_credits = CREDITS.get(plan_id, 0)
                 
                 if plan_credits > 0:
+                    # Keep User.credits in sync for backward compatibility
                     user.credits = (user.credits or 0) + plan_credits
                     
-                    # Also log this real-money purchase into the UserWallet gamified ledger
+                    # Primary source of truth: UserWallet.credits
                     if not user.wallet:
                         from app.models.UserWallet import UserWallet
                         user.wallet = UserWallet(user_id=user.id)
@@ -611,7 +612,8 @@ def get_credits():
     user = User.query.get(user_id)
     if not user:
         return error_response("User not found", 404)
-    return success_response({"credits": user.credits})
+    wallet_credits = user.wallet.credits if user.wallet else 0
+    return success_response({"credits": wallet_credits})
 
 @payment_bp.route("/ai-tools", methods=["GET"])
 @jwt_required()

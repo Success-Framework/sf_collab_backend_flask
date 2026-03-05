@@ -117,6 +117,9 @@ def get_conversations():
         if not user:
             return error_response("User not found", 404)
 
+        # Support ?archived=true to fetch only archived, default fetches non-archived
+        include_archived = request.args.get('archived', 'false').lower() == 'true'
+
         try:
             query = (
                 ChatConversation.query.join(conversation_participants)
@@ -126,6 +129,15 @@ def get_conversations():
                     (conversation_participants.c.is_hidden == None)
                 )
             )
+            if include_archived:
+                # Return ONLY archived conversations
+                query = query.filter(conversation_participants.c.is_archived == True)
+            else:
+                # Exclude archived conversations (default)
+                query = query.filter(
+                    (conversation_participants.c.is_archived == False) |
+                    (conversation_participants.c.is_archived == None)
+                )
             conversations = query.order_by(ChatConversation.updated_at.desc()).all()
         except Exception:
             query = (
@@ -587,7 +599,7 @@ def send_message(conversation_id):
             
             # Notify all participants except sender
             for participant in conversation.participants:
-                if participant.id != current_user_id:
+                if int(participant.id) != int(current_user_id):
                     # Use appropriate notification based on conversation type
                     if conversation.conversation_type == 'group':
                         notify_group_message(
@@ -617,7 +629,7 @@ def send_message(conversation_id):
             mentions = extract_mentions(original_content)
             for username in mentions:
                 mentioned_user = get_user_by_username(username)
-                if mentioned_user and mentioned_user.id != current_user_id:
+                if mentioned_user and int(mentioned_user.id) != int(current_user_id):
                     # Check if mentioned user is part of the conversation
                     if mentioned_user in conversation.participants:
                         notify_mention_in_chat(
@@ -1366,6 +1378,72 @@ def unarchive_conversation(conversation_id):
         return error_response(f"Failed to unarchive conversation: {str(e)}", 500)
 
 # ─────────────────────────────────────────────────────────────
+# PIN / UNPIN CONVERSATION  (per-user, persists in DB)
+# ─────────────────────────────────────────────────────────────
+@chat_bp.route("/conversations/<int:conversation_id>/pin", methods=["POST"])
+@jwt_required()
+def pin_conversation(conversation_id):
+    """Pin a conversation for the current user."""
+    try:
+        current_user_id = get_jwt_identity()
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation or not conversation.is_user_participant(current_user_id):
+            return error_response("Conversation not found or access denied", 404)
+
+        db.session.execute(
+            db.text("""UPDATE conversation_participants
+                       SET is_pinned = 1, pinned_at = :now
+                       WHERE conversation_id = :cid AND user_id = :uid"""),
+            {'cid': conversation_id, 'uid': current_user_id, 'now': datetime.utcnow()}
+        )
+        db.session.commit()
+
+        # Emit to user so ChatDock + ChatPage both update in real-time
+        if SOCKET_ENABLED:
+            emit_to_user(current_user_id, "conversation_pinned", {
+                "conversation_id": conversation_id,
+                "is_pinned": True
+            })
+
+        return success_response({"conversation_id": conversation_id, "is_pinned": True}, "Conversation pinned")
+    except Exception as e:
+        logging.error(f"Pin conversation failed: {e}")
+        db.session.rollback()
+        return error_response(f"Failed to pin conversation: {str(e)}", 500)
+
+
+@chat_bp.route("/conversations/<int:conversation_id>/pin", methods=["DELETE"])
+@jwt_required()
+def unpin_conversation(conversation_id):
+    """Unpin a conversation for the current user."""
+    try:
+        current_user_id = get_jwt_identity()
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation or not conversation.is_user_participant(current_user_id):
+            return error_response("Conversation not found or access denied", 404)
+
+        db.session.execute(
+            db.text("""UPDATE conversation_participants
+                       SET is_pinned = 0, pinned_at = NULL
+                       WHERE conversation_id = :cid AND user_id = :uid"""),
+            {'cid': conversation_id, 'uid': current_user_id}
+        )
+        db.session.commit()
+
+        if SOCKET_ENABLED:
+            emit_to_user(current_user_id, "conversation_pinned", {
+                "conversation_id": conversation_id,
+                "is_pinned": False
+            })
+
+        return success_response({"conversation_id": conversation_id, "is_pinned": False}, "Conversation unpinned")
+    except Exception as e:
+        logging.error(f"Unpin conversation failed: {e}")
+        db.session.rollback()
+        return error_response(f"Failed to unpin conversation: {str(e)}", 500)
+
+
+# ─────────────────────────────────────────────────────────────
 # DELETE CONVERSATION (removes user from conversation)
 # ─────────────────────────────────────────────────────────────
 @chat_bp.route("/conversations/<int:conversation_id>", methods=["DELETE"])
@@ -1423,3 +1501,259 @@ def setup_general_chat():
         {"general_chat_id": general_chat.id, "sync_stats": stats},
         "General chat setup complete!",
     )
+
+# ─────────────────────────────────────────────────────────────
+# FEATURE 3: STAR / UNSTAR A MESSAGE
+# ─────────────────────────────────────────────────────────────
+@chat_bp.route("/conversations/<int:conversation_id>/messages/<int:message_id>/star", methods=["POST"])
+@jwt_required()
+def star_message(conversation_id, message_id):
+    """Star a message for the current user."""
+    try:
+        current_user_id = get_jwt_identity()
+
+        # Verify participation
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation or not conversation.is_user_participant(current_user_id):
+            return error_response("Not a participant", 403)
+
+        message = ChatMessage.query.get(message_id)
+        if not message or message.conversation_id != conversation_id:
+            return error_response("Message not found", 404)
+
+        # Upsert into message_stars
+        existing = db.session.execute(
+            db.text("SELECT id FROM message_stars WHERE user_id = :uid AND message_id = :mid"),
+            {"uid": current_user_id, "mid": message_id}
+        ).fetchone()
+
+        if not existing:
+            db.session.execute(
+                db.text("INSERT INTO message_stars (user_id, message_id, created_at) VALUES (:uid, :mid, :now)"),
+                {"uid": current_user_id, "mid": message_id, "now": datetime.utcnow()}
+            )
+            db.session.commit()
+
+        return success_response({"message_id": message_id, "is_starred": True}, "Message starred")
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Star message failed: {e}")
+        return error_response(str(e), 500)
+
+
+@chat_bp.route("/conversations/<int:conversation_id>/messages/<int:message_id>/star", methods=["DELETE"])
+@jwt_required()
+def unstar_message(conversation_id, message_id):
+    """Unstar a message."""
+    try:
+        current_user_id = get_jwt_identity()
+        db.session.execute(
+            db.text("DELETE FROM message_stars WHERE user_id = :uid AND message_id = :mid"),
+            {"uid": current_user_id, "mid": message_id}
+        )
+        db.session.commit()
+        return success_response({"message_id": message_id, "is_starred": False}, "Message unstarred")
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+
+
+@chat_bp.route("/conversations/<int:conversation_id>/starred", methods=["GET"])
+@jwt_required()
+def get_starred_messages(conversation_id):
+    """Get all starred messages in a conversation for the current user."""
+    try:
+        current_user_id = get_jwt_identity()
+        rows = db.session.execute(
+            db.text("""
+                SELECT m.id, m.content, m.created_at, m.sender_id
+                FROM chat_messages m
+                JOIN message_stars s ON s.message_id = m.id
+                WHERE m.conversation_id = :cid AND s.user_id = :uid
+                ORDER BY s.created_at DESC
+            """),
+            {"cid": conversation_id, "uid": current_user_id}
+        ).fetchall()
+        messages = [{"id": r.id, "content": r.content, "created_at": str(r.created_at), "sender_id": r.sender_id} for r in rows]
+        return success_response({"messages": messages}, "Starred messages fetched")
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# FEATURE 3: PIN / UNPIN A MESSAGE
+# ─────────────────────────────────────────────────────────────
+@chat_bp.route("/conversations/<int:conversation_id>/messages/<int:message_id>/pin", methods=["POST"])
+@jwt_required()
+def pin_message(conversation_id, message_id):
+    """Pin a message in a conversation (admins or any participant)."""
+    try:
+        current_user_id = get_jwt_identity()
+
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation or not conversation.is_user_participant(current_user_id):
+            return error_response("Not a participant", 403)
+
+        message = ChatMessage.query.get(message_id)
+        if not message or message.conversation_id != conversation_id:
+            return error_response("Message not found", 404)
+
+        existing = db.session.execute(
+            db.text("SELECT id FROM pinned_messages WHERE conversation_id = :cid AND message_id = :mid"),
+            {"cid": conversation_id, "mid": message_id}
+        ).fetchone()
+
+        if not existing:
+            db.session.execute(
+                db.text("""
+                    INSERT INTO pinned_messages (conversation_id, message_id, pinned_by, created_at)
+                    VALUES (:cid, :mid, :uid, :now)
+                """),
+                {"cid": conversation_id, "mid": message_id, "uid": current_user_id, "now": datetime.utcnow()}
+            )
+            db.session.commit()
+
+        return success_response({"message_id": message_id, "is_pinned": True}, "Message pinned")
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Pin message failed: {e}")
+        return error_response(str(e), 500)
+
+
+@chat_bp.route("/conversations/<int:conversation_id>/messages/<int:message_id>/pin", methods=["DELETE"])
+@jwt_required()
+def unpin_message(conversation_id, message_id):
+    """Unpin a message."""
+    try:
+        current_user_id = get_jwt_identity()
+        db.session.execute(
+            db.text("DELETE FROM pinned_messages WHERE conversation_id = :cid AND message_id = :mid"),
+            {"cid": conversation_id, "mid": message_id}
+        )
+        db.session.commit()
+        return success_response({"message_id": message_id, "is_pinned": False}, "Message unpinned")
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+
+
+@chat_bp.route("/conversations/<int:conversation_id>/pinned", methods=["GET"])
+@jwt_required()
+def get_pinned_messages(conversation_id):
+    """Get all pinned messages in a conversation."""
+    try:
+        current_user_id = get_jwt_identity()
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation or not conversation.is_user_participant(current_user_id):
+            return error_response("Not a participant", 403)
+
+        rows = db.session.execute(
+            db.text("""
+                SELECT m.id, m.content, m.created_at, m.sender_id, p.pinned_by
+                FROM chat_messages m
+                JOIN pinned_messages p ON p.message_id = m.id
+                WHERE p.conversation_id = :cid
+                ORDER BY p.created_at DESC
+            """),
+            {"cid": conversation_id}
+        ).fetchall()
+        messages = [{"id": r.id, "content": r.content, "created_at": str(r.created_at), "sender_id": r.sender_id, "pinned_by": r.pinned_by} for r in rows]
+        return success_response({"messages": messages}, "Pinned messages fetched")
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+# ─────────────────────────────────────────────────────────────
+# FEATURE 3: SAVE / REMOVE MESSAGE AS TASK
+# ─────────────────────────────────────────────────────────────
+@chat_bp.route("/conversations/<int:conversation_id>/messages/<int:message_id>/task", methods=["POST"])
+@jwt_required()
+def save_message_task(conversation_id, message_id):
+    """Save a message as a task for the current user."""
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        due_date = data.get("due_date")
+        note = data.get("note")
+
+        conversation = ChatConversation.query.get(conversation_id)
+        if not conversation or not conversation.is_user_participant(current_user_id):
+            return error_response("Not a participant", 403)
+
+        message = ChatMessage.query.get(message_id)
+        if not message or message.conversation_id != conversation_id:
+            return error_response("Message not found", 404)
+
+        # Upsert
+        existing = db.session.execute(
+            db.text("SELECT id FROM message_tasks WHERE user_id = :uid AND message_id = :mid"),
+            {"uid": current_user_id, "mid": message_id}
+        ).fetchone()
+
+        if existing:
+            db.session.execute(
+                db.text("UPDATE message_tasks SET due_date = :dd, note = :note WHERE user_id = :uid AND message_id = :mid"),
+                {"dd": due_date, "note": note, "uid": current_user_id, "mid": message_id}
+            )
+        else:
+            db.session.execute(
+                db.text("""
+                    INSERT INTO message_tasks (user_id, message_id, conversation_id, due_date, note, created_at)
+                    VALUES (:uid, :mid, :cid, :dd, :note, :now)
+                """),
+                {"uid": current_user_id, "mid": message_id, "cid": conversation_id,
+                 "dd": due_date, "note": note, "now": datetime.utcnow()}
+            )
+        db.session.commit()
+        return success_response({"message_id": message_id, "is_task": True}, "Task saved")
+
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Save task failed: {e}")
+        return error_response(str(e), 500)
+
+
+@chat_bp.route("/conversations/<int:conversation_id>/messages/<int:message_id>/task", methods=["DELETE"])
+@jwt_required()
+def remove_message_task(conversation_id, message_id):
+    """Remove a message task."""
+    try:
+        current_user_id = get_jwt_identity()
+        db.session.execute(
+            db.text("DELETE FROM message_tasks WHERE user_id = :uid AND message_id = :mid"),
+            {"uid": current_user_id, "mid": message_id}
+        )
+        db.session.commit()
+        return success_response({"message_id": message_id, "is_task": False}, "Task removed")
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+
+
+@chat_bp.route("/tasks", methods=["GET"])
+@jwt_required()
+def get_my_tasks():
+    """Get all tasks saved by the current user."""
+    try:
+        current_user_id = get_jwt_identity()
+        rows = db.session.execute(
+            db.text("""
+                SELECT t.id, t.message_id, t.conversation_id, t.due_date, t.note, t.created_at,
+                       m.content, m.sender_id
+                FROM message_tasks t
+                JOIN chat_messages m ON m.id = t.message_id
+                WHERE t.user_id = :uid
+                ORDER BY t.created_at DESC
+            """),
+            {"uid": current_user_id}
+        ).fetchall()
+        tasks = [{
+            "id": r.id, "message_id": r.message_id, "conversation_id": r.conversation_id,
+            "due_date": str(r.due_date) if r.due_date else None, "note": r.note,
+            "created_at": str(r.created_at), "message_content": r.content, "sender_id": r.sender_id
+        } for r in rows]
+        return success_response({"tasks": tasks}, "Tasks fetched")
+    except Exception as e:
+        return error_response(str(e), 500)

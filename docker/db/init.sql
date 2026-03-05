@@ -49,7 +49,6 @@ CREATE TABLE `users` (
   `credits` int DEFAULT 0,
   `xp_points` int DEFAULT NULL,
   `streak_days` int DEFAULT NULL,
-  `credits` int DEFAULT 0,
   `last_activity_date` date DEFAULT NULL,
   `total_revenue` float DEFAULT NULL,
   `satisfaction_percentage` float DEFAULT NULL,
@@ -81,6 +80,7 @@ CREATE TABLE `users` (
   `notif_quiet_hours_end` varchar(5) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `storage_used_mb` float NOT NULL DEFAULT 0.0,
   
   PRIMARY KEY (`id`),
 
@@ -359,6 +359,10 @@ CREATE TABLE `conversation_participants` (
   `joined_at` datetime DEFAULT NULL,
   `role` varchar(20) DEFAULT NULL,
   `is_hidden` tinyint(1) DEFAULT '0',
+  `is_archived` tinyint(1) DEFAULT 0 NOT NULL,
+  `archived_at` datetime DEFAULT NULL,
+  `is_pinned` tinyint(1) DEFAULT 0 NOT NULL,
+  `pinned_at` datetime DEFAULT NULL,
   PRIMARY KEY (`conversation_id`,`user_id`),
   KEY `conversation_id` (`conversation_id`),
   KEY `user_id` (`user_id`),
@@ -651,6 +655,7 @@ CREATE TABLE `knowledge` (
   `image_content_type` varchar(100) DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `file_size_mb` float NOT NULL DEFAULT 0.0,
   PRIMARY KEY (`id`),
   KEY `author_id` (`author_id`),
   CONSTRAINT `knowledge_ibfk_1` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`)
@@ -890,7 +895,7 @@ CREATE TABLE `posts` (
   `author_first_name` varchar(100) DEFAULT NULL,
   `author_last_name` varchar(100) DEFAULT NULL,
   `content` text NOT NULL,
-  `type` enum('professional','social','image','video') DEFAULT NULL,
+  `type` enum('professional','social','image','video','text') DEFAULT NULL,
   `tags` json DEFAULT NULL,
   `likes` int DEFAULT NULL,
   `comments_count` int DEFAULT NULL,
@@ -1129,7 +1134,7 @@ CREATE TABLE `startup_documents` (
   `content_type` varchar(100) NOT NULL,
   `document_type` varchar(50) DEFAULT NULL,
   `visible_by` varchar(50) DEFAULT 'public',
-  `file_size` int DEFAULT NULL,
+  `file_size_mb` float NOT NULL DEFAULT 0.0,
   `uploaded_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `startup_id` (`startup_id`),
@@ -2110,3 +2115,186 @@ LOCK TABLES `errors` WRITE;
 /*!40000 ALTER TABLE `errors` ENABLE KEYS */;
 UNLOCK TABLES;
 
+
+DROP TABLE IF EXISTS `startup_views`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `startup_views` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `viewed_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `startup_id` (`startup_id`),
+  CONSTRAINT `startup_views_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `startup_views_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `startup_views`
+--
+
+LOCK TABLES `startup_views` WRITE;
+/*!40000 ALTER TABLE `startup_views` DISABLE KEYS */;
+/*!40000 ALTER TABLE `startup_views` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `idea_comment_likes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `idea_comment_likes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `comment_id` int NOT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `comment_id` (`comment_id`),
+  CONSTRAINT `idea_comment_likes_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `idea_comment_likes_ibfk_2` FOREIGN KEY (`comment_id`) REFERENCES `idea_comments` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `idea_comment_likes` WRITE;
+/*!40000 ALTER TABLE `idea_comment_likes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `idea_comment_likes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `pitch_decks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pitch_decks` (
+  `id` varchar(36) NOT NULL,
+  `user_id` int NOT NULL,
+  `startup_id` int DEFAULT NULL,
+  `title` varchar(255) NOT NULL,
+  `template_type` varchar(100) NOT NULL,
+  `theme_type` varchar(100) NOT NULL,
+  `slides_json` json NOT NULL,
+  `credits_used` int DEFAULT 20,
+  `status` varchar(50) DEFAULT 'draft',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `startup_id` (`startup_id`),
+  KEY `status` (`status`),
+  CONSTRAINT `pitch_decks_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `pitch_decks_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `pitch_decks` WRITE;
+/*!40000 ALTER TABLE `pitch_decks` DISABLE KEYS */;
+/*!40000 ALTER TABLE `pitch_decks` ENABLE KEYS */;
+UNLOCK TABLES;
+--
+-- Table structure for table `sessions` (Flask-Session)
+--
+
+DROP TABLE IF EXISTS `sessions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sessions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_id` varchar(255) DEFAULT NULL,
+  `data` blob,
+  `expiry` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `session_id` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `sessions` WRITE;
+/*!40000 ALTER TABLE `sessions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sessions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+
+DROP TABLE IF EXISTS `plan_versions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `plan_versions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `plan_id` int NOT NULL,
+  `version_number` int NOT NULL,
+  `trigger_type` varchar(50) DEFAULT NULL,
+  `summary` text,
+  `health_score` int DEFAULT NULL,
+  `health_status` varchar(30) DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `plan_id` (`plan_id`),
+  CONSTRAINT `plan_versions_ibfk_1` FOREIGN KEY (`plan_id`) REFERENCES `business_plans` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `plan_versions` WRITE;
+/*!40000 ALTER TABLE `plan_versions` DISABLE KEYS */;
+/*!40000 ALTER TABLE `plan_versions` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `startup_invitations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `startup_invitations` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `startup_id` int NOT NULL,
+  `invited_user_id` int NOT NULL,
+  `invited_by_id` int DEFAULT NULL,
+  `role` varchar(100) NOT NULL,
+  `status` enum('pending','accepted','rejected','expired') DEFAULT 'pending',
+  `expires_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `responded_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_startup_invitation` (`startup_id`,`invited_user_id`),
+  KEY `startup_id` (`startup_id`),
+  KEY `invited_user_id` (`invited_user_id`),
+  KEY `invited_by_id` (`invited_by_id`),
+  CONSTRAINT `startup_invitations_ibfk_1` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `startup_invitations_ibfk_2` FOREIGN KEY (`invited_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `startup_invitations_ibfk_3` FOREIGN KEY (`invited_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `startup_invitations` WRITE;
+/*!40000 ALTER TABLE `startup_invitations` DISABLE KEYS */;
+/*!40000 ALTER TABLE `startup_invitations` ENABLE KEYS */;
+UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `ai_news_articles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ai_news_articles` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `title` varchar(500) NOT NULL,
+  `url` varchar(1000) NOT NULL,
+  `summary` text,
+  `author` varchar(255) DEFAULT NULL,
+  `image_url` varchar(1000) DEFAULT NULL,
+  `source` varchar(100) NOT NULL,
+  `source_label` varchar(100) DEFAULT NULL,
+  `category` varchar(100) DEFAULT NULL,
+  `tags` text,
+  `impact_score` int DEFAULT 5,
+  `published_at` datetime DEFAULT NULL,
+  `scraped_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `is_active` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_url` (`url`),
+  KEY `idx_source` (`source`),
+  KEY `idx_category` (`category`),
+  KEY `idx_published_at` (`published_at`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_is_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `ai_news_articles` WRITE;
+/*!40000 ALTER TABLE `ai_news_articles` DISABLE KEYS */;
+/*!40000 ALTER TABLE `ai_news_articles` ENABLE KEYS */;
+UNLOCK TABLES;

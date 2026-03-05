@@ -38,7 +38,7 @@ def get_or_create_wallet(user_id):
             daily_earning_limit=1000
         )
         db.session.add(wallet)
-        db.session.commit()
+        db.session.flush()  # get wallet.id without committing
         
         # Record welcome bonus transaction
         WalletTransaction.record_transaction(
@@ -51,6 +51,7 @@ def get_or_create_wallet(user_id):
             balance_after=100,
             description='Welcome bonus'
         )
+        db.session.commit()
     
     return wallet
 
@@ -169,8 +170,6 @@ def earn_coins():
         wallet.total_coins_earned += amount
         wallet.daily_earnings += amount
         
-        db.session.commit()
-        
         # Record transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
@@ -184,6 +183,7 @@ def earn_coins():
             reference_id=reference_id,
             description=description
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -226,8 +226,6 @@ def spend_coins():
         wallet.sf_coins -= amount
         wallet.total_coins_spent += amount
         
-        db.session.commit()
-        
         # Record transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
@@ -241,6 +239,7 @@ def spend_coins():
             reference_id=reference_id,
             description=description
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -273,8 +272,6 @@ def add_crystals():
         balance_before = wallet.premium_gems
         wallet.premium_gems += amount
         
-        db.session.commit()
-        
         # Record transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
@@ -288,6 +285,7 @@ def add_crystals():
             reference_id=payment_reference,
             description=description
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -328,8 +326,6 @@ def spend_crystals():
         balance_before = wallet.premium_gems
         wallet.premium_gems -= amount
         
-        db.session.commit()
-        
         # Record transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
@@ -343,6 +339,7 @@ def spend_crystals():
             reference_id=reference_id,
             description=description
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -374,8 +371,6 @@ def add_event_tokens():
         balance_before = wallet.event_tokens
         wallet.event_tokens += amount
         
-        db.session.commit()
-        
         # Record transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
@@ -389,6 +384,7 @@ def add_event_tokens():
             reference_id=event_id,
             description=description
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -441,8 +437,6 @@ def transfer_coins():
         recipient_wallet.sf_coins += amount
         recipient_wallet.total_coins_earned += amount
         
-        db.session.commit()
-        
         # Record sender transaction
         WalletTransaction.record_transaction(
             wallet_id=sender_wallet.id,
@@ -470,6 +464,7 @@ def transfer_coins():
             reference_id=str(sender_id),
             description=f'Transfer from user: {message}' if message else 'Transfer from user'
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,
@@ -527,8 +522,6 @@ def award_bonus():
             wallet.event_tokens += amount
             balance_after = wallet.event_tokens
         
-        db.session.commit()
-        
         # Record transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
@@ -542,6 +535,7 @@ def award_bonus():
             reference_id=str(admin_id),
             description=description
         )
+        db.session.commit()
         
         return jsonify({
             'success': True,

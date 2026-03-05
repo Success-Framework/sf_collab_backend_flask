@@ -110,10 +110,20 @@ class Startup(db.Model):
         lazy='dynamic',
         cascade='all, delete-orphan',
         foreign_keys='StartupDocument.startup_id')
+    startup_views = db.relationship('StartupView',
+        back_populates='startup',
+        lazy='dynamic',
+        cascade='all, delete-orphan')
     # HELPER FUNCTIONS
-    def increment_views(self):
+    def increment_views(self, user_id):
         """Increment view count"""
-        self.views += 1
+        isViewed = StartupView.query.filter_by(startup_id=self.id, user_id=user_id).first()
+        if not isViewed:
+            new_view = StartupView(startup_id=self.id, user_id=user_id)
+            self.views += 1
+            db.session.add(new_view)
+            
+        
         db.session.commit()
     
     def update_member_count(self):
@@ -220,7 +230,7 @@ class Startup(db.Model):
     def add_document(self, filename, file_path, content_type, document_type='general', file_url=None):
         """Add a document to the startup"""
         from app.models.startup_document import StartupDocument
-        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024) if os.path.exists(file_path) else 0
         
         # Generate file_url if not provided
         if not file_url:
@@ -234,7 +244,7 @@ class Startup(db.Model):
             file_url=file_url,
             content_type=content_type,
             document_type=document_type,
-            file_size=file_size
+            file_size_mb=file_size_mb
         )
         db.session.add(document)
         db.session.commit()
@@ -282,5 +292,30 @@ class Startup(db.Model):
             'memberCount': self.member_count,
             'views': self.views,
             'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat()
+            'updatedAt': self.updated_at.isoformat(),
+            # 'startupViews': [view.to_dict() for view in self.startup_views]
+            
         }
+        
+
+
+class StartupView(db.Model):
+  __tablename__ = 'startup_views'
+  
+  id = db.Column(db.Integer, primary_key=True)
+  user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+  startup_id = db.Column(db.Integer, db.ForeignKey('startups.id'), nullable=False)
+  viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
+  
+  # Relationships
+  user = db.relationship('User', back_populates='startup_views')
+  startup = db.relationship('Startup', back_populates='startup_views')
+  
+  
+  def to_dict(self):
+    return {
+      'id': self.id,
+      'user_id': self.user_id,
+      'startup_id': self.startup_id,
+      'viewed_at': self.viewed_at.isoformat()
+    }
