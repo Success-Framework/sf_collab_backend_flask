@@ -93,7 +93,7 @@ def get_idea(idea_id):
 @jwt_required()
 def create_idea():
     """Create new idea"""
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     
     # Get form data
     title = request.form.get('title')
@@ -392,7 +392,6 @@ def get_idea_image(filename):
     print(UPLOAD_FOLDER, "filename:", filename)
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-
 # ════════════════════════════════════════════════════════════════════════════
 # ✨ CO-DEVELOPER REQUEST ROUTES
 # ════════════════════════════════════════════════════════════════════════════
@@ -413,7 +412,6 @@ def request_to_collab(idea_id):
     from app.models.ideaCollabRequest import IdeaCollabRequest
     from app.models.Enums import JoinRequestStatus
 
-    # Check for existing pending request
     existing = IdeaCollabRequest.query.filter_by(
         idea_id=idea_id,
         user_id=current_user_id,
@@ -448,7 +446,6 @@ def request_to_collab(idea_id):
         except Exception as e:
             print(f"⚠️ Collab request notification failed: {e}")
 
-        # Emit realtime event to creator
         try:
             from app.extensions import socketio
             socketio.emit('new_collab_request', {
@@ -484,7 +481,6 @@ def get_collab_requests(idea_id):
         return error_response('Only the idea creator can view requests', 403)
 
     from app.models.ideaCollabRequest import IdeaCollabRequest
-
     requests_list = IdeaCollabRequest.query.filter_by(idea_id=idea_id).order_by(
         IdeaCollabRequest.created_at.desc()
     ).all()
@@ -501,10 +497,17 @@ def get_my_collab_status(idea_id):
     current_user_id = int(get_jwt_identity())
 
     from app.models.ideaCollabRequest import IdeaCollabRequest
+    from app.models.Enums import JoinRequestStatus
 
     collab_request = IdeaCollabRequest.query.filter_by(
         idea_id=idea_id,
-        user_id=current_user_id
+        user_id=current_user_id,
+    ).filter(
+        IdeaCollabRequest.status.in_([
+            JoinRequestStatus.pending,
+            JoinRequestStatus.approved,
+            JoinRequestStatus.rejected
+        ])
     ).order_by(IdeaCollabRequest.created_at.desc()).first()
 
     return success_response({
@@ -519,6 +522,7 @@ def approve_collab_request(request_id):
     current_user_id = int(get_jwt_identity())
 
     from app.models.ideaCollabRequest import IdeaCollabRequest
+    from app.models.Enums import JoinRequestStatus
 
     collab_request = IdeaCollabRequest.query.get(request_id)
     if not collab_request:
@@ -530,6 +534,13 @@ def approve_collab_request(request_id):
 
     try:
         collab_request.approve()
+        user = User.query.get(collab_request.user_id)
+        if user:
+            idea.add_team_member(
+                name=f"{user.first_name} {user.last_name}",
+                position=collab_request.role,
+                skills=None
+            )
         db.session.commit()
 
         try:
@@ -543,11 +554,11 @@ def approve_collab_request(request_id):
 
         return success_response(
             {'collab_request': collab_request.to_dict()},
-            'Request approved'
+            'Request approved successfully'
         )
     except Exception as e:
         db.session.rollback()
-        return error_response(f'Failed to approve: {str(e)}', 500)
+        return error_response(f'Failed to approve request: {str(e)}', 500)
 
 
 @ideas_bp.route('/collab-requests/<int:request_id>/reject', methods=['POST'])
@@ -574,7 +585,7 @@ def reject_collab_request(request_id):
             from app.notifications.helpers import notify_info
             notify_info(
                 user_id=collab_request.user_id,
-                message=f"Your request to join '{idea.title}' was not accepted."
+                message=f"Your request to join '{idea.title}' was not approved at this time."
             )
         except Exception as e:
             print(f"⚠️ Rejection notification failed: {e}")
@@ -585,13 +596,13 @@ def reject_collab_request(request_id):
         )
     except Exception as e:
         db.session.rollback()
-        return error_response(f'Failed to reject: {str(e)}', 500)
+        return error_response(f'Failed to reject request: {str(e)}', 500)
 
 
 @ideas_bp.route('/collab-requests/<int:request_id>/cancel', methods=['POST'])
 @jwt_required()
 def cancel_collab_request(request_id):
-    """Cancel your own collab request"""
+    """Cancel a co-developer request (by requester)"""
     current_user_id = int(get_jwt_identity())
 
     from app.models.ideaCollabRequest import IdeaCollabRequest
@@ -605,7 +616,10 @@ def cancel_collab_request(request_id):
         return error_response('You can only cancel your own requests', 403)
 
     if collab_request.status != JoinRequestStatus.pending:
-        return error_response('Only pending requests can be cancelled', 400)
+        return success_response(
+            {'collab_request': collab_request.to_dict()},
+            'Request already processed'
+        )
 
     try:
         collab_request.cancel()

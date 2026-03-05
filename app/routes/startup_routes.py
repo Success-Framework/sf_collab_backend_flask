@@ -142,9 +142,11 @@ def get_startups():
 
     
     if builder:
-        print("Builder filter applied - showing startups where user is a member or creator")
-        query = query.join(Startup.startup_members).filter(
-            (StartupMember.user_id == current_user_id) & (Startup.creator_id != current_user_id) # Show startups where user is a member but not the creator
+        print("Builder filter applied - showing startups where user is a member but not creator")
+        query = query.join(StartupMember, StartupMember.startup_id == Startup.id).filter(
+            StartupMember.user_id == current_user_id,
+            StartupMember.is_active == True,
+            Startup.creator_id != current_user_id
         )
     if page == 1:
         query = query.order_by(Startup.created_at.desc())

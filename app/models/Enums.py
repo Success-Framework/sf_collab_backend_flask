@@ -85,6 +85,7 @@ class SuggestionStatus(enum.Enum):
     pending = "pending"
     accepted = "accepted"
     rejected = "rejected"
+    cancelled = "cancelled"
 
 class StartupStage(enum.Enum):
     idea = "idea"

@@ -1,7 +1,7 @@
 from datetime import datetime
 from app.extensions import db
 from sqlalchemy import Enum
-from .Enums import JoinRequestStatus  # Reuse existing enum
+from .Enums import JoinRequestStatus
 
 
 class IdeaCollabRequest(db.Model):
@@ -15,28 +15,19 @@ class IdeaCollabRequest(db.Model):
     last_name = db.Column(db.String(100))
     message = db.Column(db.Text)
     role = db.Column(db.String(100), default='co-developer')
-    status = db.Column(Enum(JoinRequestStatus), default=JoinRequestStatus.pending)
+    status = db.Column(Enum(JoinRequestStatus), default=JoinRequestStatus.pending, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    target_idea = db.relationship('Idea', foreign_keys=[idea_id])
-    request_user = db.relationship('User', foreign_keys=[user_id])
+    idea = db.relationship('Idea', backref=db.backref('idea_collab_requests', lazy='dynamic'), foreign_keys=[idea_id])
+    requester = db.relationship('User', backref=db.backref('idea_collab_requests', lazy='dynamic'), foreign_keys=[user_id])
+
+    # ── Helpers ──────────────────────────────────────────────────────────
 
     def approve(self):
-        """Approve request and add user as TeamMember on the idea"""
         self.status = JoinRequestStatus.approved
         self.updated_at = datetime.utcnow()
-
-        from app.models.teamMember import TeamMember
-        member = TeamMember(
-            idea_id=self.idea_id,
-            name=f"{self.first_name} {self.last_name}",
-            position=self.role,
-            skills={}
-        )
-        db.session.add(member)
-        return member
 
     def reject(self):
         self.status = JoinRequestStatus.rejected
