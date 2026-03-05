@@ -749,7 +749,7 @@ def qwen_chat():
             return standard_response(False, None, 'Missing messages in request', 400)
 
         # GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
-        # groq_client = get_groq_client()
+        groq_client = get_groq_client()
         messages = data.get('messages', [])
         temperature = data.get('temperature', 0.7)
         max_tokens = data.get('max_tokens', 2048)
