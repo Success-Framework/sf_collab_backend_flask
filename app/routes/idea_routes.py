@@ -547,7 +547,7 @@ def approve_collab_request(request_id):
             from app.notifications.helpers import notify_info
             notify_info(
                 user_id=collab_request.user_id,
-                message=f"Your request to join '{idea.title}' has been approved!"
+                message=f"Your request to join '{idea.title}' as co-developer has been approved! 🎉"
             )
         except Exception as e:
             print(f"⚠️ Approval notification failed: {e}")
@@ -632,11 +632,10 @@ def cancel_collab_request(request_id):
         db.session.rollback()
         return error_response(f'Failed to cancel: {str(e)}', 500)
 
-
 @ideas_bp.route('/<int:idea_id>/leave', methods=['POST'])
 @jwt_required()
 def leave_idea_team(idea_id):
-    """Leave an idea team"""
+    """Leave an idea team (remove yourself as a co-developer)"""
     current_user_id = int(get_jwt_identity())
 
     from app.models.ideaCollabRequest import IdeaCollabRequest

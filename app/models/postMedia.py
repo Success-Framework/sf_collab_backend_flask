@@ -76,7 +76,7 @@ class PostMedia(db.Model):
             'isVideo': self.is_video(),
             'isDocument': self.is_document(),
             'post': {
-                'id': self.post.id,
-                'content': self.post.content[:100] + '...' if len(self.post.content) > 100 else self.post.content
-            } if self.post else None
+                'id': self.parent_post.id,
+                'content': self.parent_post.content[:100] + '...' if len(self.parent_post.content) > 100 else self.parent_post.content
+            } if self.parent_post else None
         }

@@ -44,16 +44,29 @@ class IdeaCollabRequest(db.Model):
         return value.value if hasattr(value, 'value') else value
 
     def to_dict(self):
+        user = self.request_user
+        idea = self.target_idea
         return {
             'id': self.id,
-            'idea_id': self.idea_id,
-            'idea_title': self.idea_title,
-            'user_id': self.user_id,
-            'first_name': self.first_name,
-            'last_name': self.last_name,
+            'ideaId': self.idea_id,
+            'ideaTitle': self.idea_title,
+            'userId': self.user_id,
+            'firstName': self.first_name,
+            'lastName': self.last_name,
             'message': self.message,
             'role': self.role,
             'status': self._enum_to_value(self.status),
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'isPending': self.is_pending(),
+            'createdAt': self.created_at.isoformat(),
+            'updatedAt': self.updated_at.isoformat(),
+            'user': {
+                'id': user.id,
+                'firstName': user.first_name,
+                'lastName': user.last_name,
+                'profilePicture': user.profile_picture
+            } if user else None,
+            'idea': {
+                'id': idea.id,
+                'title': idea.title
+            } if idea else None
         }
