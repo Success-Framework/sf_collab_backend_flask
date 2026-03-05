@@ -44,8 +44,8 @@ class IdeaCollabRequest(db.Model):
         return value.value if hasattr(value, 'value') else value
 
     def to_dict(self):
-        user = self.request_user
-        idea = self.target_idea
+        user = self.requester
+        idea = self.idea
         return {
             'id': self.id,
             'ideaId': self.idea_id,

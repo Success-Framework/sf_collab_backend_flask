@@ -2298,3 +2298,31 @@ LOCK TABLES `ai_news_articles` WRITE;
 /*!40000 ALTER TABLE `ai_news_articles` DISABLE KEYS */;
 /*!40000 ALTER TABLE `ai_news_articles` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `idea_collab_requests`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `idea_collab_requests` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `idea_id` int NOT NULL,
+  `idea_title` varchar(255) DEFAULT NULL,
+  `user_id` int NOT NULL,
+  `first_name` varchar(100) DEFAULT NULL,
+  `last_name` varchar(100) DEFAULT NULL,
+  `message` text,
+  `role` varchar(100) DEFAULT 'co-developer',
+  `status` enum('pending','approved','rejected','cancelled') DEFAULT 'pending',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idea_id` (`idea_id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `idea_collab_requests_ibfk_1` FOREIGN KEY (`idea_id`) REFERENCES `ideas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `idea_collab_requests_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `idea_collab_requests` WRITE;
+/*!40000 ALTER TABLE `idea_collab_requests` DISABLE KEYS */;
+/*!40000 ALTER TABLE `idea_collab_requests` ENABLE KEYS */;
+UNLOCK TABLES;
