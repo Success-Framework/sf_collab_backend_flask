@@ -743,58 +743,29 @@ def qwen_chat():
     try:
         if request.method == 'OPTIONS':
             return standard_response(True, {}, code=200)
+
         data = request.get_json()
 
         if not data or 'messages' not in data:
             return standard_response(False, None, 'Missing messages in request', 400)
 
-        # GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
-        groq_client = get_groq_client()
         messages = data.get('messages', [])
         temperature = data.get('temperature', 0.7)
         max_tokens = data.get('max_tokens', 2048)
-        model = data.get('model', AVAILABLE_MODELS[0])
 
-        # if not GROQ_API_KEY:
-        #     return standard_response(False, None, 'Groq API key not configured', 500)
-
-        # ---- Convert messages[] → prompt ----
+        # Convert conversation → prompt
         prompt_lines = []
+
         for msg in messages:
             role = msg.get('role', 'user')
             content = msg.get('content', '')
+
             if content:
                 prompt_lines.append(f"{role.capitalize()}: {content}")
 
-        final_prompt = "\n".join(prompt_lines) + "\nAssistant:"
+        final_prompt = "\n".join(prompt_lines)
 
-        # ---- Call Groq ----
-        # --- GUARDRAIL PREPROCESS ---
-        guardrail_check = AIService.preprocess_input("chat", final_prompt)
-        if guardrail_check:
-            return standard_response(True, guardrail_check)
-
-        # --- BUILD SAFE MESSAGES ---
-        messages = AIService.build_messages(
-            feature="chat",
-            user_input=final_prompt
-        )
-
-        # --- CALL MODEL ---
-        completion = groq_client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-
-        response_text = completion.choices[0].message.content
-
-        # --- GUARDRAIL POSTPROCESS ---
-        post_guardrail = AIService.postprocess_output(response_text)
-        if post_guardrail:
-            return standard_response(True, post_guardrail)
-
+        # Use AIService (HF Proxy + Guardrails)
         result = AIService.generate(
             feature="chat",
             user_input=final_prompt,
@@ -802,7 +773,7 @@ def qwen_chat():
             max_tokens=max_tokens
         )
 
-        return standard_response(True, result)    
+        return standard_response(True, result)
 
     except Exception as e:
         logging.exception("Qwen chat error")

@@ -5,7 +5,7 @@ from .injection import detect_prompt_injection
 from .output_filter import detect_sensitive_output
 from .system_prompts import get_system_prompt
 from .response_builder import build_refusal
-
+import re
 
 class AIService:
 
@@ -100,3 +100,14 @@ class AIService:
             "response": response_text,
             "guardrail_triggered": False
         }
+
+
+    @staticmethod
+
+    def remove_thinking(text: str):
+        if not text:
+            return text
+    
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+
+        return text.strip()
