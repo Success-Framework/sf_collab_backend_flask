@@ -207,27 +207,27 @@ def register_crowdfunding_interest():
         if not user:
             return error_response("User not found", 404)
 
-        # Use a JSON field on the user to store interest flags.
-        # If your User model has a 'preferences' or 'metadata' JSON column, use that.
-        # Otherwise we store it in a generic way via the notification log.
-        # We check if interest is already recorded to avoid duplicates.
-        if not hasattr(user, 'preferences') or user.preferences is None:
-            user.preferences = {}
-
-        preferences = dict(user.preferences) if user.preferences else {}
+        # Read existing preferences safely
+        preferences = {}
+        if hasattr(user, 'preferences') and isinstance(user.preferences, dict):
+            preferences = dict(user.preferences)
 
         if preferences.get("crowdfunding_interest"):
-            # Already registered — return 409 so frontend can handle gracefully
             return jsonify({
                 "success": True,
                 "already_registered": True,
                 "message": "You have already registered your interest in crowdfunding."
             }), 409
 
-        # Mark interest
+        # Mark interest with a proper datetime string
         preferences["crowdfunding_interest"] = True
-        preferences["crowdfunding_interest_at"] = str(db.func.now())
-        user.preferences = preferences
+        preferences["crowdfunding_interest_at"] = datetime.utcnow().isoformat()
+
+        # Use update_preferences if available, otherwise set directly
+        if hasattr(user, 'update_preferences'):
+            user.update_preferences(preferences)
+        else:
+            user.preferences = preferences
 
         db.session.commit()
 

@@ -145,7 +145,7 @@ def like_post(post_id):
         return error_response('User ID is required', 400)
     
     # Check if user already liked the post
-    from models.postLike import PostLike
+    from app.models.postLike import PostLike
     existing_like = PostLike.query.filter_by(post_id=post_id, user_id=user_id).first()
     
     if existing_like:
@@ -178,7 +178,7 @@ def unlike_post(post_id):
     if not user_id:
         return error_response('User ID is required', 400)
     
-    from models.postLike import PostLike
+    from app.models.postLike import PostLike
     like = PostLike.query.filter_by(post_id=post_id, user_id=user_id).first()
     
     if not like:
