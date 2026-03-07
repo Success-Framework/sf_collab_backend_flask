@@ -127,61 +127,78 @@ def calculate_total_positions(roles_data, fallback_positions=0):
 @jwt_required()
 def get_startups():
     """Get all startups with filtering, or user's startups if requested"""
-    current_user_id = get_jwt_identity()
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-    industry = request.args.get('industry', type=str)
-    stage = request.args.get('stage', type=str)
-    search = request.args.get('search', type=str)
-    my_startups = request.args.get('my_startups', 'false').lower() == 'true'
-    min_funding = request.args.get('min_funding', type=float)
-    max_funding = request.args.get('max_funding', type=float)
-    builder = request.args.get('builder', 'false').lower() == 'true'
-    query = Startup.query.filter(Startup.status != 'deleted')  # Exclude deleted startups
-    
+    try:
+        current_user_id = get_jwt_identity()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        industry = request.args.get('industry', type=str)
+        stage = request.args.get('stage', type=str)
+        search = request.args.get('search', type=str)
+        my_startups = request.args.get('my_startups', 'false').lower() == 'true'
+        min_funding = request.args.get('min_funding', type=float)
+        max_funding = request.args.get('max_funding', type=float)
+        builder = request.args.get('builder', 'false').lower() == 'true'
+        sort_by = request.args.get('sort_by', 'date', type=str)  # 'date', 'views', 'rating'
+        query = Startup.query.filter(Startup.status != 'deleted')  # Exclude deleted startups
 
-    
-    if builder:
-        print("Builder filter applied - showing startups where user is a member or creator")
-        query = query.join(Startup.startup_members).filter(
-            (StartupMember.user_id == current_user_id) & (Startup.creator_id != current_user_id) # Show startups where user is a member but not the creator
-        )
-    if page == 1:
-        query = query.order_by(Startup.created_at.desc())
-    else:
-        query = query.order_by(
-            Startup.created_at.desc(),
-            func.random()
-        )
+        if builder:
+            print("Builder filter applied - showing startups where user is a member but not creator")
+            query = query.join(StartupMember, StartupMember.startup_id == Startup.id).filter(
+                StartupMember.user_id == current_user_id,
+                StartupMember.is_active == True,
+                Startup.creator_id != current_user_id
+            )
 
-    # Apply filters
-    if industry:
-        query = query.filter(Startup.industry.ilike(f'%{industry}%'))
-    if stage:
-        query = query.filter(Startup.stage == stage)
-    if search:
-        query = query.filter(
-            (Startup.name.ilike(f'%{search}%')) |
-            (Startup.description.ilike(f'%{search}%'))
-        )
-    if min_funding is not None:
-        query = query.filter(Startup.funding_amount >= min_funding)
-    if max_funding is not None:
-        query = query.filter(Startup.funding_amount <= max_funding)
-    # Get user's startups if requested
-    if my_startups:
-        query = query.filter(Startup.creator_id == current_user_id)
-    result = paginate(query, page, per_page)
-    
-    return success_response({
-        'startups': [startup.to_dict() for startup in result['items']],
-        'pagination': {
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'pages': result['pages']
-        }
-    })
+        # Apply sorting based on sort_by parameter
+        if sort_by == 'views':
+            query = query.order_by(Startup.views.desc())
+        elif sort_by == 'rating':
+            from app.models.startup_rating import StartupRating
+            avg_rating_subquery = db.session.query(
+                StartupRating.startup_id,
+                func.avg(StartupRating.rating).label('avg_rating')
+            ).group_by(StartupRating.startup_id).subquery()
+
+            query = query.outerjoin(avg_rating_subquery, Startup.id == avg_rating_subquery.c.startup_id).order_by(
+                func.coalesce(avg_rating_subquery.c.avg_rating, 0).desc()
+            )
+        else:  # Default to 'date'
+            query = query.order_by(Startup.created_at.desc())
+
+        # Apply filters
+        if industry:
+            query = query.filter(Startup.industry.ilike(f'%{industry}%'))
+        if stage:
+            query = query.filter(Startup.stage == stage)
+        if search:
+            query = query.filter(
+                (Startup.name.ilike(f'%{search}%')) |
+                (Startup.description.ilike(f'%{search}%'))
+            )
+        if min_funding is not None:
+            query = query.filter(Startup.funding_amount >= min_funding)
+        if max_funding is not None:
+            query = query.filter(Startup.funding_amount <= max_funding)
+        if my_startups:
+            query = query.filter(Startup.creator_id == current_user_id)
+
+        result = paginate(query, page, per_page)
+
+        return success_response({
+            'startups': [startup.to_dict() for startup in result['items']],
+            'pagination': {
+                'page': result['page'],
+                'per_page': result['per_page'],
+                'total': result['total'],
+                'pages': result['pages']
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"🔥 GET_STARTUPS ERROR: {type(e).__name__}: {e}")
+        db.session.rollback()
+        return error_response(f'Failed to load startups: {str(e)}', 500)
 @startups_bp.route('/top', methods=['GET'])
 @jwt_required()
 def get_top_startups():
@@ -229,7 +246,9 @@ def get_startup(startup_id):
             'banner_url': startup.banner_url,
             'member_count': startup.member_count,
             'views': startup.views,
-            'createdAt': startup.created_at.isoformat(),
+            'average_rating': startup._get_average_rating(),
+            'rating_count': startup._get_rating_count(),
+            'createdAt': startup.created_at.isoformat() if startup.created_at else None,
             'access_level': 'public_limited',
             'roles': startup.roles,
             'tech_stack': startup.tech_stack
@@ -1012,7 +1031,7 @@ def get_startup_stats(startup_id):
         'views': startup.views,
         'member_count': startup.member_count,
         'positions': startup.positions,
-        'created_at': startup.created_at.isoformat(),
+        'created_at': startup.created_at.isoformat() if startup.created_at else None,
         'stage': startup._enum_to_value(startup.stage)
     }
     
@@ -1876,3 +1895,93 @@ def get_my_invitations():
         'count': len(invitations),
         'filter': status_filter
     })
+
+# ==================== RATING ENDPOINTS ====================
+
+@startups_bp.route('/<int:startup_id>/rate', methods=['POST'])
+@jwt_required()
+def rate_startup(startup_id):
+    """Submit or update a rating for a startup"""
+    current_user_id = get_jwt_identity()
+    
+    startup = Startup.query.get(startup_id)
+    if not startup:
+        return error_response('Startup not found', 404)
+    
+    data = request.get_json()
+    rating = data.get('rating')
+    review_text = data.get('review_text', '')
+    
+    # Validate rating
+    if rating is None or not isinstance(rating, (int, float)):
+        return error_response('Rating is required and must be a number', 400)
+    
+    if rating < 1 or rating > 5:
+        return error_response('Rating must be between 1 and 5', 400)
+    
+    try:
+        from app.models.startup_rating import StartupRating
+        
+        # Check if user already rated this startup
+        existing_rating = StartupRating.query.filter_by(
+            user_id=current_user_id,
+            startup_id=startup_id
+        ).first()
+        
+        if existing_rating:
+            # Update existing rating
+            existing_rating.rating = float(rating)
+            existing_rating.review_text = review_text
+        else:
+            # Create new rating
+            new_rating = StartupRating(
+                user_id=current_user_id,
+                startup_id=startup_id,
+                rating=float(rating),
+                review_text=review_text
+            )
+            db.session.add(new_rating)
+        
+        db.session.commit()
+        
+        return success_response({
+            'message': 'Rating submitted successfully',
+            'rating': float(rating)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to submit rating: {str(e)}', 500)
+
+
+@startups_bp.route('/<int:startup_id>/ratings', methods=['GET'])
+def get_startup_ratings(startup_id):
+    """Get all ratings for a startup and calculate average"""
+    startup = Startup.query.get(startup_id)
+    if not startup:
+        return error_response('Startup not found', 404)
+    
+    try:
+        from app.models.startup_rating import StartupRating
+        
+        ratings = StartupRating.query.filter_by(startup_id=startup_id).all()
+        
+        # Calculate average rating
+        if ratings:
+            avg_rating = sum(r.rating for r in ratings) / len(ratings)
+        else:
+            avg_rating = 0
+        
+        return success_response({
+            'startup_id': startup_id,
+            'ratings': [{
+                'id': r.id,
+                'user_id': r.user_id,
+                'rating': r.rating,
+                'review_text': r.review_text,
+                'created_at': r.created_at.isoformat()
+            } for r in ratings],
+            'average_rating': round(avg_rating, 2),
+            'total_ratings': len(ratings)
+        })
+    except Exception as e:
+        return error_response(f'Failed to fetch ratings: {str(e)}', 500)

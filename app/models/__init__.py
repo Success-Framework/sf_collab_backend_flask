@@ -53,3 +53,5 @@ from .product_purchase import ProductPurchase
 from .user_inventory import UserInventory
 from .EventTokenBalance import EventTokenBalance
 from .aiNews import AINewsArticle
+from .ideaCollabRequest import IdeaCollabRequest
+from .startup_rating import StartupRating

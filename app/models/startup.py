@@ -114,6 +114,12 @@ class Startup(db.Model):
         back_populates='startup',
         lazy='dynamic',
         cascade='all, delete-orphan')
+    
+    ratings = db.relationship('StartupRating',
+        back_populates='startup',
+        lazy='dynamic',
+        cascade='all, delete-orphan')
+
     # HELPER FUNCTIONS
     def increment_views(self, user_id):
         """Increment view count"""
@@ -260,6 +266,19 @@ class Startup(db.Model):
     
     def _enum_to_value(self, value):
         return value.value if hasattr(value, "value") else value
+
+    def _get_average_rating(self):
+        """Get average rating for this startup"""
+        from sqlalchemy import func
+        from app.models.startup_rating import StartupRating
+        result = db.session.query(func.avg(StartupRating.rating)).filter(
+            StartupRating.startup_id == self.id
+        ).scalar()
+        return round(float(result), 2) if result else 0
+
+    def _get_rating_count(self):
+        """Get total number of ratings"""
+        return self.ratings.count()
     
     def to_dict(self):
         return {
@@ -291,8 +310,10 @@ class Startup(db.Model):
             'status': self.status,
             'memberCount': self.member_count,
             'views': self.views,
-            'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat(),
+            'average_rating': self._get_average_rating(),
+            'rating_count': self._get_rating_count(),
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
             # 'startupViews': [view.to_dict() for view in self.startup_views]
             
         }
