@@ -218,7 +218,7 @@ CREATE TABLE `alembic_version` (
 
 LOCK TABLES `alembic_version` WRITE;
 /*!40000 ALTER TABLE `alembic_version` DISABLE KEYS */;
---INSERT INTO `alembic_version` VALUES ('55cb5f25f54c'),('d659945d25c6');
+INSERT INTO `alembic_version` VALUES ('ee78359866cc');
 /*!40000 ALTER TABLE `alembic_version` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -2326,3 +2326,24 @@ LOCK TABLES `idea_collab_requests` WRITE;
 /*!40000 ALTER TABLE `idea_collab_requests` DISABLE KEYS */;
 /*!40000 ALTER TABLE `idea_collab_requests` ENABLE KEYS */;
 UNLOCK TABLES;
+--
+-- Table structure for table `startup_ratings`
+--
+
+DROP TABLE IF EXISTS `startup_ratings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `startup_ratings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `rating` float NOT NULL,
+  `review_text` text,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_id` (`user_id`,`startup_id`),
+  KEY `startup_id` (`startup_id`),
+  CONSTRAINT `startup_ratings_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `startup_ratings_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
