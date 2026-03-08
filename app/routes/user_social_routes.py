@@ -365,7 +365,7 @@ def update_match_preferences(user_id):
 
 @user_social_bp.route('/suggestions', methods=['GET'])
 @jwt_required()
-def get_user_suggestions(user_id):
+def get_user_suggestions():
   """Get user suggestions based on match preferences"""
   limit = request.args.get('limit', 5, type=int)
   current_user_id = get_jwt_identity()
