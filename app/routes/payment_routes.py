@@ -691,3 +691,153 @@ def get_ai_tools():
         return success_response({"tools": []})
     tools = ai_plans[0].get('tools', [])
     return success_response({"tools": tools})
+
+@payment_bp.route("/deposit", methods=["POST"])
+@jwt_required()
+def deposit_funds():
+    """Allow users to deposit real money into their platform wallet"""
+    try:
+        data = request.get_json()
+        amount = data.get("amount")  # in cents
+        user_id = get_jwt_identity()
+        
+        if not amount or amount <= 0:
+            return error_response("Invalid amount", 400)
+        
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User not found", 404)
+        
+        session = stripe.checkout.Session.create(
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": "Platform Wallet Deposit"},
+                    "unit_amount": amount,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            ui_mode="hosted",
+            metadata={
+                "user_id": user_id,
+                "type": "deposit",
+            },
+            success_url=f"{current_app.config['FRONTEND_URL']}/wallet/deposit/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{current_app.config['FRONTEND_URL']}/wallet/deposit/cancel",
+        )
+        
+        return jsonify({
+            "checkoutSessionClientSecret": session["client_secret"],
+            "url": session["url"],
+            "success": True
+        })
+    except Exception as e:
+        return error_response(str(e), 500)
+@payment_bp.route("/wallet-balance", methods=["GET"])
+@jwt_required()
+def get_wallet_balance():
+    """Get user's wallet balance (balance is separate from credits)"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        
+        if not user:
+            return error_response("User not found", 404)
+        
+        balance = user.wallet.credits if user.wallet else 0
+        
+        return success_response({
+            "balance": balance,
+            "currency": "usd"
+        })
+    except Exception as e:
+        return error_response(str(e), 500)
+@payment_bp.route("/withdraw", methods=["POST"])
+@jwt_required()
+def withdraw_funds():
+    """Withdraw funds from wallet to connected bank account"""
+    try:
+        data = request.get_json()
+        amount = data.get("amount")  # in cents
+        user_id = get_jwt_identity()
+        
+        if not amount or amount <= 0:
+            return error_response("Invalid amount", 400)
+        
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User not found", 404)
+        
+        current_balance = user.wallet.credits if user.wallet else 0
+        if current_balance < amount:
+            return error_response("Insufficient balance", 400)
+        
+        if not user.stripe_connect_account_id:
+            return error_response("No connected bank account. Please connect Stripe account first.", 400)
+        
+        # Create payout to connected account
+        payout = stripe.Payout.create(
+            amount=amount,
+            currency="usd",
+            destination=user.stripe_connect_account_id,
+        )
+        
+        # Deduct from wallet using the model method
+        user.wallet.spend_credits(amount, description="Withdrawal to bank account")
+        
+        # Create withdrawal transaction record
+        withdrawal_tx = Transaction(
+            user_id=user_id,
+            amount=amount,
+            currency="usd",
+            type="withdrawal",
+            status="completed",
+            stripe_payout_id=payout.id
+        )
+        
+        db.session.add(withdrawal_tx)
+        db.session.commit()
+        
+        return success_response({
+            "withdrawal_id": withdrawal_tx.id,
+            "amount": amount,
+            "new_balance": user.wallet.credits,
+            "payout_id": payout.id
+        }, "Withdrawal processed successfully", 200)
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+@payment_bp.route("/wallet-transactions", methods=["GET"])
+@jwt_required()
+def get_wallet_transactions():
+    """Get user's wallet transaction history"""
+    try:
+        user_id = get_jwt_identity()
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 10, type=int)
+        
+        query = Transaction.query.filter(
+            Transaction.user_id == user_id,
+            Transaction.type.in_(["deposit", "withdrawal"])
+        ).order_by(Transaction.created_at.desc())
+        
+        paginated = paginate(query, page=page, per_page=per_page)
+        
+        result = [
+            {
+                "id": tx.id,
+                "type": tx.type,
+                "amount": tx.amount,
+                "status": tx.status,
+                "createdAt": tx.created_at.isoformat()
+            }
+            for tx in paginated["items"]
+        ]
+        
+        return success_response({
+            "transactions": result,
+            "pagination": paginated
+        })
+    except Exception as e:
+        return error_response(str(e), 500)

@@ -41,7 +41,7 @@ def get_ideas():
     stage = request.args.get('stage', type=str)
     creator_id = request.args.get('creator_id', type=int)
     search = request.args.get('search', type=str)
-    
+    sort_by = request.args.get('sort_by', 'created_at', type=str)
     query = Idea.query
     
     if industry:
@@ -56,7 +56,8 @@ def get_ideas():
             (Idea.description.ilike(f'%{search}%')) |
             (Idea.project_details.ilike(f'%{search}%'))
         )
-    
+    if sort_by in ['created_at', 'likes']:
+        query = query.order_by(getattr(Idea, sort_by).desc())
     result = paginate(query, page, per_page)
     
     return success_response({
@@ -68,7 +69,24 @@ def get_ideas():
             'pages': result['pages']
         }
     })
-
+@ideas_bp.route('/top', methods=['GET'])
+def get_top_ideas():
+    """Get top ideas based on likes"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    limit = request.args.get('limit', 10, type=int)
+    query = Idea.query.order_by(Idea.likes.desc()).limit(limit)
+    result = paginate(query, page, per_page)
+    
+    return success_response({
+        'ideas': [idea.to_dict() for idea in result['items']],
+        'pagination': {
+            'page': result['page'],
+            'per_page': result['per_page'],
+            'total': result['total'],
+            'pages': result['pages']
+        }
+    })
 
 @ideas_bp.route('/<int:idea_id>', methods=['GET'])
 @jwt_required()
