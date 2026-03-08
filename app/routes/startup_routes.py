@@ -199,8 +199,8 @@ def get_startups():
         print(f"🔥 GET_STARTUPS ERROR: {type(e).__name__}: {e}")
         db.session.rollback()
         return error_response(f'Failed to load startups: {str(e)}', 500)
+
 @startups_bp.route('/top', methods=['GET'])
-@jwt_required()
 def get_top_startups():
     """Get top startups by views"""
     page = request.args.get('page', 1, type=int)
@@ -224,13 +224,13 @@ def get_top_startups():
     })
 #! GET SINGLE STARTUP (Public - no auth required)
 @startups_bp.route('/<int:startup_id>', methods=['GET'])
-@jwt_required()
 def get_startup(startup_id):
-    current_user_id = get_jwt_identity()
+    current_user_id = request.args.get('user_id', type=int)  # Optional user_id for access level determination
     startup = Startup.query.get_or_404(startup_id)
     if startup.status == 'deleted':
         return error_response('Startup not found', 404)
-    startup.increment_views(current_user_id)
+    if current_user_id:
+        startup.increment_views(current_user_id)
 
     role = get_current_user_startup_role(startup_id)
     
@@ -1962,6 +1962,7 @@ def get_startup_ratings(startup_id):
     
     try:
         from app.models.startup_rating import StartupRating
+
         
         ratings = StartupRating.query.filter_by(startup_id=startup_id).all()
         
@@ -1985,3 +1986,184 @@ def get_startup_ratings(startup_id):
         })
     except Exception as e:
         return error_response(f'Failed to fetch ratings: {str(e)}', 500)
+from app.utils.ai_helpers import get_response
+import re
+@startups_bp.route('/<int:startup_id>/launch-data', methods=['GET'])
+@jwt_required()
+def get_startup_launch_data(startup_id):
+    """
+    AI endpoint to generate startup registration suggestions based on an existing idea.
+    Fetches idea data and returns pre-filled startup registration data.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    if not user:
+        return error_response('User not found', 404)
+    
+    # Fetch the idea by startup_id (assuming it's passed as idea_id)
+    from app.models.idea import Idea
+    idea = Idea.query.get(startup_id)
+    
+    if not idea:
+        return error_response('Idea not found', 404)
+    
+    try:
+        system_prompt = (
+            "You are a startup registration assistant. "
+            "Based on the provided idea data, generate startup registration suggestions. "
+            "Return ONLY valid JSON with no markdown formatting.\n\n"
+            "Schema:\n"
+            "{\n"
+            '  "name": "string (suggested startup name based on idea title)",\n'
+            '  "industry": "string (industry category)",\n'
+            '  "description": "string (2-3 sentence description based on idea)",\n'
+            '  "stage": "string (idea|mvp|beta|launched|growth)",\n'
+            '  "roles": {\n'
+            '    "role_name": {"positionsNumber": number}\n'
+            '  },\n'
+            '  "tech_stack": ["string (technologies)"],\n'
+            '  "location": "string (optional location)",\n'
+            '  "funding_round": "string (pre-seed|seed|seriesA|seriesB|etc)"\n'
+            "}"
+        )
+        
+        user_prompt = (
+            f"Based on this idea, suggest startup registration details:\n\n"
+            f"Title: {idea.title}\n"
+            f"Industry: {idea.industry}\n"
+            f"Stage: {idea.stage}\n"
+            f"Description: {idea.description}\n"
+            f"Project Details: {idea.project_details}\n"
+            f"Tags: {', '.join(idea.tags or [])}\n\n"
+            f"Generate realistic suggestions for a startup registration form."
+        )
+        
+        response_text, tokens_used = get_response(
+            model="qwen/qwen3-32b",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.7,
+            max_tokens=1024
+        )
+        
+        # Parse JSON response
+        try:
+            suggestions = json.loads(response_text)
+        except json.JSONDecodeError:
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                suggestions = json.loads(json_match.group())
+            else:
+                return error_response('Failed to parse AI suggestions', 500)
+        
+        return success_response({
+            'suggestions': suggestions,
+            'tokens_used': tokens_used
+        }, 'Suggestions generated successfully')
+        
+    except Exception as e:
+        print(f"❌ [AI_LAUNCH_DATA] Error: {str(e)}")
+        return error_response(f'Failed to generate suggestions: {str(e)}', 500)
+@startups_bp.route('/<int:startup_id>/ai/refine-description', methods=['POST'])
+@jwt_required()
+def refine_startup_description(startup_id):
+    """
+    AI endpoint to refine and improve startup description.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    if not user:
+        return error_response('User not found', 404)
+    
+    data = request.get_json() or {}
+    description = data.get('description', '').strip()
+    
+    if not description:
+        return error_response('Please provide a description to refine', 400)
+    
+    try:
+        system_prompt = (
+            "You are a professional startup copywriter. "
+            "Improve and refine the given startup description to be more compelling, "
+            "professional, and investor-ready. Keep it concise (2-3 sentences). "
+            "Return ONLY the refined description text, no JSON."
+        )
+        
+        response_text, tokens_used = get_response(
+            model="qwen/qwen3-32b",
+            system_prompt=system_prompt,
+            user_prompt=f"Refine this startup description:\n\n{description}",
+            temperature=0.7,
+            max_tokens=256
+        )
+        
+        return success_response({
+            'refined_description': response_text.strip(),
+            'tokens_used': tokens_used
+        })
+        
+    except Exception as e:
+        print(f"❌ [AI_REFINE_DESCRIPTION] Error: {str(e)}")
+        return error_response(f'Failed to refine description: {str(e)}', 500)
+@startups_bp.route('/<int:startup_id>/ai/suggest-roles', methods=['POST'])
+@jwt_required()
+def suggest_startup_roles(startup_id):
+    """
+    AI endpoint to suggest team roles based on startup description.
+    """
+    current_user_id = get_jwt_identity()
+    
+    data = request.get_json() or {}
+    startup_description = data.get('description', '').strip()
+    industry = data.get('industry', '').strip()
+    
+    if not startup_description:
+        return error_response('Please provide a startup description', 400)
+    
+    try:
+        system_prompt = (
+            "You are a startup HR consultant. "
+            "Based on the startup description and industry, suggest key team roles needed. "
+            "Return ONLY valid JSON with no markdown.\n\n"
+            "Schema:\n"
+            "{\n"
+            '  "roles": {\n'
+            '    "role_name": {"positionsNumber": number}\n'
+            '  }\n'
+            "}"
+        )
+        
+        user_prompt = (
+            f"Suggest team roles for this startup:\n"
+            f"Industry: {industry}\n"
+            f"Description: {startup_description}\n\n"
+            f"Suggest 3-5 key roles with position counts."
+        )
+        
+        response_text, tokens_used = get_response(
+            model="qwen/qwen3-32b",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.7,
+            max_tokens=512
+        )
+        
+        try:
+            roles_data = json.loads(response_text)
+        except json.JSONDecodeError:
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                roles_data = json.loads(json_match.group())
+            else:
+                return error_response('Failed to parse role suggestions', 500)
+        
+        return success_response({
+            'roles': roles_data.get('roles', {}),
+            'tokens_used': tokens_used
+        })
+        
+    except Exception as e:
+        print(f"❌ [AI_SUGGEST_ROLES] Error: {str(e)}")
+        return error_response(f'Failed to suggest roles: {str(e)}', 500)

@@ -243,6 +243,7 @@ CREATE TABLE `calendar_events` (
   `color` varchar(20) DEFAULT NULL,
   `location` varchar(255) DEFAULT NULL,
   `is_recurring` tinyint(1) DEFAULT NULL,
+  `visible_by` varchar(255) DEFAULT NULL,
   `recurrence_rule` varchar(255) DEFAULT NULL,
   `reminder_minutes` int DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
@@ -2347,3 +2348,29 @@ CREATE TABLE `startup_ratings` (
   CONSTRAINT `startup_ratings_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `friend_request`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `friend_request` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `sender_id` int NOT NULL,
+  `receiver_id` int NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'pending',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_friend_request` (`sender_id`,`receiver_id`),
+  CHECK (`sender_id` != `receiver_id`),
+  KEY `ix_friend_request_sender_id` (`sender_id`),
+  KEY `ix_friend_request_receiver_id` (`receiver_id`),
+  KEY `ix_friend_request_status` (`status`),
+  CONSTRAINT `friend_request_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `friend_request_ibfk_2` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `friend_request` WRITE;
+/*!40000 ALTER TABLE `friend_request` DISABLE KEYS */;
+/*!40000 ALTER TABLE `friend_request` ENABLE KEYS */;
+UNLOCK TABLES;

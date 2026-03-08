@@ -273,6 +273,7 @@ def get_users():
     status = request.args.get('status', type=str)
     role = request.args.get('role', type=str)
     search = request.args.get('search', type=str)
+    sort_by = request.args.get('sort_by', 'created_at', type=str)
     query = User.query
     if page == 1:
         query = query.order_by(User.created_at.desc())
@@ -292,7 +293,8 @@ def get_users():
             (User.last_name.ilike(f'%{search}%')) |
             (User.email.ilike(f'%{search}%'))
         )
-    
+    if sort_by in ['created_at', 'xp_points', 'streak_days', 'total_revenue', 'satisfaction_percentage', 'active_startups_count']:
+        query = query.order_by(getattr(User, sort_by).desc())
     result = paginate(query, page, per_page)
     
     return success_response({
@@ -304,7 +306,15 @@ def get_users():
             'pages': result['pages']
         }
     })
-
+@users_bp.route('/top', methods=['GET'])
+def get_top_users():
+    """Get top users based on XP points"""
+    limit = request.args.get('limit', 10, type=int)
+    top_users = User.query.order_by(User.xp_points.desc()).limit(limit).all()
+    
+    return success_response({
+        'users': [user.to_dict(public=True) for user in top_users]
+    })
 #! GET SINGLE USER BY ID
 @users_bp.route('/<int:user_id>', methods=['GET'])
 @jwt_required()
