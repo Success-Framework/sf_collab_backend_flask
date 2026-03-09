@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify
 from app.models.post import Post
+from app.models.postMedia import PostMedia
 from app.models.user import User
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
+from app.utils.upload_to_s3 import upload_file_to_s3
 
 posts_bp = Blueprint('posts', __name__)
 
@@ -15,8 +17,6 @@ def get_posts():
     author_id = request.args.get('author_id', type=int)
     post_type = request.args.get('type', type=str)
     search = request.args.get('search', type=str)
-    include_comments = request.args.get('include_comments', 'false').lower() == 'true'
-    include_media = request.args.get('include_media', 'false').lower() == 'true'
     
     query = Post.query
     
@@ -39,8 +39,8 @@ def get_posts():
     
     return success_response({
         'posts': [post.to_dict(
-            include_comments=include_comments,
-            include_media=include_media,
+            include_comments=True,
+            include_media=True,
             user_id=current_user_id
         ) for post in result['items']],
         'pagination': {
@@ -73,32 +73,47 @@ def get_post(post_id):
 @posts_bp.route('', methods=['POST'])
 def create_post():
     """Create new post"""
-    data = request.get_json()
+    media_files = request.files.getlist('media')
     
     required_fields = ['user_id', 'author_id', 'content']
-    if not all(field in data for field in required_fields):
+    if not all(field in request.form for field in required_fields):
         return error_response('Missing required fields')
     
     try:
-        user = User.query.get(data['user_id'])
+        user = User.query.get(request.form['user_id'])
         if not user:
             return error_response('User not found', 404)
         
         post = Post(
-            user_id=data['user_id'],
-            author_id=data['author_id'],
-            author_first_name=data.get('author_first_name', user.first_name),
-            author_last_name=data.get('author_last_name', user.last_name),
-            content=data['content'],
-            type=data.get('type', 'professional'),
-            tags=data.get('tags', [])
+            user_id=request.form.get('user_id', user.id),
+            author_id=request.form.get('author_id', user.id),
+            author_first_name=request.form.get('author_first_name', user.first_name),
+            author_last_name=request.form.get('author_last_name', user.last_name),
+            content=request.form.get('content'),
+            type=request.form.get('type', 'professional'),
+            tags=request.form.get('tags', [])
         )
-        
         db.session.add(post)
+        db.session.flush()
+
+        for file in media_files:
+            if not file or file.filename == '':
+                continue
+            media_url = upload_file_to_s3(file)
+            post_media = PostMedia(
+                file_name=file.filename,
+                content_type=file.content_type,
+                file_size=len(file.read()),
+                media_url=media_url,
+                parent_post=post.id
+            )
+            db.session.add(post_media)
+            post.media_items.append(post_media)
+       
         db.session.commit()
         
         return success_response({
-            'post': post.to_dict()
+            'post': post.to_dict(include_media=True if media_files else False)
         }, 'Post created successfully', 201)
     except Exception as e:
         db.session.rollback()

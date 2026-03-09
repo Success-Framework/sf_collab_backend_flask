@@ -860,7 +860,7 @@ DROP TABLE IF EXISTS `post_media`;
 CREATE TABLE `post_media` (
   `id` int NOT NULL AUTO_INCREMENT,
   `post_id` int NOT NULL,
-  `data` blob,
+  `media_url` varchar(500) NOT NULL,
   `content_type` varchar(100) DEFAULT NULL,
   `file_name` varchar(255) DEFAULT NULL,
   `file_size` int DEFAULT NULL,
