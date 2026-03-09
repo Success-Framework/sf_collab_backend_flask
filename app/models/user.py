@@ -15,6 +15,7 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     is_email_verified = db.Column(db.Boolean, default=False)
     last_login = db.Column(db.DateTime, nullable=True)
+    last_seen = db.Column(db.DateTime, nullable=True)  # Updated on socket disconnect
     status = db.Column(Enum(UserStatus), default=UserStatus.active)
     role = db.Column(Enum(UserRoles), default=UserRoles.member)
     xp_points = db.Column(db.Integer, default=0)
@@ -673,7 +674,9 @@ class User(db.Model):
                 'email': self.email,
                 'isEmailVerified': self.is_email_verified,
                 'lastLogin': self.last_login.isoformat() if self.last_login else None,
-                'last_seen': self.last_login.isoformat() if self.last_login else None,
+                'last_seen': self.last_seen.isoformat() if self.last_seen else (
+                    self.last_login.isoformat() if self.last_login else None
+                ),
                 'updatedAt': self.updated_at.isoformat(),
                 'timezone': self.get_timezone(),
                 'total_revenue': self.total_revenue,

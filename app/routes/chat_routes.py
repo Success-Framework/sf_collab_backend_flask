@@ -890,7 +890,7 @@ def edit_message(conversation_id, message_id):
 )
 @jwt_required()
 def react_to_message(conversation_id, message_id):
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())  # cast to int — sender_id is int in DB
     data = request.get_json() or {}
     reaction_emoji = data.get("emoji")
 
@@ -910,6 +910,7 @@ def react_to_message(conversation_id, message_id):
         reactions = metadata.get("reactions", {})  # {"👍":[1,2], "❤️":[3]}
 
         users = reactions.get(reaction_emoji, [])
+        is_adding = current_user_id not in users  # True = adding, False = removing
         if current_user_id in users:
             users.remove(current_user_id)
             if users:
@@ -933,7 +934,8 @@ def react_to_message(conversation_id, message_id):
         try:
             from app.models.notification import Notification
 
-            if message.sender_id != current_user_id:
+            # Only notify when ADDING a reaction (not removing), and never notify yourself
+            if is_adding and message.sender_id != current_user_id:
                 reactor = User.query.get(current_user_id)
                 if reactor:
                     notification = Notification(
