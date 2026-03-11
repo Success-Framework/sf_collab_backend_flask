@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.post import Post
 from app.models.postMedia import PostMedia
 from app.models.user import User
@@ -52,6 +53,7 @@ def get_posts():
     })
 
 @posts_bp.route('/<int:post_id>', methods=['GET'])
+@jwt_required()
 def get_post(post_id):
     """Get single post by ID"""
     post = Post.query.get(post_id)
@@ -71,6 +73,7 @@ def get_post(post_id):
     })
 
 @posts_bp.route('', methods=['POST'])
+@jwt_required()
 def create_post():
     """Create new post"""
     media_files = request.files.getlist('media')
@@ -120,6 +123,7 @@ def create_post():
         return error_response(f'Failed to create post: {str(e)}', 500)
 
 @posts_bp.route('/<int:post_id>', methods=['PUT'])
+@jwt_required()
 def update_post(post_id):
     """Update post"""
     post = Post.query.get(post_id)
@@ -147,6 +151,7 @@ def update_post(post_id):
         return error_response(f'Failed to update post: {str(e)}', 500)
 
 @posts_bp.route('/<int:post_id>/like', methods=['POST'])
+@jwt_required()
 def like_post(post_id):
     """Like a post"""
     post = Post.query.get(post_id)
@@ -185,6 +190,7 @@ def like_post(post_id):
         return error_response(f'Failed to like post: {str(e)}', 500)
 
 @posts_bp.route('/<int:post_id>/unlike', methods=['POST'])
+@jwt_required()
 def unlike_post(post_id):
     """Unlike a post"""
     data = request.get_json()
@@ -216,6 +222,7 @@ def unlike_post(post_id):
         return error_response(f'Failed to unlike post: {str(e)}', 500)
 
 @posts_bp.route('/<int:post_id>/tags', methods=['POST'])
+@jwt_required()
 def add_tag_to_post(post_id):
     """Add tag to post"""
     post = Post.query.get(post_id)
@@ -237,6 +244,7 @@ def add_tag_to_post(post_id):
         return error_response(f'Failed to add tag: {str(e)}', 500)
 
 @posts_bp.route('/<int:post_id>', methods=['DELETE'])
+@jwt_required()
 def delete_post(post_id):
     """Delete post"""
     post = Post.query.get(post_id)
@@ -250,3 +258,73 @@ def delete_post(post_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to delete post: {str(e)}', 500)
+    
+@posts_bp.route('/<int:post_id>/save', methods=['POST'])
+@jwt_required()
+def save_post(post_id):
+    """Save a post"""
+    post = Post.query.get(post_id)
+    if not post:
+        return error_response('Post not found', 404)
+    
+    data = request.get_json()
+    user_id = data.get('user_id') or get_jwt_identity()
+    
+    if not user_id:
+        return error_response('User not found', 400)
+    
+    # Check if user already saved the post
+    from app.models.postSave import PostSave
+    existing_save = PostSave.query.filter_by(post_id=post_id, user_id=user_id).first()
+    
+    if existing_save:
+        return error_response('Post already saved by user', 409)
+    
+    try:
+        # Create save record
+        save = PostSave(post_id=post_id, user_id=user_id)
+        db.session.add(save)
+        
+        # Increment post save count
+        post.increment_saves()
+        
+        db.session.commit()
+        return success_response({
+            'post': post.to_dict(user_id=user_id),
+            'save': save.to_dict()
+        }, 'Post saved successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to save post: {str(e)}', 500)
+
+@posts_bp.route('/<int:post_id>/unsave', methods=['POST'])
+@jwt_required()
+def unsave_post(post_id):
+    """Unsave a post"""
+    data = request.get_json()
+    user_id = data.get('user_id') or get_jwt_identity()
+
+    if not user_id:
+        return error_response('User not found', 400)
+    
+    post = Post.query.get(post_id)
+    if not post:
+        return error_response('Post not found', 404)
+    
+    from app.models.postSave import PostSave
+    save = PostSave.query.filter_by(post_id=post_id, user_id=user_id).first()
+    
+    if not save:
+        return error_response('Save not found', 404)
+    
+    try:
+        db.session.delete(save)
+        post.decrement_saves()
+        db.session.commit()
+        
+        return success_response({
+            'post': post.to_dict(user_id=user_id)
+        }, 'Post unsaved successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to unsave post: {str(e)}', 500)

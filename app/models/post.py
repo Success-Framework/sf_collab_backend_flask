@@ -79,6 +79,12 @@ class Post(db.Model):
         """Increment save count"""
         self.saves += 1
         db.session.commit()
+
+    def decrement_saves(self):
+        """Decrement save count"""
+        if self.saves > 0:
+            self.saves -= 1
+        db.session.commit()
     
     def add_tag(self, tag):
         """Add tag to post"""
