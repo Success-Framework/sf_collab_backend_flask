@@ -10,6 +10,7 @@ from app.utils.upload_to_s3 import upload_file_to_s3
 posts_bp = Blueprint('posts', __name__)
 
 @posts_bp.route('', methods=['GET'])
+@jwt_required
 def get_posts():
     """Get all posts with filtering"""
     page = request.args.get('page', 1, type=int)
