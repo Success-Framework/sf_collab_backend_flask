@@ -73,6 +73,10 @@ from .routes import (
     #! removed image_logo_generator_route,
     #! removed business_plan_route,
     #! removed qwen_chat_route
+    readiness_routes,
+    balance_routes,
+    crystal_routes,
+    
 )
 
 
@@ -144,4 +148,7 @@ blueprints = [
 { "blueprint": wallet_routes.wallet_bp, "url_prefix": '/api/wallet'},
 { "blueprint": store_routes.store_bp, "url_prefix": '/api/store'},
 { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
+{ "blueprint": readiness_routes.readiness_bp, "url_prefix": '/api/readiness' },
+{ "blueprint": balance_routes.balance_bp, "url_prefix": '/api/balance' },
+{ "blueprint": crystal_routes.crystals_bp, "url_prefix": '/api/crystals' },
 ]
