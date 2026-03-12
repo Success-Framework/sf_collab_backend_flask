@@ -127,7 +127,7 @@ def create_app(config_name=None):
         if request.path in ("/favicon.ico", "/health"):
             return response
         if request.method == "OPTIONS" and not response.headers.get("Access-Control-Allow-Origin"):
-            print("⚠️  CORS WARNING: Missing Access-Control-Allow-Origin header")
+            print("CORS WARNING: Missing Access-Control-Allow-Origin header")
 
 
         duration = round(time.time() - g.start_time, 4)
@@ -226,9 +226,9 @@ def create_app(config_name=None):
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
     
     # Start AI news scheduler
-    print("Starting AI news scheduler...")
-    start_scheduler(app)
-    print("✓ Scheduler started")
+    # print("Starting AI news scheduler...")
+    # start_scheduler(app)
+    # print("✓ Scheduler started")
     
     @app.route('/uploads/<path:filename>')
     def uploaded_file(filename):

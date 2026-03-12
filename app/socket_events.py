@@ -13,7 +13,7 @@ import logging
 
 connected_users = {}
 socket_sessions = {}
-print("✅ socket_events.py loaded")
+print("socket_events.py loaded")
 def get_user_from_token(token):
     try:
         decoded = decode_token(token)
@@ -23,15 +23,15 @@ def get_user_from_token(token):
         return None
 @socketio.on("connect")
 def handle_connect(auth):
-    print("🔌 SOCKET CONNECT")
+    print("SOCKET CONNECT")
     print("Auth payload:", auth)
     token = auth.get("token") if auth else None
     if not token:
-        print("❌ No token provided")
+        print("No token provided")
         return False  # causes 400 if missing
     user_id = get_user_from_token(token)
     if not user_id:
-        print("❌ Invalid token")
+        print("Invalid token")
         return False
     sid = request.sid
     socket_sessions[sid] = {"user_id": user_id}
@@ -46,7 +46,7 @@ def handle_connect(auth):
         },
         broadcast=True,
     )
-    print(f"✅ User {user_id} connected (sid={sid})")
+    print(f"User {user_id} connected (sid={sid})")
 @socketio.on("disconnect")
 def handle_disconnect():
     sid = request.sid
