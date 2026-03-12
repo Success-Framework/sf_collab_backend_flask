@@ -57,7 +57,9 @@ def standard_response(success=True, data=None, error=None, code=200):
 # ============================================================
 # QWEN ROUTES
 # ============================================================
-
+def total_credits(user):
+    wallet_credits = user.wallet.credits if user.wallet else 0
+    return wallet_credits + (user.credits or 0)
 #! HEALTH CHECK
 @ai_bp.route('/health', methods=['GET'])
 def qwen_health():
@@ -449,7 +451,7 @@ def qwen_business_ideas():
         user = User.query.get(user_id)
         if not user:
             return standard_response(False, None, 'User not found', 404)
-        if not user.wallet or user.wallet.credits < required_credits:
+        if not total_credits(user) < required_credits:
             return standard_response(False, None, 'Insufficient credits', 402)
         model = data.get('model', AVAILABLE_MODELS[0])
         max_tokens = data.get('max_tokens', 2048)
@@ -906,7 +908,7 @@ def generate_logo():
 
     total_cost = COST_PER_IMAGE * IMAGE_COUNT
 
-    if not user.wallet or (user.wallet.credits or 0) < total_cost:
+    if not total_credits(user) < total_cost:
         return jsonify({"error": "Not enough credits"}), 402
     
     client = get_openai_client()
@@ -1122,7 +1124,7 @@ def text_to_image():
 
     COST_PER_IMAGE = 10
 
-    if not user.wallet or (user.wallet.credits or 0) < COST_PER_IMAGE:
+    if not total_credits(user) < COST_PER_IMAGE:
         return standard_response(False, None, "Not enough credits", 402)
 
     try:

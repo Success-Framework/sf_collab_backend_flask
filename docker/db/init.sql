@@ -41,6 +41,7 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `is_email_verified` tinyint(1) DEFAULT NULL,
   `last_login` datetime DEFAULT NULL,
+  `last_seen` datetime DEFAULT NULL,
   `last_login_ip` varchar(45) DEFAULT NULL,
   `status` enum('active','deleted', 'banned') DEFAULT NULL,
   `role` enum('founder','contributor', 'influencer', 'content_creator', 'community_manager','hr_specialist','investor','advisor','mentor','partner','admin','moderator','member','technical_lead','engineering_manager','backend_engineer','frontend_engineer','fullstack_engineer','mobile_engineer','software_architect','qa_engineer','test_automation_engineer','devops_engineer','cloud_engineer','sre','infrastructure_engineer','platform_engineer','cybersecurity_engineer','data_scientist','data_engineer','machine_learning_engineer','ai_engineer','mlops_engineer','data_analyst','ai_researcher','product_manager','product_owner','ux_designer','ui_designer','product_designer','ux_researcher','growth_engineer','growth_marketer','seo_specialist','content_strategist') DEFAULT NULL,
