@@ -13,7 +13,7 @@ import logging
 
 connected_users = {}
 socket_sessions = {}
-print("socket_events.py loaded")
+print("✅ socket_events.py loaded")
 def get_user_from_token(token):
     try:
         decoded = decode_token(token)
@@ -23,15 +23,15 @@ def get_user_from_token(token):
         return None
 @socketio.on("connect")
 def handle_connect(auth):
-    print("SOCKET CONNECT")
+    print("🔌 SOCKET CONNECT")
     print("Auth payload:", auth)
     token = auth.get("token") if auth else None
     if not token:
-        print("No token provided")
+        print("❌ No token provided")
         return False  # causes 400 if missing
     user_id = get_user_from_token(token)
     if not user_id:
-        print("Invalid token")
+        print("❌ Invalid token")
         return False
     sid = request.sid
     socket_sessions[sid] = {"user_id": user_id}
@@ -44,11 +44,11 @@ def handle_connect(auth):
             "status": "online",
             "timestamp": datetime.utcnow().isoformat(),
         },
-        broadcast=True,
+        to="/",
     )
-    print(f"User {user_id} connected (sid={sid})")
+    print(f"✅ User {user_id} connected (sid={sid})")
 @socketio.on("disconnect")
-def handle_disconnect():
+def handle_disconnect(reason=None):
     sid = request.sid
     session = socket_sessions.pop(sid, None)
     if not session:
@@ -57,20 +57,17 @@ def handle_disconnect():
     connected_users[user_id].remove(sid)
     if not connected_users[user_id]:
         del connected_users[user_id]
-        # Capture exact disconnect time - authoritative "last seen" timestamp
-        now_dt = datetime.utcnow()
-        now_iso = now_dt.isoformat()
-        # Persist to DB so last_seen survives server restarts
+        now_iso = datetime.utcnow().isoformat()
+        # Persist last_seen timestamp in DB so other users see accurate "last seen" times
         try:
             from app.models.user import User
-            user = User.query.get(int(user_id))
-            if user:
-                user.last_seen = now_dt
+            user = User.query.get(user_id)
+            if user and hasattr(user, 'last_seen'):
+                user.last_seen = datetime.utcnow()
                 db.session.commit()
         except Exception as e:
             logging.warning(f"Could not update last_seen for user {user_id}: {e}")
-        # Broadcast with exact NOW timestamp - never the stale DB value
-        socketio.emit(
+        emit(
             "user_status",
             {
                 "user_id": user_id,
@@ -78,7 +75,7 @@ def handle_disconnect():
                 "timestamp": now_iso,
                 "last_seen": now_iso,
             },
-            broadcast=True,
+            to="/",
         )
     # Clear away state on disconnect
     _last_activity.pop(str(user_id), None)
@@ -412,7 +409,7 @@ def handle_user_activity(data):
     # Check if user is recovering from 'away' state
     last = _last_activity.get(user_id)
     was_away = _user_away_status.get(user_id, False)
-    AWAY_THRESHOLD_SECS = 5 * 60  # 5 minutes - must match frontend idle threshold
+    AWAY_THRESHOLD_SECS = 3 * 60  # 3 minutes
 
     if last and was_away:
         # User is back — broadcast online recovery
@@ -421,7 +418,7 @@ def handle_user_activity(data):
             'user_id': user_id,
             'status': 'online',
             'timestamp': ts_str,
-        }, broadcast=True, include_self=False)
+        }, to="/", include_self=False)
 
     # Update last activity
     _last_activity[user_id] = now
@@ -430,13 +427,13 @@ def handle_user_activity(data):
     emit('user_activity', {
         'user_id': user_id,
         'ts': ts_str,
-    }, broadcast=True, include_self=False)
+    }, to="/", include_self=False)
 
 
 def _check_away_users():
     """Background thread: broadcast 'away' for users silent for 3+ minutes."""
     import time
-    AWAY_THRESHOLD_SECS = 5 * 60  # 5 minutes - must match frontend idle threshold
+    AWAY_THRESHOLD_SECS = 3 * 60
     CHECK_INTERVAL = 30  # check every 30s
 
     while True:
@@ -455,7 +452,7 @@ def _check_away_users():
                         'user_id': user_id,
                         'status': 'away',
                         'timestamp': now.isoformat(),
-                    }, broadcast=True)
+                    }, to="/")
                     logging.info(f"User {user_id} marked away after {gap:.0f}s silence")
         except Exception as e:
             logging.warning(f"Away checker error: {e}")

@@ -201,6 +201,13 @@ def create_app(config_name=None):
             print(f"⚠ Sessions table race (harmless): {type(e).__name__}: {e}")
         else:
             raise
+        
+    with app.app_context():
+      from app.models.marketplace_category import seed_categories
+      try:
+          seed_categories()
+      except Exception:
+          pass
     
     # auth_routes.init_oauth(app)
     socketio.init_app(app)

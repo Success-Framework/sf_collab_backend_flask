@@ -1,0 +1,754 @@
+"""
+Marketplace Routes — SF Marketplace Foundation
+================================================
+Blueprint mounted at /api/marketplace
+
+Endpoints:
+  GET  /marketplace/categories              — list all categories
+  GET  /marketplace/listings                — browse published listings
+  GET  /marketplace/listings/<id>           — get single listing detail
+  POST /marketplace/seller/register         — register as a seller
+  GET  /marketplace/seller/me               — get my seller profile
+  POST /marketplace/listings                — create a new listing (draft)
+  PUT  /marketplace/listings/<id>           — update a listing
+  POST /marketplace/listings/<id>/publish   — publish a draft listing
+  POST /marketplace/listings/<id>/archive   — archive a listing
+  POST /marketplace/listings/<id>/upload    — upload the main product file
+  POST /marketplace/listings/<id>/previews  — upload preview images
+  GET  /marketplace/my-listings             — get my listings as seller
+  POST /marketplace/listings/<id>/boost     — boost visibility with crystals (future)
+
+Admin:
+  POST /marketplace/admin/listings/<id>/reject  — admin rejects listing
+  GET  /marketplace/admin/listings              — admin: all listings (any status)
+  PUT  /marketplace/admin/seller/<id>/verify    — admin verifies a seller
+"""
+
+import os
+import uuid
+from datetime import datetime
+from flask import Blueprint, request, jsonify, current_app, send_from_directory
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from werkzeug.utils import secure_filename
+from app.extensions import db
+from app.models.user import User
+from app.models.marketplace_seller import Seller
+from app.models.marketplace_category import MarketplaceCategory
+from app.models.marketplace_listing import MarketplaceListing, ALLOWED_PRODUCT_EXTENSIONS
+from sqlalchemy import desc, or_
+
+marketplace_bp = Blueprint('marketplace', __name__)
+
+# ------------------------------------------------------------------
+# Upload folder setup — mirrors the pattern in user_routes.py
+# ------------------------------------------------------------------
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+MARKETPLACE_UPLOAD_DIR   = os.path.join(BASE_DIR, 'uploads', 'marketplace', 'files')
+MARKETPLACE_PREVIEW_DIR  = os.path.join(BASE_DIR, 'uploads', 'marketplace', 'previews')
+
+os.makedirs(MARKETPLACE_UPLOAD_DIR,  exist_ok=True)
+os.makedirs(MARKETPLACE_PREVIEW_DIR, exist_ok=True)
+
+MAX_FILE_SIZE    = 50  * 1024 * 1024   # 50MB for product files
+MAX_PREVIEW_SIZE = 5   * 1024 * 1024   # 5MB per preview image
+MAX_PREVIEWS     = 5                    # max preview images per listing
+
+ALLOWED_PREVIEW_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
+
+
+# ------------------------------------------------------------------
+# Helpers — same pattern as user_routes.py
+# ------------------------------------------------------------------
+
+def allowed_product_file(filename: str) -> bool:
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    return ext in ALLOWED_PRODUCT_EXTENSIONS
+
+
+def allowed_preview(filename: str) -> bool:
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    return ext in ALLOWED_PREVIEW_EXTENSIONS
+
+
+def validate_file_size(file, max_size: int) -> bool:
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    return size <= max_size
+
+
+def save_product_file(file, seller_id: int):
+    """
+    Save the main downloadable product file.
+    Returns a dict with url, name, size, type — same shape as user_routes.save_uploaded_file.
+    """
+    filename = secure_filename(file.filename)
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    unique_name = f"{timestamp}_{seller_id}_{uuid.uuid4().hex[:8]}_{filename}"
+    file_path   = os.path.join(MARKETPLACE_UPLOAD_DIR, unique_name)
+    file.save(file_path)
+    return {
+        'url':       f"/uploads/marketplace/files/{unique_name}",
+        'name':      filename,
+        'size':      os.path.getsize(file_path),
+        'type':      file.content_type or filename.rsplit('.', 1)[-1].lower(),
+        'path':      file_path,
+    }
+
+
+def save_preview_image(file, seller_id: int):
+    """Save a single preview image. Returns the URL string."""
+    filename  = secure_filename(file.filename)
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    unique_name = f"{timestamp}_{seller_id}_{uuid.uuid4().hex[:6]}_{filename}"
+    file_path   = os.path.join(MARKETPLACE_PREVIEW_DIR, unique_name)
+    file.save(file_path)
+    return f"/uploads/marketplace/previews/{unique_name}"
+
+
+def require_admin(user_id: int) -> bool:
+    user = User.query.get(user_id)
+    return bool(user and getattr(user, 'is_admin', lambda: False)())
+
+
+def get_or_404(model, id_):
+    obj = model.query.get(id_)
+    if not obj:
+        return None, jsonify({'success': False, 'error': f'{model.__name__} not found'}), 404
+    return obj, None, None
+
+
+# ------------------------------------------------------------------
+# CATEGORY ENDPOINTS
+# ------------------------------------------------------------------
+
+@marketplace_bp.route('/categories', methods=['GET'])
+def get_categories():
+    """List all active marketplace categories."""
+    cats = MarketplaceCategory.query.filter_by(is_active=True)\
+                                    .order_by(MarketplaceCategory.sort_order).all()
+    return jsonify({'success': True, 'categories': [c.to_dict() for c in cats]}), 200
+
+
+# ------------------------------------------------------------------
+# LISTING BROWSE ENDPOINTS
+# ------------------------------------------------------------------
+
+@marketplace_bp.route('/listings', methods=['GET'])
+def get_listings():
+    """
+    Browse published marketplace listings.
+    Query params:
+      category_slug, item_type, search, min_price, max_price,
+      sort (newest|price_asc|price_desc|rating|popular),
+      page, per_page
+    """
+    try:
+        page         = request.args.get('page', 1, type=int)
+        per_page     = min(request.args.get('per_page', 20, type=int), 100)
+        category_slug = request.args.get('category_slug')
+        item_type    = request.args.get('item_type')
+        search       = request.args.get('search', '').strip()
+        min_price    = request.args.get('min_price', type=float)
+        max_price    = request.args.get('max_price', type=float)
+        sort         = request.args.get('sort', 'newest')
+
+        query = MarketplaceListing.query.filter_by(status='published', is_active=True)
+
+        if category_slug:
+            cat = MarketplaceCategory.query.filter_by(slug=category_slug).first()
+            if cat:
+                query = query.filter_by(category_id=cat.id)
+
+        if item_type:
+            query = query.filter_by(item_type=item_type)
+
+        if search:
+            like = f'%{search}%'
+            query = query.filter(
+                or_(
+                    MarketplaceListing.title.ilike(like),
+                    MarketplaceListing.description.ilike(like),
+                )
+            )
+
+        if min_price is not None:
+            query = query.filter(MarketplaceListing.price_cents >= int(min_price * 100))
+        if max_price is not None:
+            query = query.filter(MarketplaceListing.price_cents <= int(max_price * 100))
+
+        sort_map = {
+            'newest':     desc(MarketplaceListing.created_at),
+            'price_asc':  MarketplaceListing.price_cents,
+            'price_desc': desc(MarketplaceListing.price_cents),
+            'rating':     desc(MarketplaceListing.rating),
+            'popular':    desc(MarketplaceListing.downloads_count),
+        }
+        query = query.order_by(
+            desc(MarketplaceListing.is_boosted),   # boosted listings float to top
+            sort_map.get(sort, desc(MarketplaceListing.created_at))
+        )
+
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        return jsonify({
+            'success': True,
+            'listings': [l.to_dict() for l in pagination.items],
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': pagination.total,
+                'pages': pagination.pages,
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/listings/<int:listing_id>', methods=['GET'])
+def get_listing(listing_id):
+    """Get single listing detail and increment view count."""
+    try:
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing or not listing.is_active:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+        if listing.status != 'published':
+            return jsonify({'success': False, 'error': 'Listing not available'}), 404
+
+        listing.increment_views()
+
+        return jsonify({'success': True, 'listing': listing.to_dict()}), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ------------------------------------------------------------------
+# SELLER REGISTRATION & PROFILE
+# ------------------------------------------------------------------
+
+@marketplace_bp.route('/seller/register', methods=['POST'])
+@jwt_required()
+def register_seller():
+    """Register the current user as a marketplace seller."""
+    try:
+        user_id = int(get_jwt_identity())
+        data    = request.get_json() or {}
+
+        # Check already registered
+        existing = Seller.query.filter_by(user_id=user_id).first()
+        if existing:
+            return jsonify({
+                'success': True,
+                'seller': existing.to_dict(),
+                'message': 'Already registered as a seller'
+            }), 200
+
+        seller = Seller(
+            user_id=user_id,
+            bio=data.get('bio', ''),
+            specialization_categories=data.get('specialization_categories', []),
+        )
+        db.session.add(seller)
+        db.session.commit()
+
+        return jsonify({'success': True, 'seller': seller.to_dict()}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/seller/me', methods=['GET'])
+@jwt_required()
+def get_my_seller_profile():
+    """Get current user's seller profile."""
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        if not seller:
+            return jsonify({'success': False, 'error': 'Not registered as a seller'}), 404
+
+        return jsonify({'success': True, 'seller': seller.to_dict()}), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ------------------------------------------------------------------
+# LISTING CRUD
+# ------------------------------------------------------------------
+
+@marketplace_bp.route('/listings', methods=['POST'])
+@jwt_required()
+def create_listing():
+    """
+    Create a new listing in DRAFT status.
+    The seller can upload files and then publish separately.
+    """
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        if not seller:
+            return jsonify({
+                'success': False,
+                'error': 'You must register as a seller first'
+            }), 403
+
+        if not seller.is_active:
+            return jsonify({'success': False, 'error': 'Seller account is suspended'}), 403
+
+        data = request.get_json() or {}
+
+        # Validate required fields
+        required = ['title', 'description', 'price', 'category_id']
+        missing  = [f for f in required if not data.get(f)]
+        if missing:
+            return jsonify({
+                'success': False,
+                'error': f'Missing required fields: {", ".join(missing)}'
+            }), 400
+
+        # Validate category exists
+        category = MarketplaceCategory.query.get(data['category_id'])
+        if not category or not category.is_active:
+            return jsonify({'success': False, 'error': 'Invalid category'}), 400
+
+        # Convert price to cents
+        try:
+            price_cents = int(round(float(data['price']) * 100))
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'error': 'Invalid price'}), 400
+
+        if price_cents <= 0:
+            return jsonify({'success': False, 'error': 'Price must be greater than zero'}), 400
+
+        # Validate item_type if provided
+        item_type = data.get('item_type', '')
+        if item_type and category.allowed_types:
+            if item_type not in category.allowed_types:
+                return jsonify({
+                    'success': False,
+                    'error': f'item_type "{item_type}" not allowed in {category.name}. '
+                             f'Allowed: {", ".join(category.allowed_types)}'
+                }), 400
+
+        listing = MarketplaceListing(
+            seller_id=seller.id,
+            category_id=category.id,
+            title=data['title'].strip(),
+            description=data['description'].strip(),
+            item_type=item_type,
+            price_cents=price_cents,
+            tags=data.get('tags', []),
+            status='draft',
+        )
+        db.session.add(listing)
+        db.session.commit()
+
+        return jsonify({'success': True, 'listing': listing.to_dict()}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/listings/<int:listing_id>', methods=['PUT'])
+@jwt_required()
+def update_listing(listing_id):
+    """Update a draft or published listing (seller only)."""
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        if not seller:
+            return jsonify({'success': False, 'error': 'Not registered as a seller'}), 403
+
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+        if listing.seller_id != seller.id:
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+        if listing.status == 'archived':
+            return jsonify({'success': False, 'error': 'Cannot edit an archived listing'}), 400
+
+        data = request.get_json() or {}
+
+        updatable = ['title', 'description', 'item_type', 'tags']
+        for field in updatable:
+            if field in data:
+                setattr(listing, field, data[field])
+
+        if 'price' in data:
+            try:
+                listing.price_cents = int(round(float(data['price']) * 100))
+            except (ValueError, TypeError):
+                return jsonify({'success': False, 'error': 'Invalid price'}), 400
+
+        if 'category_id' in data:
+            cat = MarketplaceCategory.query.get(data['category_id'])
+            if not cat or not cat.is_active:
+                return jsonify({'success': False, 'error': 'Invalid category'}), 400
+            listing.category_id = cat.id
+
+        listing.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'success': True, 'listing': listing.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/listings/<int:listing_id>/publish', methods=['POST'])
+@jwt_required()
+def publish_listing(listing_id):
+    """Publish a draft listing — makes it visible in the marketplace."""
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        if not seller:
+            return jsonify({'success': False, 'error': 'Not registered as a seller'}), 403
+
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+        if listing.seller_id != seller.id:
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        listing.publish()
+
+        return jsonify({'success': True, 'listing': listing.to_dict()}), 200
+
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/listings/<int:listing_id>/archive', methods=['POST'])
+@jwt_required()
+def archive_listing(listing_id):
+    """Seller archives their listing."""
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing or listing.seller_id != seller.id:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+
+        listing.archive()
+        return jsonify({'success': True, 'listing': listing.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ------------------------------------------------------------------
+# FILE UPLOAD ENDPOINTS
+# ------------------------------------------------------------------
+
+@marketplace_bp.route('/listings/<int:listing_id>/upload', methods=['POST'])
+@jwt_required()
+def upload_product_file(listing_id):
+    """
+    Upload the main downloadable product file.
+    Accepts multipart/form-data with field name 'file'.
+    Max size: 50MB.
+    """
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        if not seller:
+            return jsonify({'success': False, 'error': 'Not registered as a seller'}), 403
+
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+        if listing.seller_id != seller.id:
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'success': False, 'error': 'Empty filename'}), 400
+
+        if not allowed_product_file(file.filename):
+            return jsonify({
+                'success': False,
+                'error': f'File type not allowed. Allowed: {", ".join(sorted(ALLOWED_PRODUCT_EXTENSIONS))}'
+            }), 400
+
+        if not validate_file_size(file, MAX_FILE_SIZE):
+            return jsonify({
+                'success': False,
+                'error': f'File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB'
+            }), 400
+
+        # Delete old file if replacing
+        if listing.file_url:
+            old_path = os.path.join(BASE_DIR, listing.file_url.lstrip('/'))
+            if os.path.exists(old_path):
+                os.remove(old_path)
+
+        file_info = save_product_file(file, seller.id)
+
+        listing.file_url        = file_info['url']
+        listing.file_name       = file_info['name']
+        listing.file_size_bytes = file_info['size']
+        listing.file_type       = file_info['type']
+        listing.updated_at      = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'file': {
+                'url':  file_info['url'],
+                'name': file_info['name'],
+                'size': file_info['size'],
+                'type': file_info['type'],
+            },
+            'listing': listing.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/listings/<int:listing_id>/previews', methods=['POST'])
+@jwt_required()
+def upload_preview_images(listing_id):
+    """
+    Upload preview images for a listing.
+    Accepts multipart/form-data with field name 'images' (multiple allowed).
+    Max 5 previews total. Max 5MB each.
+    """
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        if not seller:
+            return jsonify({'success': False, 'error': 'Not registered as a seller'}), 403
+
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing or listing.seller_id != seller.id:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+
+        files = request.files.getlist('images')
+        if not files:
+            return jsonify({'success': False, 'error': 'No images provided'}), 400
+
+        current_previews = listing.preview_images or []
+        remaining_slots  = MAX_PREVIEWS - len(current_previews)
+
+        if remaining_slots <= 0:
+            return jsonify({
+                'success': False,
+                'error': f'Maximum {MAX_PREVIEWS} preview images allowed'
+            }), 400
+
+        new_urls = []
+        for file in files[:remaining_slots]:
+            if not file.filename:
+                continue
+            if not allowed_preview(file.filename):
+                return jsonify({
+                    'success': False,
+                    'error': f'Preview must be an image (png, jpg, jpeg, webp, gif)'
+                }), 400
+            if not validate_file_size(file, MAX_PREVIEW_SIZE):
+                return jsonify({
+                    'success': False,
+                    'error': f'Preview image too large. Max {MAX_PREVIEW_SIZE // (1024*1024)}MB'
+                }), 400
+            url = save_preview_image(file, seller.id)
+            new_urls.append(url)
+
+        listing.preview_images = current_previews + new_urls
+        listing.updated_at     = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'preview_images': listing.preview_images,
+            'listing': listing.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/listings/<int:listing_id>/previews/<int:preview_index>', methods=['DELETE'])
+@jwt_required()
+def delete_preview_image(listing_id, preview_index):
+    """Remove a specific preview image by its index."""
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing or listing.seller_id != seller.id:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+
+        previews = list(listing.preview_images or [])
+        if preview_index < 0 or preview_index >= len(previews):
+            return jsonify({'success': False, 'error': 'Invalid preview index'}), 400
+
+        # Delete file from disk
+        url = previews[preview_index]
+        old_path = os.path.join(BASE_DIR, url.lstrip('/'))
+        if os.path.exists(old_path):
+            os.remove(old_path)
+
+        previews.pop(preview_index)
+        listing.preview_images = previews
+        db.session.commit()
+
+        return jsonify({'success': True, 'preview_images': listing.preview_images}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ------------------------------------------------------------------
+# MY LISTINGS (SELLER VIEW)
+# ------------------------------------------------------------------
+
+@marketplace_bp.route('/my-listings', methods=['GET'])
+@jwt_required()
+def get_my_listings():
+    """Get all listings belonging to the current seller."""
+    try:
+        user_id = int(get_jwt_identity())
+        seller  = Seller.query.filter_by(user_id=user_id).first()
+
+        if not seller:
+            return jsonify({'success': False, 'error': 'Not registered as a seller'}), 404
+
+        status = request.args.get('status')   # optional filter
+        query  = MarketplaceListing.query.filter_by(seller_id=seller.id)
+        if status:
+            query = query.filter_by(status=status)
+        query = query.order_by(desc(MarketplaceListing.created_at))
+
+        listings = query.all()
+        return jsonify({
+            'success': True,
+            'listings': [l.to_dict(include_seller=False) for l in listings]
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ------------------------------------------------------------------
+# ADMIN ENDPOINTS
+# ------------------------------------------------------------------
+
+@marketplace_bp.route('/admin/listings', methods=['GET'])
+@jwt_required()
+def admin_get_all_listings():
+    """Admin: get all listings regardless of status."""
+    try:
+        user_id = int(get_jwt_identity())
+        if not require_admin(user_id):
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+
+        page     = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 20, type=int), 100)
+        status   = request.args.get('status')
+
+        query = MarketplaceListing.query
+        if status:
+            query = query.filter_by(status=status)
+        query = query.order_by(desc(MarketplaceListing.created_at))
+
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        return jsonify({
+            'success': True,
+            'listings': [l.to_dict() for l in pagination.items],
+            'pagination': {
+                'page': page, 'per_page': per_page,
+                'total': pagination.total, 'pages': pagination.pages
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/admin/listings/<int:listing_id>/reject', methods=['POST'])
+@jwt_required()
+def admin_reject_listing(listing_id):
+    """Admin rejects a listing that doesn't meet marketplace rules."""
+    try:
+        user_id = int(get_jwt_identity())
+        if not require_admin(user_id):
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+
+        listing = MarketplaceListing.query.get(listing_id)
+        if not listing:
+            return jsonify({'success': False, 'error': 'Listing not found'}), 404
+
+        data   = request.get_json() or {}
+        reason = data.get('reason', 'Does not meet marketplace content guidelines')
+        listing.reject(reason)
+
+        return jsonify({'success': True, 'listing': listing.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketplace_bp.route('/admin/seller/<int:seller_id>/verify', methods=['PUT'])
+@jwt_required()
+def admin_verify_seller(seller_id):
+    """Admin verifies or suspends a seller account."""
+    try:
+        user_id = int(get_jwt_identity())
+        if not require_admin(user_id):
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+
+        seller = Seller.query.get(seller_id)
+        if not seller:
+            return jsonify({'success': False, 'error': 'Seller not found'}), 404
+
+        data   = request.get_json() or {}
+        status = data.get('status')
+        if status not in ('verified', 'suspended', 'unverified', 'pending'):
+            return jsonify({
+                'success': False,
+                'error': 'status must be one of: verified, suspended, unverified, pending'
+            }), 400
+
+        seller.verification_status = status
+        db.session.commit()
+
+        return jsonify({'success': True, 'seller': seller.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ------------------------------------------------------------------
+# FILE SERVING — serve marketplace files at /uploads/marketplace/*
+# Registered in app/__init__.py via the existing uploaded_file route
+# which already serves /uploads/<path:filename>
+# No extra route needed here.
+# ------------------------------------------------------------------

@@ -83,6 +83,14 @@ class User(db.Model):
     
     # ========== RELATIONSHIPS ==========
     
+     # Marketplace seller profile (one-to-one)
+    seller_profile = db.relationship(
+        'Seller',
+        back_populates='user',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+    
     # =========================================================================
     # WALLET & STORE RELATIONSHIPS - ADD THESE TO YOUR USER MODEL
     # =========================================================================
@@ -740,3 +748,5 @@ class User(db.Model):
         if not old_file_size_mb or not new_file_size_mb:
             return
         self.storage_used_mb = max((self.storage_used_mb or 0) - old_file_size_mb + new_file_size_mb, 0)
+        
+    
