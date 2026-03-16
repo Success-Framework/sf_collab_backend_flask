@@ -42,6 +42,7 @@ def get_user_by_username(username):
 
 
 @post_comments_bp.route('', methods=['GET'])
+@jwt_required()
 def get_post_comments():
     """Get all post comments with filtering"""
     page = request.args.get('page', 1, type=int)
@@ -70,6 +71,7 @@ def get_post_comments():
 
 
 @post_comments_bp.route('/<int:comment_id>', methods=['GET'])
+@jwt_required()
 def get_post_comment(comment_id):
     """Get single post comment by ID"""
     comment = PostComment.query.get(comment_id)

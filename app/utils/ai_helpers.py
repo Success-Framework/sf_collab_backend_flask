@@ -3,7 +3,6 @@ from groq import Groq
 import re
 import json
 from openai import OpenAI
-from weasyprint import HTML
 import markdown
 import base64
 def get_groq_client():
@@ -52,6 +51,7 @@ def extract_text_from_response(response, *, expect_json=False, strict=False):
 
 
 def generate_pdf_from_markdown(markdown_text, output_path):
+    from weasyprint import HTML
     html = markdown.markdown(
         markdown_text,
         extensions=["extra", "tables", "fenced_code"]

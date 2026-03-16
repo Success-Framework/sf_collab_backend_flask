@@ -743,7 +743,7 @@ def get_credits():
     user = User.query.get(user_id)
     if not user:
         return error_response("User not found", 404)
-    wallet_credits = user.wallet.credits if user.wallet else 0
+    wallet_credits = user.wallet.credits if user.wallet else user.credits or 0
     return success_response({"credits": wallet_credits})
 
 @payment_bp.route("/ai-tools", methods=["GET"])
