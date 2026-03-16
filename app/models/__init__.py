@@ -55,6 +55,9 @@ from .EventTokenBalance import EventTokenBalance
 from .aiNews import AINewsArticle
 from .ideaCollabRequest import IdeaCollabRequest
 from .startup_rating import StartupRating
+from .marketplace_category import MarketplaceCategory
+from .marketplace_listing import MarketplaceListing
+from .marketplace_seller import Seller
 
 # Economy Layer 2: Real-money Balance + Escrow
 from .Balance import Balance, BalanceTransaction
