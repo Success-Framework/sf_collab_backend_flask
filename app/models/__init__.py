@@ -55,3 +55,10 @@ from .EventTokenBalance import EventTokenBalance
 from .aiNews import AINewsArticle
 from .ideaCollabRequest import IdeaCollabRequest
 from .startup_rating import StartupRating
+
+# Economy Layer 2: Real-money Balance + Escrow
+from .Balance import Balance, BalanceTransaction
+from .EscrowTransaction import EscrowTransaction
+
+# Economy Layer 3: Crystals (visibility acceleration only — NOT money)
+from .Crystal import CrystalWallet, CrystalTransaction, VisibilityBoost

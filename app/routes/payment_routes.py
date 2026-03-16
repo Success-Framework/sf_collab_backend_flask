@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, current_app, abort
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_cors import cross_origin
 from app.models.transaction import Transaction
-from app.extensions import db
+from app.extensions import db, celery
 from app.models.plan import Plan
 from app.subscription_plans import PLANS
 from app.models.user import User
@@ -19,8 +19,47 @@ from app.notifications.helpers import (
     notify_points_earned,
     notify_contribution_verified
 )
+# Real-money Balance model — deposits from Stripe land here
+from app.models.Balance import Balance, BalanceTransaction
+# Crystal visibility boosts — needed for the expiry Celery task
+from app.models.Crystal import VisibilityBoost
+from datetime import datetime
 
 payment_bp = Blueprint("payments", __name__, url_prefix="/payments")
+
+
+# =============================================================================
+# CELERY TASK — Auto-expire Visibility Boosts
+# =============================================================================
+# Runs every 10 minutes (configured in extensions.py beat_schedule).
+# Finds all boosts whose expires_at has passed and marks them inactive.
+# This keeps the discovery/ranking system accurate without manual cleanup.
+# =============================================================================
+@celery.task(name="app.routes.payment_routes.expire_visibility_boosts")
+def expire_visibility_boosts():
+    """
+    Background task: mark expired VisibilityBoosts as inactive.
+    Scheduled via Celery Beat every 10 minutes.
+
+    To run manually (for testing):
+        from app.routes.payment_routes import expire_visibility_boosts
+        expire_visibility_boosts.delay()
+    """
+    now = datetime.utcnow()
+    expired = VisibilityBoost.query.filter(
+        VisibilityBoost.is_active == True,
+        VisibilityBoost.expires_at <= now
+    ).all()
+
+    count = len(expired)
+    for boost in expired:
+        boost.is_active = False
+
+    if count > 0:
+        db.session.commit()
+        print(f"[Celery] Expired {count} visibility boost(s)")
+
+    return {"expired_count": count}
 
 
 def get_user_full_name(user_id):
@@ -479,6 +518,30 @@ def stripe_webhook():
                     )
             else:
                 print(f"⚠️ User {user_id} not found")
+
+        # ======================================================
+        # Deposit type → credit the real-money Balance model
+        # This is separate from AI credits (UserWallet.credits).
+        # Balance is the financial settlement layer used for
+        # marketplace purchases, mentorship, and crowdfunding.
+        # ======================================================
+        if user_id and tx_type == "deposit":
+            user = User.query.get(user_id)
+            if user:
+                balance = Balance.query.filter_by(user_id=user_id).first()
+                if not balance:
+                    balance = Balance(user_id=user_id)
+                    db.session.add(balance)
+                    db.session.flush()
+
+                balance_tx = balance.deposit(
+                    cents=amount,
+                    description=f"Stripe deposit — session {session.get('id')}"
+                )
+                balance_tx.stripe_payment_id = session.get("id")
+                print(f"✅ [WEBHOOK] Credited Balance: {amount}¢ for user {user_id}")
+            else:
+                print(f"⚠️ [WEBHOOK] Deposit: user {user_id} not found")
 
         db.session.commit()
         print(f"✅ [WEBHOOK] Transaction stored (ID {tx.id})")

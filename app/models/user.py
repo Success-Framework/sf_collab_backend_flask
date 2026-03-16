@@ -30,6 +30,22 @@ class User(db.Model):
     total_revenue = db.Column(db.Float, default=0.0)
     satisfaction_percentage = db.Column(db.Float, default=100.0)
     active_startups_count = db.Column(db.Integer, default=0)
+
+    # -------------------------------------------------------------------------
+    # Stripe Connect — needed for contributor/mentor withdrawal payouts
+    # -------------------------------------------------------------------------
+    stripe_connect_account_id = db.Column(db.String(255), nullable=True)
+
+    # -------------------------------------------------------------------------
+    # Reputation System — execution-based only (per SF Economy docs)
+    # Rule: money/crystals/ratings must NEVER directly affect these scores.
+    # -------------------------------------------------------------------------
+    reputation_score      = db.Column(db.Float, default=0.0)
+    milestones_completed  = db.Column(db.Integer, default=0)
+    milestones_on_time    = db.Column(db.Integer, default=0)
+    tasks_completed       = db.Column(db.Integer, default=0)
+    tasks_on_time         = db.Column(db.Integer, default=0)
+    collaborations_count  = db.Column(db.Integer, default=0)
     
     # Profile
     profile_picture = db.Column(db.String(500), nullable=True)
@@ -115,7 +131,71 @@ class User(db.Model):
     event_token_balances = db.relationship("EventTokenBalance", 
         back_populates="user",
         lazy='dynamic')
-    
+
+    # =========================================================================
+    # ECONOMY LAYER 2 — Real-money Balance + Escrow
+    # =========================================================================
+
+    # Real-money balance (one-to-one)
+    balance = db.relationship(
+        'Balance',
+        back_populates='user',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+
+    # Immutable audit log of every real-money movement
+    balance_transactions = db.relationship(
+        'BalanceTransaction',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+
+    # Escrow agreements where this user is the Payer (Founder)
+    escrows_as_payer = db.relationship(
+        'EscrowTransaction',
+        foreign_keys='EscrowTransaction.payer_id',
+        back_populates='payer',
+        lazy='dynamic'
+    )
+
+    # Escrow agreements where this user is the Payee (Contributor)
+    escrows_as_payee = db.relationship(
+        'EscrowTransaction',
+        foreign_keys='EscrowTransaction.payee_id',
+        back_populates='payee',
+        lazy='dynamic'
+    )
+
+    # =========================================================================
+    # ECONOMY LAYER 3 — Crystals (visibility acceleration only — NOT money)
+    # =========================================================================
+
+    # Crystal wallet (one-to-one)
+    crystal_wallet = db.relationship(
+        'CrystalWallet',
+        back_populates='user',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+
+    # Crystal transaction log
+    crystal_transactions = db.relationship(
+        'CrystalTransaction',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+
+    # Visibility boosts purchased with crystals
+    visibility_boosts = db.relationship(
+        'VisibilityBoost',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+
     # Core Authentication & Profile
     refresh_tokens = db.relationship('RefreshToken', 
         back_populates='token_owner', 
@@ -417,6 +497,51 @@ class User(db.Model):
         """Add XP points to user"""
         self.xp_points += points
         db.session.commit()
+
+    def compute_reputation_score(self) -> float:
+        """
+        Compute and cache reputation score (0-100).
+        Execution-based only — money/crystals/ratings never affect this.
+
+        Weights:
+          40% — milestone on-time rate
+          30% — task on-time rate
+          20% — XP points (capped at 5000)
+          10% — collaboration breadth (capped at 10 startups)
+        """
+        score = 0.0
+
+        if self.milestones_completed and self.milestones_completed > 0:
+            score += min(self.milestones_on_time / self.milestones_completed, 1.0) * 40
+
+        if self.tasks_completed and self.tasks_completed > 0:
+            score += min(self.tasks_on_time / self.tasks_completed, 1.0) * 30
+
+        score += min((self.xp_points or 0) / 5000, 1.0) * 20
+        score += min((self.collaborations_count or 0) / 10, 1.0) * 10
+
+        self.reputation_score = round(score, 2)
+        db.session.commit()
+        return self.reputation_score
+
+    def record_milestone_completed(self, on_time: bool = True):
+        """Call when user completes a milestone. Updates reputation."""
+        self.milestones_completed = (self.milestones_completed or 0) + 1
+        if on_time:
+            self.milestones_on_time = (self.milestones_on_time or 0) + 1
+        self.compute_reputation_score()
+
+    def record_task_completed(self, on_time: bool = True):
+        """Call when user completes a task. Updates reputation."""
+        self.tasks_completed = (self.tasks_completed or 0) + 1
+        if on_time:
+            self.tasks_on_time = (self.tasks_on_time or 0) + 1
+        self.compute_reputation_score()
+
+    def record_collaboration(self):
+        """Call when user joins a new startup. Updates reputation."""
+        self.collaborations_count = (self.collaborations_count or 0) + 1
+        self.compute_reputation_score()
     
     def verify_email(self):
         """Mark user's email as verified"""
@@ -653,6 +778,12 @@ class User(db.Model):
             'streak_days': self.streak_days,
             'last_activity_date': self.last_activity_date.isoformat() if self.last_activity_date else None,
             'active_startups_count': self.active_startups_count,
+            'reputation_score': self.reputation_score or 0.0,
+            'milestones_completed': self.milestones_completed or 0,
+            'milestones_on_time': self.milestones_on_time or 0,
+            'tasks_completed': self.tasks_completed or 0,
+            'tasks_on_time': self.tasks_on_time or 0,
+            'collaborations_count': self.collaborations_count or 0,
             'profile': {
                 'picture': self.profile_picture,
                 'bio': self.profile_bio,

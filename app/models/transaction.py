@@ -7,6 +7,8 @@ class Transaction(db.Model):
     plan_id = db.Column(db.String(255), nullable=True)
     stripe_payment_intent_id = db.Column(db.String(255), nullable=True, unique=True)
     stripe_checkout_session_id = db.Column(db.String(255), nullable=True, unique=True)
+    # Stripe payout ID — populated when a withdrawal is processed via Stripe Connect
+    stripe_payout_id = db.Column(db.String(255), nullable=True)
     type = db.Column(db.String(255), default="subscription")
     donation_message = db.Column(db.Text, nullable=True)
     amount = db.Column(db.Integer)
@@ -22,9 +24,11 @@ class Transaction(db.Model):
             "user_id": self.user_id,
             "plan_id": self.plan_id,
             "stripe_payment_intent_id": self.stripe_payment_intent_id,
+            "stripe_payout_id": self.stripe_payout_id,
             "amount": self.amount,
             "currency": self.currency,
             "status": self.status,
+            "type": self.type,
             "donation_message": self.donation_message,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
