@@ -38,6 +38,7 @@ from app.models.marketplace_listing import MarketplaceListing, ALLOWED_PRODUCT_E
 from app.models.marketplace_purchase import MarketplacePurchase
 from app.models.Balance import Balance, BalanceTransaction
 from app.models.Crystal import CrystalWallet, CRYSTAL_SPEND_TYPES
+from app.notifications.service import notification_service
 from sqlalchemy import desc, or_
 
 marketplace_bp = Blueprint('marketplace', __name__)
@@ -711,6 +712,20 @@ def admin_reject_listing(listing_id):
         reason = data.get('reason', 'Does not meet marketplace content guidelines')
         listing.reject(reason)
 
+        # Notify the seller
+        if listing.seller:
+            notification_service.create_notification(
+                user_id=listing.seller.user_id,
+                template_key='MARKETPLACE_LISTING_REJECTED',
+                entity_type='marketplace_listing',
+                entity_id=listing_id,
+                variables={
+                    'listing_title': listing.title,
+                    'reason': reason,
+                },
+                link_url='/marketplace',
+            )
+
         return jsonify({'success': True, 'listing': listing.to_dict()}), 200
 
     except Exception as e:
@@ -865,6 +880,35 @@ def purchase_listing(listing_id):
         db.session.add(purchase)
         db.session.commit()
 
+        # ── Notify seller of new sale ──────────────────────────────
+        buyer = User.query.get(buyer_id)
+        buyer_name = f"{buyer.first_name} {buyer.last_name}" if buyer else 'Someone'
+
+        notification_service.create_notification(
+            user_id=seller.user_id,
+            template_key='MARKETPLACE_NEW_PURCHASE',
+            actor_id=buyer_id,
+            entity_type='marketplace_listing',
+            entity_id=listing_id,
+            variables={
+                'buyer_name': buyer_name,
+                'listing_title': listing.title,
+                'amount': f"{price_cents / 100:.2f}",
+            },
+            link_url='/marketplace',
+        )
+
+        # ── Notify buyer of successful purchase ────────────────────
+        notification_service.create_notification(
+            user_id=buyer_id,
+            template_key='MARKETPLACE_PURCHASE_CONFIRMED',
+            actor_id=seller.user_id,
+            entity_type='marketplace_listing',
+            entity_id=listing_id,
+            variables={'listing_title': listing.title},
+            link_url='/marketplace',
+        )
+
         return jsonify({
             'success': True,
             'purchase': purchase.to_dict(),
@@ -989,6 +1033,23 @@ def rate_purchase(purchase_id):
             listing.add_rating(score)
 
         db.session.commit()
+
+        # ── Notify seller of new rating ────────────────────────────
+        if listing and listing.seller:
+            buyer = User.query.get(buyer_id)
+            notification_service.create_notification(
+                user_id=listing.seller.user_id,
+                template_key='MARKETPLACE_LISTING_RATED',
+                actor_id=buyer_id,
+                entity_type='marketplace_listing',
+                entity_id=listing.id,
+                variables={
+                    'buyer_name': f"{buyer.first_name} {buyer.last_name}" if buyer else 'A buyer',
+                    'listing_title': listing.title,
+                    'rating': score,
+                },
+                link_url='/marketplace',
+            )
 
         return jsonify({
             'success': True,

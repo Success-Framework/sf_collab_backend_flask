@@ -67,3 +67,4 @@ from .EscrowTransaction import EscrowTransaction
 from .Crystal import CrystalWallet, CrystalTransaction, VisibilityBoost
 
 from .marketplace_purchase import MarketplacePurchase
+from .mentor import MentorProfile, MentorSession, MentorshipRequest
