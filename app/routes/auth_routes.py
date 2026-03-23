@@ -3,6 +3,7 @@ SF Collab Auth Routes
 Updated with notification triggers for account events
 """
 
+from urllib import response
 from flask import Blueprint, request, jsonify, redirect, url_for
 from app.extensions import oauth, db, limiter
 from flask import session
@@ -12,6 +13,9 @@ from flask_jwt_extended import (
     jwt_required, 
     get_jwt_identity,
     get_jwt,
+    set_access_cookies, 
+    set_refresh_cookies,
+    unset_jwt_cookies
     decode_token
 )
 import traceback
@@ -230,11 +234,16 @@ def register():
         access_token, refresh_token = generate_tokens(user.id)
         save_refresh_token(user.id, refresh_token)
         
-        return success_response({
-            'user': get_user_response_data(user),
-            'access_token': access_token,
-            'refresh_token': refresh_token
-        }, 'Registration successful', 201)
+        response = jsonify({
+            "success": True,
+            "message": "Registration successful",
+            "user": get_user_response_data(user)
+        })
+        
+        set_access_cookies(response, access_token)
+        set_refresh_cookies(response, refresh_token)
+
+        return response
         
     except Exception as e:
         db.session.rollback()
@@ -302,11 +311,16 @@ def login():
         user_response = get_user_response_data(user)
         print(f"DEBUG: User response data prepared")
         
-        return success_response({
-            'user': user_response,
-            'access_token': access_token,
-            'refresh_token': refresh_token
-        }, 'Login successful')
+        response = jsonify({
+        "success": True,
+        "message": "Login successful",
+        "user": user_response
+    })
+    
+        set_access_cookies(response, access_token)
+        set_refresh_cookies(response, refresh_token)
+
+        return response
         
     except Exception as e:
         print(f"DEBUG: Exception in login: {str(e)}")
@@ -493,14 +507,13 @@ def refresh():
         if not user:
             return error_response('User not found', 404)
         
-        access_token = create_access_token(
-            identity=str(user_id),
-            expires_delta=timedelta(hours=6)
-        )
+
+        new_access_token = create_access_token(identity=str(user_id))
         
-        return success_response({
-            'access_token': access_token
-        })
+        response = jsonify({"message": "Token refreshed"})
+        set_access_cookies(response, new_access_token)
+        
+        return response
         
     except Exception as e:
         return error_response(f'Token refresh failed: {str(e)}', 500)
@@ -526,9 +539,11 @@ def logout():
         #     details=f"User logged out at {utc_now_str()}"
         # )
         
-        return success_response({
-            'message': 'Logged out successfully'
-        })
+
+        response = jsonify({"message": "Logged out successfully"})
+        unset_jwt_cookies(response)
+        
+        return response
         
     except Exception as e:
         return error_response(f'Logout failed: {str(e)}', 500)
