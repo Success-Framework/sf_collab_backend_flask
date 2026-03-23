@@ -84,4 +84,4 @@ test staging
 # Clean up
 docker-compose -f docker-compose-dev.yml down
 ```
-test staging deploy
+trigger staging deploy
