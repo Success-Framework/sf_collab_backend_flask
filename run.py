@@ -18,7 +18,7 @@ PORT = int(os.getenv("PORT", 5001))
 DEBUG = ENV != "production"
 
 print("=" * 60)
-print("🚀 SF COLLAB API STARTING")
+print("SF COLLAB API STARTING")
 print(f"ENV: {ENV}")
 print(f"PORT: {PORT}")
 print("=" * 60)

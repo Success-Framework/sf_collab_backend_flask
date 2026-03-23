@@ -102,26 +102,49 @@ class Notification(db.Model):
                 'profilePicture': self.actor.profile_picture
             }
         
+        # ✅ FIX: Return BOTH snake_case and camelCase for every key field.
+        # Different components check different naming conventions.
+        # notification.py is the backend safety net even before the context normalizes.
         return {
+            # Identity
             'id': self.id,
             'userId': self.user_id,
+            'user_id': self.user_id,
             'actorId': self.actor_id,
+            'actor_id': self.actor_id,
             'actor': actor_info,
+            # Type / category
             'type': self.notification_type,
+            'notification_type': self.notification_type,
             'category': self.category,
             'priority': self.priority,
+            # Content
             'title': self.title,
             'message': self.message,
+            # Entity
             'entityType': self.entity_type,
+            'entity_type': self.entity_type,
             'entityId': self.entity_id,
+            'entity_id': self.entity_id,
+            # Metadata
             'data': self.data or {},
+            # ✅ Read status — BOTH conventions (is_read for Python/snake, isRead for camelCase)
             'isRead': self.is_read,
+            'is_read': self.is_read,
             'readAt': self.read_at.isoformat() if self.read_at else None,
+            'read_at': self.read_at.isoformat() if self.read_at else None,
+            # Email / push
             'emailSent': self.email_sent,
             'pushSent': self.push_sent,
+            # ✅ Timestamps — BOTH conventions
             'createdAt': self.created_at.isoformat(),
+            'created_at': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+            # ✅ Link — BOTH conventions
             'linkUrl': self.link_url,
+            'link_url': self.link_url,
+            # Computed
             'isRecent': self.is_recent(),
             'priorityLevel': self.get_priority_level(),
             'user': {

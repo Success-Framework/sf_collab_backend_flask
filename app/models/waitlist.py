@@ -74,10 +74,10 @@ class Waitlist(db.Model):
     # Constants (business rules)
     # -------------------------
     MAX_MVP = 1000
-    MAX_V1 = 2500
+    MAX_V1 = 10000
 
-    JAN_10_DEADLINE = datetime(2026, 1, 10, 23, 59, 59)
-    FEB_7_DEADLINE = datetime(2026, 2, 7, 23, 59, 59)
+    MVP_DEADLINE = datetime(2026, 2, 27, 23, 59, 59)
+    V1_DEADLINE = datetime(2026, 3, 5, 23, 59, 59)
 
     def register_activity(self):
         now = datetime.utcnow()
@@ -155,9 +155,9 @@ class Waitlist(db.Model):
     def get_max_allowed() -> int:
         now = datetime.utcnow()
 
-        if now <= Waitlist.JAN_10_DEADLINE:
+        if now <= Waitlist.MVP_DEADLINE:
             return Waitlist.MAX_MVP
-        elif now <= Waitlist.FEB_7_DEADLINE:
+        elif now <= Waitlist.V1_DEADLINE:
             return Waitlist.MAX_V1
         return 10**9  # effectively unlimited
 
@@ -200,7 +200,7 @@ class Waitlist(db.Model):
     # -------------------------
     # Points mutation
     # -------------------------
-    def add_points(self, points: int, category: str):
+    def add_points(self, points: int = 0, category: str = ""):
         if category == "referral":
             self.referral_points += points
             # Bonus: 25 points for every 5 successful referrals

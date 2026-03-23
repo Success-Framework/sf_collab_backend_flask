@@ -21,7 +21,10 @@ from app.models.user import User
 from app.services.ai_assistant.ingest import ingest_document
 from app.services.ai_assistant.rag import ask_assistant
 from app.services.ai_image_gen import generate_image
-from app.utils.ai_helpers import get_groq_client, get_openai_client, extract_text_from_response, get_response, generate_pdf_from_markdown
+from app.utils.ai_helpers import get_groq_client, get_openai_client, extract_text_from_response, get_response, generate_pdf_from_markdown, get_vision_response
+from app.services.ai_core.ai_service import AIService
+from app.services.ai_core.response_builder import build_refusal
+
 # Load environment variables
 load_dotenv()
 
@@ -39,7 +42,7 @@ Path(QWN_UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
 
 # Available models
 AVAILABLE_MODELS = [
-    "openai/gpt-oss-20b",
+    # "openai/gpt-oss-20b",
     "qwen/qwen3-32b"
 ]
 
@@ -54,7 +57,9 @@ def standard_response(success=True, data=None, error=None, code=200):
 # ============================================================
 # QWEN ROUTES
 # ============================================================
-
+def total_credits(user):
+    wallet_credits = user.wallet.credits if user.wallet else 0
+    return wallet_credits + (user.credits or 0)
 #! HEALTH CHECK
 @ai_bp.route('/health', methods=['GET'])
 def qwen_health():
@@ -446,7 +451,7 @@ def qwen_business_ideas():
         user = User.query.get(user_id)
         if not user:
             return standard_response(False, None, 'User not found', 404)
-        if user.credits < required_credits:
+        if not total_credits(user) < required_credits:
             return standard_response(False, None, 'Insufficient credits', 402)
         model = data.get('model', AVAILABLE_MODELS[0])
         max_tokens = data.get('max_tokens', 2048)
@@ -682,7 +687,10 @@ def qwen_business_ideas():
         else:
             enhanced_prompt = prompt
         response_text, tokens_used = get_response(model, system_prompt, enhanced_prompt, temperature=temperature, max_tokens=max_tokens)
-        user.credits -= required_credits
+        user.wallet.spend_credits(
+            amount=required_credits, 
+            description=f"Generated AI content: {content_type}"
+        )
         db.session.commit()
         # =========================
         # FILE GENERATION
@@ -742,15 +750,15 @@ def qwen_chat():
         if not data or 'messages' not in data:
             return standard_response(False, None, 'Missing messages in request', 400)
 
-        GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
-        groq_client = get_groq_client()
+        # GROQ_API_KEY = current_app.config.get("GROQ_API_KEY")
+        # groq_client = get_groq_client()
         messages = data.get('messages', [])
         temperature = data.get('temperature', 0.7)
         max_tokens = data.get('max_tokens', 2048)
         model = data.get('model', AVAILABLE_MODELS[0])
 
-        if not GROQ_API_KEY:
-            return standard_response(False, None, 'Groq API key not configured', 500)
+        # if not GROQ_API_KEY:
+        #     return standard_response(False, None, 'Groq API key not configured', 500)
 
         # ---- Convert messages[] → prompt ----
         prompt_lines = []
@@ -763,22 +771,40 @@ def qwen_chat():
         final_prompt = "\n".join(prompt_lines) + "\nAssistant:"
 
         # ---- Call Groq ----
+        # --- GUARDRAIL PREPROCESS ---
+        guardrail_check = AIService.preprocess_input("chat", final_prompt)
+        if guardrail_check:
+            return standard_response(True, guardrail_check)
+
+        # --- BUILD SAFE MESSAGES ---
+        messages = AIService.build_messages(
+            feature="chat",
+            user_input=final_prompt
+        )
+
+        # --- CALL MODEL ---
         completion = groq_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant."},
-                {"role": "user", "content": final_prompt}
-            ],
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        response_text = completion.choices[0].message.content
+
+        # --- GUARDRAIL POSTPROCESS ---
+        post_guardrail = AIService.postprocess_output(response_text)
+        if post_guardrail:
+            return standard_response(True, post_guardrail)
+
+        result = AIService.generate(
+            feature="chat",
+            user_input=final_prompt,
             temperature=temperature,
             max_tokens=max_tokens
         )
 
-        response_text = completion.choices[0].message.content
-
-        return standard_response(True, {
-            "response": response_text,
-            "model": model
-        })
+        return standard_response(True, result)    
 
     except Exception as e:
         logging.exception("Qwen chat error")
@@ -882,7 +908,7 @@ def generate_logo():
 
     total_cost = COST_PER_IMAGE * IMAGE_COUNT
 
-    if user.credits < total_cost:
+    if not total_credits(user) < total_cost:
         return jsonify({"error": "Not enough credits"}), 402
     
     client = get_openai_client()
@@ -1008,7 +1034,10 @@ def generate_logo():
             "base64": img.b64_json
         })
 
-    user.credits -= total_cost
+    user.wallet.spend_credits(
+        amount=total_cost,
+        description=f"Generated {IMAGE_COUNT} logo images"
+    )
     db.session.commit()
 
     return jsonify({
@@ -1095,7 +1124,7 @@ def text_to_image():
 
     COST_PER_IMAGE = 10
 
-    if user.credits < COST_PER_IMAGE:
+    if not total_credits(user) < COST_PER_IMAGE:
         return standard_response(False, None, "Not enough credits", 402)
 
     try:
@@ -1103,7 +1132,10 @@ def text_to_image():
     except Exception as e:
         return standard_response(False, None, str(e), 500)
 
-    user.credits -= COST_PER_IMAGE
+    user.wallet.spend_credits(
+        amount=COST_PER_IMAGE,
+        description="Generated AI image"
+    )
     db.session.commit()
 
     return standard_response(True, {
@@ -1112,6 +1144,129 @@ def text_to_image():
             "base64": image_base64
         }
     })
+
+# ==================================
+# Generates social media captions using AI from text input or image + text input. Captions are optimized per platform and tone and
+# return only caption text.
+#
+# Supported platforms: Instagram, LinkedIn, Twitter/X, Facebook, YouTube (community posts), TikTok
+#
+# Supported tones: casual, professional, inspiring, promotional, educational, storytelling, humorous, minimalist
+# ==================================
+@ai_bp.route('/generate/caption', methods=['POST'])
+def generate_caption():
+    try:
+        if request.method == 'OPTIONS':
+            return standard_response(True, {}, code=200)
+
+        data = request.get_json()
+        if not data:
+            return standard_response(False, None, 'Missing data in request', 400)
+
+        model = data.get('model', AVAILABLE_MODELS[0])
+        content_type = data.get('content_type', 'text')
+        platform = data.get('platform', 'Instagram')
+        tone = data.get('tone', 'casual')
+        temperature = data.get('temperature', 0.7)
+        max_tokens = data.get('max_tokens', 200)
+
+        prompt = data.get('prompt')
+
+        if isinstance(prompt, list):
+            prompt = "\n".join(map(str, prompt))
+        elif not isinstance(prompt, str):
+            prompt = str(prompt)
+
+        if model not in AVAILABLE_MODELS:
+            return standard_response(
+                False, None, f'Model not available. Choose from: {AVAILABLE_MODELS}', 400
+            )
+        
+        # ==================================
+        # CAPTION-BASED SYSTEM PROMPTS
+        # ==================================
+
+        CAPTION_SYSTEM_PROMPTS = {
+            "text": (
+                "You are a professional social media copywriter.\n"
+                "Generate short, catchy, platform-optimized captions.\n"
+                "Rules:\n"
+                "- Output only caption text\n"
+                "- No explanations\n"
+                "- Include emojis and hashtags where appropriate\n"
+                "- Generate 3 variations\n"
+            ),
+            "image": (
+                "You are a professional social media copywriter.\n"
+                "Generate short, catchy, platform-optimized captions from the given image and optional context.\n"
+                "Generate captions that visually match the image.\n"
+                "Rules:\n"
+                "- Do not mention the image explicitly\n"
+                "- No analysis or explanations\n"
+                "- Include emojis and hashtags\n"
+                "- Generate 3 variations\n"
+            )
+        }
+
+        system_prompt = CAPTION_SYSTEM_PROMPTS[content_type]
+        response_text = ""
+        tokens_used = 0
+
+        # =========================
+        # TEXT-ONLY CAPTION
+        # =========================
+        if content_type == 'text':
+
+            user_prompt = (
+                f"Platform: {platform}\n"
+                f"Tone: {tone}\n"
+                f"Input: {prompt}"
+            )
+
+            response_text, tokens_used = get_response(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        # =========================
+        # IMAGE-BASED CAPTION
+        # =========================
+        if content_type == 'image':
+            image_file = data.get('image')
+            if not image_file:
+                return standard_response(False, None, 'Image file required', 400)
+
+            response_text, tokens_used = get_vision_response(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_file=image_file,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+        # =========================
+        # RESPONSE
+        # =========================
+        return standard_response(True, {
+            "response": response_text,
+            "model": model,
+            "tokens_used": tokens_used,
+            "content_type": content_type,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+    except Exception as e:
+        logging.exception("Generation error")
+        return standard_response(False, None, str(e), 500)
+
+    except Exception as e:
+        logging.exception("Caption generation failed")
+        return standard_response(False, None, str(e), 500)
+
 
 # @ai_bp.route("/logo/generate", methods=["POST", "OPTIONS"])
 # @jwt_required()

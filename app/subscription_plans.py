@@ -15,11 +15,11 @@ PLANS = [
                         "price": 900,
                         "badge_id": "crowdfunding-founder-explorer-badge",
                         "features": [
-                            "Early access priority: ahead of public rollout",
-                            "Access to exclusive founder community",
-                            "Early access to new features",
-                            "Supporter badge",
-                            "Supporter-only updates"
+                            "Early supporter access (before public launch)",
+                            "1 month Founder Starter included",
+                            "Early feedback & product preview access",
+                            "Founder Explorer badge (early backer recognition)",
+                            "Support the platform from day one"
                         ],
                         "options": [{
                             "title": "Founder Starter",
@@ -41,10 +41,11 @@ PLANS = [
                         "price": 1900,
                         "badge_id": "crowdfunding-founder-starter-supporter-badge",
                         "features": [
-                            "Higher matching & discovery priority: surfaced earlier to founders",
-                            "Early access to new features",
-                            "Supporter badge",
-                            "Supporter-only updates",
+                            "Higher discovery & matching priority",
+                            "2 months Founder Starter included",
+                            "Early access to upcoming features",
+                            "Supporter-only updates & roadmap insights",
+                            "Founder Starter Supporter badge"
                         ],
                         "options": [{
                             "title": "Founder Starter",
@@ -66,11 +67,12 @@ PLANS = [
                         "price": 4900,
                         "badge_id": "crowdfunding-founder-pro-badge",
                         "features": [
-                            "Very high priority across SF",
-                            "Priority support",
-                            "Pro supporter badge",
-                            "All previous benefits included",
-                            "Chose between Founder Starter and Founder Pro options"
+                            "Very high platform-wide priority",
+                            "Priority support access",
+                            "Extended plan access (choose Starter or Pro)",
+                            "Early feature unlocks before general release",
+                            "Founder Pro Supporter badge",
+                            "All previous supporter benefits included"
                         ],
                         "options": [
                             {
@@ -108,11 +110,12 @@ PLANS = [
                         "price": 9900,
                         "badge_id": "crowdfunding-founder-power-badge",
                         "features": [
-                            "Top priority across SF",
-                            "Feature request voting",
+                            "Top visibility priority across SF ecosystem",
+                            "Feature request voting influence",
+                            "Multi-tier plan flexibility (Starter / Pro / Scale)",
+                            "Priority support",
                             "Power Supporter badge",
-                            "All previous benefits included",
-                            "Chose between Founder Starter, Founder Pro, and Founder Scale options"
+                            "All previous supporter benefits included"
                         ],
                         "options": [
                             {
@@ -156,28 +159,29 @@ PLANS = [
                                     "Advanced analytics & reports",
                                     "Priority support",
                                     "AI tools: 7,000 credits",
-                              ]
-                          }
-                      ]
-                  },
-                  {
-                      "title": "Founder Champion",
-                      "id": "crowdfunding-founder-champion",
-                      "price": 24900,
-                      "badge_id": "crowdfunding-founder-champion-badge",
-                      "features": [
-                            "Guaranteed early access at launch",
-                            "Long-term priority status",
-                            "Champion badge",
-                            "All previous benefits included",
-                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
-                      ],
-                      "options": [
-                          {
-                              "title": "Founder Starter",
-                              "description": "Basic project creation and collaboration access",
-                              "duration_months": 18,
-                              "features": [
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Founder Champion",
+                        "id": "crowdfunding-founder-champion",
+                        "price": 24900,
+                        "badge_id": "crowdfunding-founder-champion-badge",
+                        "features": [
+                            "Guaranteed early access at full launch",
+                            "Long-term priority status on the platform",
+                            "Extended multi-tier access options",
+                            "Direct roadmap visibility",
+                            "Founder Champion badge",
+                            "All previous supporter benefits included"
+                        ],
+                        "options": [
+                            {
+                                "title": "Founder Starter",
+                                "description": "Basic project creation and collaboration access",
+                                "duration_months": 18,
+                                "features": [
                                     "Everything in Founder Starter +",
                                     "Create up to 3 projects at a time",
                                     "Collaborators: up to 15 per project",
@@ -185,13 +189,13 @@ PLANS = [
                                     "Tasks & milestones: up to 200",
                                     "Ad-free experience",
                                     "AI tools: 1,000 credits",
-                              ]
-                          },
-                          {
-                              "title": "Founder Pro",
-                              "description": "Advanced analytics and priority support",
-                              "duration_months": 6,
-                              "features": [
+                                ]
+                            },
+                            {
+                                "title": "Founder Pro",
+                                "description": "Advanced analytics and priority support",
+                                "duration_months": 6,
+                                "features": [
                                     "Everything in Founder Starter +",
                                     "Projects: up to 10 projects active at a time",
                                     "Collaborators: up to 40 per project",
@@ -199,12 +203,12 @@ PLANS = [
                                     "Tasks & milestones: up to 500",
                                     "Advanced team roles & permissions",
                                     "AI tools: 2,500 credits",
-                              ]
-                          },
-                          {
-                              "title": "Founder Scale",
-                              "description": "Higher limits and advanced collaboration capacity",
-                              "duration_months": 3,
+                                ]
+                            },
+                            {
+                                "title": "Founder Scale",
+                                "description": "Higher limits and advanced collaboration capacity",
+                                "duration_months": 3,
                                 "features": [
                                         "Everything in Founder Pro +",
                                         "Unlimited projects",
@@ -215,29 +219,28 @@ PLANS = [
                                         "Priority support",
                                         "AI tools: 7,000 credits",
                                 ]   
-                          }
-                      ]
-                  },
-                  {
-                      "id": "crowdfunding-founder-patron",
-                      "title": "Founder Patron",
-                      "badge_id": "crowdfunding-founder-patron-badge",
-                      "price": 49900,
-                      "features": [
-                            "Immediate access (no waiting)",
-                            "Direct support channel: prioritized communication",
-                            "Up to 10 team seats",
-                            "Founder Patron badge: long-term supporter recognition",
-                            "All previous benefits included",
-                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
-
-                      ],
-                      "options": [
-                          {
-                              "title": "Founder Starter",
-                              "description": "Basic project creation and collaboration access",
-                              "duration_months": 36,
-                              "features": [
+                            }
+                        ]
+                    },
+                    {
+                        "id": "crowdfunding-founder-patron",
+                        "title": "Founder Patron",
+                        "badge_id": "crowdfunding-founder-patron-badge",
+                        "price": 49900,
+                        "features": [
+                            "Immediate access (no waiting period)",
+                            "Direct prioritized communication channel",
+                            "Up to 10 team seats included",
+                            "Long-term recognition as core supporter",
+                            "Founder Patron badge",
+                            "All previous supporter benefits included"
+                        ],
+                        "options": [
+                            {
+                                "title": "Founder Starter",
+                                "description": "Basic project creation and collaboration access",
+                                "duration_months": 36,
+                                "features": [
                                     "Everything in Founder Starter +",
                                     "Create up to 3 projects at a time",
                                     "Collaborators: up to 15 per project",
@@ -245,13 +248,13 @@ PLANS = [
                                     "Tasks & milestones: up to 200",
                                     "Ad-free experience",
                                     "AI tools: 1,000 credits",
-                              ]
-                          },
-                          {
-                              "title": "Founder Pro",
-                              "description": "Advanced analytics and priority support",
-                              "duration_months": 12,
-                              "features": [
+                                ]
+                            },
+                            {
+                                "title": "Founder Pro",
+                                "description": "Advanced analytics and priority support",
+                                "duration_months": 12,
+                                "features": [
                                     "Everything in Founder Starter +",
                                     "Projects: up to 10 projects active at a time",
                                     "Collaborators: up to 40 per project",
@@ -259,13 +262,13 @@ PLANS = [
                                     "Tasks & milestones: up to 500",
                                     "Advanced team roles & permissions",
                                     "AI tools: 2,500 credits",
-                              ]
-                          }, 
-                          {
-                              "title": "Founder Scale",
-                              "description": "Higher limits and advanced collaboration capacity",
-                              "duration_months": 6,
-                              "features": [
+                                ]
+                            }, 
+                            {
+                                "title": "Founder Scale",
+                                "description": "Higher limits and advanced collaboration capacity",
+                                "duration_months": 6,
+                                "features": [
                                     "Everything in Founder Pro +",
                                     "Unlimited projects",
                                     "Collaborators: up to 100 per project",
@@ -274,31 +277,29 @@ PLANS = [
                                     "Advanced analytics & reports",
                                     "Priority support",
                                     "AI tools: 7,000 credits",
-                              ]
-                          }
-                      ]
-                  },
-                  {
-                      "title": "Founding Partner",
-                      "id": "crowdfunding-founding-partner",
-                      "price": 99900,
-                      "badge_id": "crowdfunding-founding-partner-badge",
-                      "features": [
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Founding Partner",
+                        "id": "crowdfunding-founding-partner",
+                        "price": 99900,
+                        "badge_id": "crowdfunding-founding-partner-badge",
+                        "features": [
                             "Lifetime platform access",
-                            "Exclusive founding partner badge",
                             "Permanent recognition (name or logo)",
-                            "Monthly founder Q&A calls : direct access to leadership",
-                            "Priority consideration for long-term cooperation",
-                            "Long-term priority status",
-                            "Champion badge",
-                            "All previous benefits included",
-                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
-                      ],
-                      "options": [
-                          {
-                              "title": "Founder Starter",
-                              "description": "Basic project creation and collaboration access",
-                              "duration_months": 72,
+                            "Monthly private Q&A with leadership",
+                            "Long-term strategic priority status",
+                            "Eligibility for collaboration initiatives",
+                            "Founding Partner badge",
+                            "All previous supporter benefits included"
+                        ],
+                        "options": [
+                            {
+                                "title": "Founder Starter",
+                                "description": "Basic project creation and collaboration access",
+                                "duration_months": 72,
                                 "features": [
                                         "Everything in Founder Starter +",
                                         "Create up to 3 projects at a time",
@@ -308,11 +309,11 @@ PLANS = [
                                         "Ad-free experience",
                                         "AI tools: 1,000 credits",
                                 ]
-                          },
-                          {
-                              "title": "Founder Pro",
-                              "description": "Advanced analytics and priority support",
-                              "duration_months": 24,
+                            },
+                            {
+                                "title": "Founder Pro",
+                                "description": "Advanced analytics and priority support",
+                                "duration_months": 24,
                                 "features": [
                                         "Everything in Founder Starter +",
                                         "Projects: up to 10 projects active at a time",
@@ -322,12 +323,12 @@ PLANS = [
                                         "Advanced team roles & permissions",
                                         "AI tools: 2,500 credits",
                                 ]
-                          }, 
-                          {
-                              "title": "Founder Scale",
-                              "description": "Higher limits and advanced collaboration capacity",
-                              "duration_months": 12,
-                              "features": [
+                            }, 
+                            {
+                                "title": "Founder Scale",
+                                "description": "Higher limits and advanced collaboration capacity",
+                                "duration_months": 12,
+                                "features": [
                                     "Everything in Founder Pro +",
                                     "Unlimited projects",
                                     "Collaborators: up to 100 per project",
@@ -336,25 +337,25 @@ PLANS = [
                                     "Advanced analytics & reports",
                                     "Priority support",
                                     "AI tools: 7,000 credits",
-                              ]
-                          },
-                          {
+                                ]
+                            },
+                            {
                                 "title": "Founder Partner",
                                 "description": "Highest platform stability & limits",
                                 "duration_months": 6,
                                 "features": [
-                                      "Everything in Founder Scale +",
-                                      "Collaborators: up to 200 per project",
-                                      "Storage: 500 GB",
-                                      "Highest platform stability & limits",
-                                      "Eligibility for SF-supported initiatives (merit-based)",
-                                      "Early access to new SF domains and systems",
-                                      "Dedicated support & structured feedback channel",
-                                      "AI tools: 10,000 credits",
+                                        "Everything in Founder Scale +",
+                                        "Collaborators: up to 200 per project",
+                                        "Storage: 500 GB",
+                                        "Highest platform stability & limits",
+                                        "Eligibility for SF-supported initiatives (merit-based)",
+                                        "Early access to new SF domains and systems",
+                                        "Dedicated support & structured feedback channel",
+                                        "AI tools: 10,000 credits",
                                 ]
-                          }
-                      ]
-                  },
+                            }
+                        ]
+                    },
                     {
                         "title": "Strategic Supporter",
                         "id": "crowdfunding-strategic-supporter",
@@ -364,11 +365,10 @@ PLANS = [
                             "All Founding Partner benefits included",
                             "Personalized onboarding session",
                             "Dedicated account manager",
-                            "Quarterly business reviews",
-                            "Customized feature requests",
-                            "Exclusive networking opportunities",
-                            "All previous benefits included",
-                            "Chose between Founder Starter, Founder Pro, Founder Scale, and Founder Partner options"
+                            "Quarterly strategic business reviews",
+                            "Customized feature consideration",
+                            "Exclusive high-level networking access",
+                            "Strategic Supporter badge"
                         ],
                         "options": [
                             {
@@ -431,111 +431,112 @@ PLANS = [
                             }
                         ],
                     }
-              ]
-          },
-          {
-              "role": "builder",
-              "tiers": [
-                  {
-                      "title": "Builder Supporter",
-                      "id": "crowdfunding-builder-supporter",
-                      "price": 500,
-                      "badge_id": "crowdfunding-builder-supporter-badge",
-                      "features": [
-                          "Early access priority: ahead of public rollout",
-                          "0% platform fee on first $500 earned",
-                          "Supporter badge",
-                          "Supporter-only updates"
-                      ],
-                      "options": [],
-                      "money_before_fee": 50000,
-                  }, 
-                  {
-                      "title": "Builder Early",
-                      "id": "crowdfunding-builder-early",
-                      "price": 900,
-                      "badge_id": "crowdfunding-builder-early-badge",
-                      "features": [
-                          "Higher matching & discovery priority: surfaced earlier to founders",
-                          "0% platform fee on first $1500 earned",
-                          "Early access to new features",
-                          "Early supporter badge"
-                      ],
-                      "options": [],
-                      "money_before_fee": 150000
-                  },
-                  {
-                      "title": "Builder Starter",
-                      "id": "crowdfunding-builder-starter",
-                      "price": 1900,
-                      "badge_id": "crowdfunding-builder-starter-badge",
-                      "features": [
-                            "High priority during project selection",
+                ]
+            },
+            {
+                "role": "builder",
+                "tiers": [
+                    {
+                        "title": "Builder Supporter",
+                        "id": "crowdfunding-builder-supporter",
+                        "price": 500,
+                        "badge_id": "crowdfunding-builder-supporter-badge",
+                        "features": [
+                            "Early platform access before public launch",
+                            "0% platform fee on first $500 earned",
+                            "Priority matching in early projects",
+                            "Builder Supporter badge",
+                            "Supporter-only updates"
+                        ],
+                        "options": [],
+                        "money_before_fee": 50000,
+                    }, 
+                    {
+                        "title": "Builder Early",
+                        "id": "crowdfunding-builder-early",
+                        "price": 900,
+                        "badge_id": "crowdfunding-builder-early-badge",
+                        "features": [
+                            "Higher discovery & matching priority",
+                            "0% platform fee on first $1,500 earned",
+                            "Early feature unlocks",
+                            "Builder Early badge"
+                        ],
+                        "options": [],
+                        "money_before_fee": 150000
+                    },
+                    {
+                        "title": "Builder Starter",
+                        "id": "crowdfunding-builder-starter",
+                        "price": 1900,
+                        "badge_id": "crowdfunding-builder-starter-badge",
+                        "features": [
+                            "High project selection priority",
                             "0% platform fee on first $3,500 earned",
                             "Faster access to new opportunities",
                             "Starter Supporter badge"
-                      ],
-                      "options": [],
-                      "money_before_fee": 350000
-                  },
-                  {
-                      "title": "Builder Pro Supporter",
-                      "id": "crowdfunding-builder-pro-supporter",
-                      "price": 4900,
-                      "badge_id": "crowdfunding-builder-pro-supporter-badge",
-                      "features": [
-                          "Very high priority across SF",
-                          "0% platform fee on first $10000 earned",
-                          "Priority support",
-                          "Pro Supporter badge"
-                      ],
-                      "options": [],
-                      "money_before_fee": 1000000
-                  },
-                  {
-                      "title": "Builder Power Supporter",
-                      "id": "crowdfunding-builder-power-supporter",
-                      "price": 9900,
-                      "badge_id": "crowdfunding-builder-power-supporter-badge",
-                      "features": [
-                          "Top priority across matching, access, and features",
-                          "0% platform fee on first $25000 earned",
-                          "Feature request voting",
-                          "Power Supporter badge"
-                      ],
-                      "options": [],
-                      "money_before_fee": 2500000
-                  },
-                  {
-                      "title": "Builder Champion",
-                      "id": "crowdfunding-builder-champion",
-                      "price": 24900,
-                      "badge_id": "crowdfunding-builder-champion-badge",
-                      "features": [
-                           "Guaranteed early access at launch",
-                           "0% platform fee on first $85,000 earned",
-                           "Long-term priority status",
-                           "Champion badge"
-                      ],
-                      "options": [],
-                      "money_before_fee": 8500000
-                  },
-                  {
-                      "title": "Builder Patron",
-                      "id": "crowdfunding-builder-patron",
-                      "price": 49900,
-                      "badge_id": "crowdfunding-builder-patron-badge",
-                      "features": [
-                         "Immediate access at launch",
-                         "Lifetime priority across SF",
-                         "0% platform fee on first $200,000 earned",
-                         "Patron recognition badge"
-                      ],
-                      "options": [],
-                      "money_before_fee": 20000000
-                  }
-              ]
-          }
+                        ],
+                        "options": [],
+                        "money_before_fee": 350000
+                    },
+                    {
+                        "title": "Builder Pro Supporter",
+                        "id": "crowdfunding-builder-pro-supporter",
+                        "price": 4900,
+                        "badge_id": "crowdfunding-builder-pro-supporter-badge",
+                        "features": [
+                            "Very high visibility across projects",
+                            "0% platform fee on first $10,000 earned",
+                            "Priority support access",
+                            "Pro Supporter badge"
+                        ],
+                        "options": [],
+                        "money_before_fee": 1000000
+                    },
+                    {
+                        "title": "Builder Power Supporter",
+                        "id": "crowdfunding-builder-power-supporter",
+                        "price": 9900,
+                        "badge_id": "crowdfunding-builder-power-supporter-badge",
+                        "features": [
+                            "Top matching & visibility priority",
+                            "0% platform fee on first $25,000 earned",
+                            "Feature request voting",
+                            "Power Supporter badge"
+                        ],
+                        "options": [],
+                        "money_before_fee": 2500000
+                    },
+                    {
+                        "title": "Builder Champion",
+                        "id": "crowdfunding-builder-champion",
+                        "price": 24900,
+                        "badge_id": "crowdfunding-builder-champion-badge",
+                        "features": [
+                            "Guaranteed early access at launch",
+                            "0% platform fee on first $85,000 earned",
+                            "Long-term priority status",
+                            "Champion badge"
+                        ],
+                        "options": [],
+                        "money_before_fee": 8500000
+                    },
+                    {
+                        "title": "Builder Patron",
+                        "id": "crowdfunding-builder-patron",
+                        "price": 49900,
+                        "badge_id": "crowdfunding-builder-patron-badge",
+                        "features": [
+                            "Immediate launch access",
+                            "Lifetime priority across matching & opportunities",
+                            "0% platform fee on first $200,000 earned",
+                            "Patron recognition badge"
+                        ],
+                        "options": [],
+                        "money_before_fee": 20000000
+                    }
+                ]
+            }
         ]
     },
     {
@@ -823,7 +824,7 @@ PLANS = [
         "category": "credits",
         "currency": "usd",
         "description": "Usage-based credits for AI, automation, and processing.",
-        "credit_packs": [
+        "data": [
             {
                 "type": "monthly",
                 "title": "Monthly Credit Pack - 1,000",
@@ -889,6 +890,7 @@ PLANS = [
         ],
         "description_details": "Credits are used for AI (text, image, video, voice), automation, heavy processing, and external APIs. Core collaboration never uses credits."
     },
+    
 ]
 
 def insert_default_plans():

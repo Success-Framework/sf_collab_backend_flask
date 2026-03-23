@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, current_app, abort
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_cors import cross_origin
 from app.models.transaction import Transaction
-from app.extensions import db
+from app.extensions import db, celery
 from app.models.plan import Plan
 from app.subscription_plans import PLANS
 from app.models.user import User
@@ -19,8 +19,47 @@ from app.notifications.helpers import (
     notify_points_earned,
     notify_contribution_verified
 )
+# Real-money Balance model — deposits from Stripe land here
+from app.models.Balance import Balance, BalanceTransaction
+# Crystal visibility boosts — needed for the expiry Celery task
+from app.models.Crystal import VisibilityBoost
+from datetime import datetime
 
 payment_bp = Blueprint("payments", __name__, url_prefix="/payments")
+
+
+# =============================================================================
+# CELERY TASK — Auto-expire Visibility Boosts
+# =============================================================================
+# Runs every 10 minutes (configured in extensions.py beat_schedule).
+# Finds all boosts whose expires_at has passed and marks them inactive.
+# This keeps the discovery/ranking system accurate without manual cleanup.
+# =============================================================================
+@celery.task(name="app.routes.payment_routes.expire_visibility_boosts")
+def expire_visibility_boosts():
+    """
+    Background task: mark expired VisibilityBoosts as inactive.
+    Scheduled via Celery Beat every 10 minutes.
+
+    To run manually (for testing):
+        from app.routes.payment_routes import expire_visibility_boosts
+        expire_visibility_boosts.delay()
+    """
+    now = datetime.utcnow()
+    expired = VisibilityBoost.query.filter(
+        VisibilityBoost.is_active == True,
+        VisibilityBoost.expires_at <= now
+    ).all()
+
+    count = len(expired)
+    for boost in expired:
+        boost.is_active = False
+
+    if count > 0:
+        db.session.commit()
+        print(f"[Celery] Expired {count} visibility boost(s)")
+
+    return {"expired_count": count}
 
 
 def get_user_full_name(user_id):
@@ -51,6 +90,7 @@ def get_plans():
             "title": plan['category'],
             "currency": plan.get('currency', 'usd'),
             "description": plan.get('description', ''),
+            "data": plan.get('data', []),
             "roles": plan.get('roles', []),
         } for plan in plans])
 
@@ -70,7 +110,7 @@ def get_plan_by_id(plan_id):
                         return jsonify(result)
 
         # 2️⃣ Check ai-tools -> tools
-        if 'tools' in category:
+        if 'ai-tools' in category:
             for tool in category['tools']:
                 if tool.get('id') == plan_id:
                     result = tool.copy()
@@ -183,6 +223,74 @@ def checkout():
 def get_checkout_session(session_id):
     session = stripe.checkout.Session.retrieve(session_id)
     return jsonify(session)
+
+
+# ─────────────────────────────────────────────────────────────────
+# CROWDFUNDING INTEREST ENDPOINT
+# Crowdfunding payments are disabled. This endpoint logs user interest
+# so we can notify them when crowdfunding launches.
+# No payment is created. No campaign is started.
+# ─────────────────────────────────────────────────────────────────
+@payment_bp.route("/crowdfunding-interest", methods=["POST"])
+@jwt_required()
+def register_crowdfunding_interest():
+    """
+    Log that the current user is interested in crowdfunding.
+    Stores interest in the database (user metadata).
+    Returns 409 if already registered, 200 on success.
+    """
+    try:
+        current_user_id = int(get_jwt_identity())
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return error_response("User not found", 404)
+
+        # Read existing preferences safely
+        preferences = {}
+        if hasattr(user, 'preferences') and isinstance(user.preferences, dict):
+            preferences = dict(user.preferences)
+
+        if preferences.get("crowdfunding_interest"):
+            return jsonify({
+                "success": True,
+                "already_registered": True,
+                "message": "You have already registered your interest in crowdfunding."
+            }), 409
+
+        # Mark interest with a proper datetime string
+        preferences["crowdfunding_interest"] = True
+        preferences["crowdfunding_interest_at"] = datetime.utcnow().isoformat()
+
+        # Use update_preferences if available, otherwise set directly
+        if hasattr(user, 'update_preferences'):
+            user.update_preferences(preferences)
+        else:
+            user.preferences = preferences
+
+        db.session.commit()
+
+        # Optionally send a confirmation notification
+        try:
+            from app.notifications.helpers import notify_general
+            notify_general(
+                user_id=current_user_id,
+                title="Crowdfunding Interest Registered 🚀",
+                message="Thanks for your interest! We'll notify you the moment crowdfunding goes live.",
+                notification_type="system"
+            )
+        except Exception:
+            pass  # Non-critical — don't fail the request
+
+        return success_response(
+            {"registered": True},
+            "Your interest in crowdfunding has been registered! We'll notify you when it launches.",
+            200
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f"Failed to register interest: {str(e)}", 500)
 
 
 # @payment_bp.route("/record-transaction", methods=["POST"])
@@ -394,9 +502,46 @@ def stripe_webhook():
                 plan_credits = CREDITS.get(plan_id, 0)
                 
                 if plan_credits > 0:
+                    # Keep User.credits in sync for backward compatibility
                     user.credits = (user.credits or 0) + plan_credits
+                    
+                    # Primary source of truth: UserWallet.credits
+                    if not user.wallet:
+                        from app.models.UserWallet import UserWallet
+                        user.wallet = UserWallet(user_id=user.id)
+                        db.session.add(user.wallet)
+                        db.session.flush()
+                        
+                    user.wallet.add_credits(
+                        amount=plan_credits,
+                        description=f"Purchased plan/top-up: {plan_id}"
+                    )
             else:
                 print(f"⚠️ User {user_id} not found")
+
+        # ======================================================
+        # Deposit type → credit the real-money Balance model
+        # This is separate from AI credits (UserWallet.credits).
+        # Balance is the financial settlement layer used for
+        # marketplace purchases, mentorship, and crowdfunding.
+        # ======================================================
+        if user_id and tx_type == "deposit":
+            user = User.query.get(user_id)
+            if user:
+                balance = Balance.query.filter_by(user_id=user_id).first()
+                if not balance:
+                    balance = Balance(user_id=user_id)
+                    db.session.add(balance)
+                    db.session.flush()
+
+                balance_tx = balance.deposit(
+                    cents=amount,
+                    description=f"Stripe deposit — session {session.get('id')}"
+                )
+                balance_tx.stripe_payment_id = session.get("id")
+                print(f"✅ [WEBHOOK] Credited Balance: {amount}¢ for user {user_id}")
+            else:
+                print(f"⚠️ [WEBHOOK] Deposit: user {user_id} not found")
 
         db.session.commit()
         print(f"✅ [WEBHOOK] Transaction stored (ID {tx.id})")
@@ -598,4 +743,164 @@ def get_credits():
     user = User.query.get(user_id)
     if not user:
         return error_response("User not found", 404)
-    return success_response({"credits": user.credits})
+    wallet_credits = user.wallet.credits if user.wallet else user.credits or 0
+    return success_response({"credits": wallet_credits})
+
+@payment_bp.route("/ai-tools", methods=["GET"])
+@jwt_required()
+def get_ai_tools():
+    ai_plans = [plan for plan in PLANS if plan['category'] == 'ai-tools']
+    if not ai_plans:
+        return success_response({"tools": []})
+    tools = ai_plans[0].get('tools', [])
+    return success_response({"tools": tools})
+
+@payment_bp.route("/deposit", methods=["POST"])
+@jwt_required()
+def deposit_funds():
+    """Allow users to deposit real money into their platform wallet"""
+    try:
+        data = request.get_json()
+        amount = data.get("amount")  # in cents
+        user_id = get_jwt_identity()
+        
+        if not amount or amount <= 0:
+            return error_response("Invalid amount", 400)
+        
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User not found", 404)
+        
+        session = stripe.checkout.Session.create(
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": "Platform Wallet Deposit"},
+                    "unit_amount": amount,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            ui_mode="hosted",
+            metadata={
+                "user_id": user_id,
+                "type": "deposit",
+            },
+            success_url=f"{current_app.config['FRONTEND_URL']}/wallet/deposit/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{current_app.config['FRONTEND_URL']}/wallet/deposit/cancel",
+        )
+        
+        return jsonify({
+            "checkoutSessionClientSecret": session["client_secret"],
+            "url": session["url"],
+            "success": True
+        })
+    except Exception as e:
+        return error_response(str(e), 500)
+@payment_bp.route("/wallet-balance", methods=["GET"])
+@jwt_required()
+def get_wallet_balance():
+    """Get user's wallet balance (balance is separate from credits)"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        
+        if not user:
+            return error_response("User not found", 404)
+        
+        balance = user.wallet.credits if user.wallet else 0
+        
+        return success_response({
+            "balance": balance,
+            "currency": "usd"
+        })
+    except Exception as e:
+        return error_response(str(e), 500)
+@payment_bp.route("/withdraw", methods=["POST"])
+@jwt_required()
+def withdraw_funds():
+    """Withdraw funds from wallet to connected bank account"""
+    try:
+        data = request.get_json()
+        amount = data.get("amount")  # in cents
+        user_id = get_jwt_identity()
+        
+        if not amount or amount <= 0:
+            return error_response("Invalid amount", 400)
+        
+        user = User.query.get(user_id)
+        if not user:
+            return error_response("User not found", 404)
+        
+        current_balance = user.wallet.credits if user.wallet else 0
+        if current_balance < amount:
+            return error_response("Insufficient balance", 400)
+        
+        if not user.stripe_connect_account_id:
+            return error_response("No connected bank account. Please connect Stripe account first.", 400)
+        
+        # Create payout to connected account
+        payout = stripe.Payout.create(
+            amount=amount,
+            currency="usd",
+            destination=user.stripe_connect_account_id,
+        )
+        
+        # Deduct from wallet using the model method
+        user.wallet.spend_credits(amount, description="Withdrawal to bank account")
+        
+        # Create withdrawal transaction record
+        withdrawal_tx = Transaction(
+            user_id=user_id,
+            amount=amount,
+            currency="usd",
+            type="withdrawal",
+            status="completed",
+            stripe_payout_id=payout.id
+        )
+        
+        db.session.add(withdrawal_tx)
+        db.session.commit()
+        
+        return success_response({
+            "withdrawal_id": withdrawal_tx.id,
+            "amount": amount,
+            "new_balance": user.wallet.credits,
+            "payout_id": payout.id
+        }, "Withdrawal processed successfully", 200)
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+@payment_bp.route("/wallet-transactions", methods=["GET"])
+@jwt_required()
+def get_wallet_transactions():
+    """Get user's wallet transaction history"""
+    try:
+        user_id = get_jwt_identity()
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 10, type=int)
+        
+        query = Transaction.query.filter(
+            Transaction.user_id == user_id,
+            Transaction.type.in_(["deposit", "withdrawal"])
+        ).order_by(Transaction.created_at.desc())
+        
+        paginated = paginate(query, page=page, per_page=per_page)
+        
+        result = [
+            {
+                "id": tx.id,
+                "type": tx.type,
+                "amount": tx.amount,
+                "status": tx.status,
+                "createdAt": tx.created_at.isoformat()
+            }
+            for tx in paginated["items"]
+        ]
+        
+        return success_response({
+            "transactions": result,
+            "pagination": paginated
+        })
+    except Exception as e:
+        return error_response(str(e), 500)

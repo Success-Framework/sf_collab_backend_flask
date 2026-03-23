@@ -1,11 +1,15 @@
+# app/services/ai_assistant/vector_store.py
+
 import os
 import chromadb
 from chromadb.config import Settings
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-VECTOR_DB_DIR = os.path.join(BASE_DIR, 'vector_store')
+VECTOR_STORE_PATH = os.getenv(
+    "VECTOR_STORE_PATH",
+    "/app/vector_store"   # shared directory inside container
+)
 
-os.makedirs(VECTOR_DB_DIR, exist_ok=True)
+os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
 
 _client = None
 _collection = None

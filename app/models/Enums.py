@@ -85,6 +85,7 @@ class SuggestionStatus(enum.Enum):
     pending = "pending"
     accepted = "accepted"
     rejected = "rejected"
+    cancelled = "cancelled"
 
 class StartupStage(enum.Enum):
     idea = "idea"
@@ -97,6 +98,7 @@ class JoinRequestStatus(enum.Enum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+    cancelled = "cancelled"
 
 class StoryType(enum.Enum):
     image = "image"
@@ -107,10 +109,9 @@ class PostType(enum.Enum):
     social = "social"
     image = "image"
     video = "video"
+    text = "text"
 
 class ConnectionStatus(enum.Enum):
     connected = "connected"
     pending = "pending"
     blocked = "blocked"
-
-

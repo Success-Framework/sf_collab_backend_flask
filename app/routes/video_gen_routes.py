@@ -147,3 +147,14 @@ def generate_video_route():
 #  → Save output
 #  → Increment usage
 #  → Return final URL
+
+@video_bp.route("/download/<filename>", methods=["GET"])
+@jwt_required()
+def download_video(filename):
+    user_id = get_jwt_identity()
+    video_path = os.path.join(current_app.config["VIDEO_OUTPUT_DIR"], secure_filename(filename))
+
+    if not os.path.exists(video_path):
+        return standard_response(False, None, "File not found", 404)
+
+    return send_file(video_path, as_attachment=True)

@@ -4,6 +4,7 @@ from app.models.user import User
 from app.extensions import db
 from app.utils.helper import error_response, success_response, paginate
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from operator import or_
 
 user_social_bp = Blueprint('user_social', __name__)
 
@@ -362,6 +363,64 @@ def update_match_preferences(user_id):
     db.session.rollback()
     return error_response(f'Failed to update match preferences: {str(e)}', 500)
 
+@user_social_bp.route('/suggestions', methods=['GET'])
+@jwt_required()
+def get_user_suggestions():
+  """Get user suggestions based on match preferences"""
+  limit = request.args.get('limit', 5, type=int)
+  current_user_id = get_jwt_identity()
+  
+  if not current_user_id:
+    return error_response('User not found', 404)
+  
+  try:
+    social = UserSocial.query.filter_by(user_id=current_user_id).first()
+    if not social:
+      return error_response('Social profile not found', 404)
+    
+    if not social.pref_suggested_accounts:
+      return success_response({'suggestions': []}, 'No suggestions available')
+
+    exclude_ids = set(social.following_ids or []).union(social.blocked_ids or []).union([current_user_id])
+    users = User.query.filter(~User.id.in_(exclude_ids)).all()
+
+    preferences = social.match_preferences or {}
+    filters = []
+
+    if 'location' in preferences:
+      filters.append(User.profile_city == preferences['location'] or User.profile_country == preferences['location'])
+    if 'looking_for' in preferences:
+      filters.append(User.role.in_(preferences['looking_for']))
+    # Add more filters based on other preferences as needed - e.g. industry, skills, etc.
+    
+    if filters:
+      users = users.filter(or_(*filters))
+      
+    candidates = users.limit(200).all()
+
+    scored_users = []
+    for candidate in candidates:
+      score = 0
+      if 'location' in preferences and (candidate.profile_city == preferences['location'] or candidate.profile_country == preferences['location']):
+        score += 10
+      if 'looking_for' in preferences and candidate.role in preferences.get('looking_for', []):
+        score += 5
+      if score > 0:
+        scored_users.append((candidate, score))
+
+    sorted_users = sorted(scored_users, key=lambda x: x[1], reverse=True)
+    top_users = [user.to_dict() for user, _ in sorted_users[:limit]]
+    # Add additional users if we don't have enough suggestions based on preferences
+    if len (top_users) < limit:
+      additional_needed = limit - len(top_users)
+      additional_users = users.filter(~User.id.in_([u['id'] for u in top_users])).order_by(User.created_at.desc()).limit(additional_needed).all()
+      
+    top_users.extend([user.to_dict() for user in additional_users])
+    return success_response({'suggestions': top_users}, 'Suggestions retrieved successfully')
+  except Exception as e:
+    return error_response(f'Failed to get user suggestions based on match preferences: {str(e)}', 500)
+
+
 # ============= SOCIAL PROFILE ROUTES =============
 
 @user_social_bp.route('/<int:user_id>', methods=['GET'])
@@ -373,6 +432,24 @@ def get_social_profile(user_id):
     return error_response('Social profile not found', 404)
   
   return success_response({'social': social.to_dict()})
+
+@user_social_bp.route('/<int:user_id>', methods=['POST'])
+@jwt_required()
+def create_social_profile(user_id):
+  """Create user's social profile"""
+  print("Creating social profile for user_id:", user_id)
+
+  user_social = UserSocial(
+    user_id=user_id
+    )
+  try:
+    db.session.add(user_social)
+    db.session.commit()
+  except Exception as e:
+    db.session.rollback()
+    return error_response(f'Failed to create social profile: {str(e)}', 500)
+  
+  return success_response({'social': user_social.to_dict()})
 
 @user_social_bp.route('/<int:user_id>/privacy', methods=['PUT'])
 @jwt_required()

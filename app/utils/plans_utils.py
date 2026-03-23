@@ -94,10 +94,11 @@ PLAN_LIMITS = {
 
 def get_user_plan_type(user: User) -> PlanType:
   """Get the plan type for a user based on plan_id"""
-  if not user.plan_id:
+  if not user.founder_plan_id and not user.builder_plan_id:
     return PlanType.FOUNDER_FREE
-  
+  print(f"User {user.id} - Founder Plan: {user.founder_plan_id}, Builder Plan: {user.builder_plan_id}")
   plan_mapping = {
+    # Standard plans
     "founder-free": PlanType.FOUNDER_FREE,
     "founder-starter": PlanType.FOUNDER_STARTER,
     "founder-pro": PlanType.FOUNDER_PRO,
@@ -107,8 +108,31 @@ def get_user_plan_type(user: User) -> PlanType:
     "builder-pro": PlanType.BUILDER_PRO,
     "builder-plus": PlanType.BUILDER_PLUS,
     "builder-elite": PlanType.BUILDER_ELITE,
+    # Crowdfunding plans map to their standard equivalents
+    "crowdfunding-founder-explorer": PlanType.FOUNDER_STARTER,
+    "crowdfunding-founder-starter-supporter": PlanType.FOUNDER_STARTER,
+    "crowdfunding-founder-pro": PlanType.FOUNDER_PRO,
+    "crowdfunding-founder-power": PlanType.FOUNDER_SCALE,
+    "crowdfunding-founder-champion": PlanType.FOUNDER_SCALE,
+    "crowdfunding-founder-patron": PlanType.FOUNDER_PARTNER,
+    "crowdfunding-founding-partner": PlanType.FOUNDER_PARTNER,
+    "crowdfunding-strategic-supporter": PlanType.FOUNDER_PARTNER,
+    "crowdfunding-builder-supporter": PlanType.BUILDER_PRO,
+    "crowdfunding-builder-early": PlanType.BUILDER_PRO,
+    "crowdfunding-builder-starter": PlanType.BUILDER_PLUS,
+    "crowdfunding-builder-pro-supporter": PlanType.BUILDER_PLUS,
+    "crowdfunding-builder-power-supporter": PlanType.BUILDER_ELITE,
+    "crowdfunding-builder-champion": PlanType.BUILDER_ELITE,
+    "crowdfunding-builder-patron": PlanType.BUILDER_ELITE,
   }
-  return plan_mapping.get(user.plan_id.lower(), PlanType.FOUNDER_FREE)
+  if user.founder_plan_id:
+    plan_id = user.founder_plan_id
+  elif user.builder_plan_id:
+    plan_id = user.builder_plan_id
+  else:
+    plan_id = "founder-free"
+  
+  return plan_mapping.get(plan_id.lower(), PlanType.FOUNDER_FREE)
 
 def get_plan_limits(user: User) -> dict:
   """Get plan limits for a user"""
@@ -126,15 +150,7 @@ def can_create_project(user: User) -> bool:
 def can_add_collaborator(user: User) -> bool:
     plan_limits = get_plan_limits(user)
 
-    current_collaborators = (
-        db.session
-        .query(func.count(StartupMember.id))
-        .filter(
-            StartupMember.user_id != user.id
-        )
-        .scalar()
-    )
-
+    current_collaborators = db.session.query(func.count(StartupMember.id)).join(StartupMember.member_startup).filter(StartupMember.user_id == user.id and StartupMember.member_startup.creator_id == user.id).scalar()
     return current_collaborators < plan_limits["max_collaborators"]
 
 def can_create_task_or_milestone(user: User) -> bool:
@@ -143,26 +159,40 @@ def can_create_task_or_milestone(user: User) -> bool:
   # Assuming tasks and milestones share the same limit as projects for simplicity
   current_tasks_milestones = user.created_tasks.count() + user.project_goals.count()
   return current_tasks_milestones < plan_limits["max_tasks_milestones"]
+
+def can_update_file(user: User, old_file_size_mb: float, new_file_size_mb: float) -> bool:
+  """Check if user can update a file of given size"""
+  plan_limits = get_plan_limits(user)
+  
+  if new_file_size_mb > plan_limits["max_file_size_mb"]:
+    return False, "File exceeds per-file limit"
+  if user.storage_used_mb + (new_file_size_mb - old_file_size_mb) > plan_limits["max_total_storage_mb"]:
+    return False, "Total storage limit exceeded"
+  return True
+
 def can_upload_file(user: User, file_size_mb: float) -> bool:
   """Check if user can upload a file of given size"""
   plan_limits = get_plan_limits(user)
   
   if file_size_mb > plan_limits["max_file_size_mb"]:
-    return False
-  
+    return False, "File exceeds per-file limit"
+  if user.storage_used_mb + file_size_mb > plan_limits["max_total_storage_mb"]:
+    return False, "Total storage limit exceeded"
   return True
 
 def consume_ai_credits(user: User, amount: int) -> bool:
   """Consume AI credits for a user"""
-  if user.credits >= amount:
-    user.credits -= amount
+  if getattr(user, 'wallet', None) and (user.wallet.credits or 0) >= amount:
+    user.wallet.spend_credits(amount, description="Consumed AI Credits")
     db.session.commit()
     return True
   return False
 
 def get_remaining_ai_credits(user: User) -> int:
   """Get remaining AI credits for user"""
-  return user.credits
+  if getattr(user, 'wallet', None):
+      return user.wallet.credits or 0
+  return 0
 
 def calculate_platform_fee(user: User, amount: float) -> float:
   """Calculate platform fee based on user's plan"""

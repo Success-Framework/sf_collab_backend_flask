@@ -15,6 +15,7 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     is_email_verified = db.Column(db.Boolean, default=False)
     last_login = db.Column(db.DateTime, nullable=True)
+    last_seen = db.Column(db.DateTime, nullable=True)  # Updated on socket disconnect
     status = db.Column(Enum(UserStatus), default=UserStatus.active)
     role = db.Column(Enum(UserRoles), default=UserRoles.member)
     xp_points = db.Column(db.Integer, default=0)
@@ -29,6 +30,22 @@ class User(db.Model):
     total_revenue = db.Column(db.Float, default=0.0)
     satisfaction_percentage = db.Column(db.Float, default=100.0)
     active_startups_count = db.Column(db.Integer, default=0)
+
+    # -------------------------------------------------------------------------
+    # Stripe Connect — needed for contributor/mentor withdrawal payouts
+    # -------------------------------------------------------------------------
+    stripe_connect_account_id = db.Column(db.String(255), nullable=True)
+
+    # -------------------------------------------------------------------------
+    # Reputation System — execution-based only (per SF Economy docs)
+    # Rule: money/crystals/ratings must NEVER directly affect these scores.
+    # -------------------------------------------------------------------------
+    reputation_score      = db.Column(db.Float, default=0.0)
+    milestones_completed  = db.Column(db.Integer, default=0)
+    milestones_on_time    = db.Column(db.Integer, default=0)
+    tasks_completed       = db.Column(db.Integer, default=0)
+    tasks_on_time         = db.Column(db.Integer, default=0)
+    collaborations_count  = db.Column(db.Integer, default=0)
     
     # Profile
     profile_picture = db.Column(db.String(500), nullable=True)
@@ -76,9 +93,117 @@ class User(db.Model):
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Storage
+    storage_used_mb = db.Column(db.Float, default=0.0, nullable=False)
     
     # ========== RELATIONSHIPS ==========
     
+     # Marketplace seller profile (one-to-one)
+    seller_profile = db.relationship(
+        'Seller',
+        back_populates='user',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+    
+    # =========================================================================
+    # WALLET & STORE RELATIONSHIPS - ADD THESE TO YOUR USER MODEL
+    # =========================================================================
+
+    # Wallet (one-to-one relationship)
+    wallet = db.relationship("UserWallet", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan")
+
+    # Wallet transactions
+    wallet_transactions = db.relationship("WalletTransaction", 
+        back_populates="user", 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # Store purchases
+    purchases = db.relationship('ProductPurchase', 
+        back_populates='user', 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # User inventory (owned items)
+    inventory = db.relationship('UserInventory', 
+        back_populates='user', 
+        lazy='dynamic',
+        cascade="all, delete-orphan")
+
+    # Event token balances
+    event_token_balances = db.relationship("EventTokenBalance", 
+        back_populates="user",
+        lazy='dynamic')
+
+    # =========================================================================
+    # ECONOMY LAYER 2 — Real-money Balance + Escrow
+    # =========================================================================
+
+    # Real-money balance (one-to-one)
+    balance = db.relationship(
+        'Balance',
+        back_populates='user',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+
+    # Immutable audit log of every real-money movement
+    balance_transactions = db.relationship(
+        'BalanceTransaction',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+
+    # Escrow agreements where this user is the Payer (Founder)
+    escrows_as_payer = db.relationship(
+        'EscrowTransaction',
+        foreign_keys='EscrowTransaction.payer_id',
+        back_populates='payer',
+        lazy='dynamic'
+    )
+
+    # Escrow agreements where this user is the Payee (Contributor)
+    escrows_as_payee = db.relationship(
+        'EscrowTransaction',
+        foreign_keys='EscrowTransaction.payee_id',
+        back_populates='payee',
+        lazy='dynamic'
+    )
+
+    # =========================================================================
+    # ECONOMY LAYER 3 — Crystals (visibility acceleration only — NOT money)
+    # =========================================================================
+
+    # Crystal wallet (one-to-one)
+    crystal_wallet = db.relationship(
+        'CrystalWallet',
+        back_populates='user',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
+
+    # Crystal transaction log
+    crystal_transactions = db.relationship(
+        'CrystalTransaction',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+
+    # Visibility boosts purchased with crystals
+    visibility_boosts = db.relationship(
+        'VisibilityBoost',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+
     # Core Authentication & Profile
     refresh_tokens = db.relationship('RefreshToken', 
         back_populates='token_owner', 
@@ -316,29 +441,115 @@ class User(db.Model):
         lazy="joined"
     )
     transactions = db.relationship("Transaction", back_populates="user")
+    
+    wallet = db.relationship(
+        "UserWallet",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    
+    # Wallet/shop relationships (needed by WalletTransaction/ProductPurchase/UserInventory/EventTokenBalance)
+    wallet_transactions = db.relationship(
+        "WalletTransaction",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    purchases = db.relationship(
+        "ProductPurchase",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    inventory = db.relationship(
+        "UserInventory",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    event_token_balances = db.relationship(
+        "EventTokenBalance",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    startup_views = db.relationship(
+        'StartupView',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+    contribution_ideas = db.relationship(
+        'ContributionIdea',
+        back_populates='user',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
+    idea_comment_likes = db.relationship(
+        'IdeaCommentLike',
+        back_populates='liker',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        foreign_keys='IdeaCommentLike.user_id'
+    )
     # ========== HELPER FUNCTIONS ==========
+    
     
     def update_last_activity(self):
         """Update last activity date and maintain streak"""
-        today = datetime.utcnow().date()
-        
-        if self.last_activity_date and self.last_activity_date == today - timedelta(days=1):
-            self.streak_days += 1
-        elif self.last_activity_date != today:
-            self.streak_days = 1
-        
-        self.last_activity_date = today
-        self.last_login = datetime.utcnow()
-        
-        from app.services.achievement_service import AchievementService
-        AchievementService.check_achievements(self.id, 'streak_days')
-        
-        db.session.commit()
+        from app.services.streak_service import StreakService
+        StreakService.update_streak(self.id)
     
     def add_xp_points(self, points: int):
         """Add XP points to user"""
         self.xp_points += points
         db.session.commit()
+
+    def compute_reputation_score(self) -> float:
+        """
+        Compute and cache reputation score (0-100).
+        Execution-based only — money/crystals/ratings never affect this.
+
+        Weights:
+          40% — milestone on-time rate
+          30% — task on-time rate
+          20% — XP points (capped at 5000)
+          10% — collaboration breadth (capped at 10 startups)
+        """
+        score = 0.0
+
+        if self.milestones_completed and self.milestones_completed > 0:
+            score += min(self.milestones_on_time / self.milestones_completed, 1.0) * 40
+
+        if self.tasks_completed and self.tasks_completed > 0:
+            score += min(self.tasks_on_time / self.tasks_completed, 1.0) * 30
+
+        score += min((self.xp_points or 0) / 5000, 1.0) * 20
+        score += min((self.collaborations_count or 0) / 10, 1.0) * 10
+
+        self.reputation_score = round(score, 2)
+        db.session.commit()
+        return self.reputation_score
+
+    def record_milestone_completed(self, on_time: bool = True):
+        """Call when user completes a milestone. Updates reputation."""
+        self.milestones_completed = (self.milestones_completed or 0) + 1
+        if on_time:
+            self.milestones_on_time = (self.milestones_on_time or 0) + 1
+        self.compute_reputation_score()
+
+    def record_task_completed(self, on_time: bool = True):
+        """Call when user completes a task. Updates reputation."""
+        self.tasks_completed = (self.tasks_completed or 0) + 1
+        if on_time:
+            self.tasks_on_time = (self.tasks_on_time or 0) + 1
+        self.compute_reputation_score()
+
+    def record_collaboration(self):
+        """Call when user joins a new startup. Updates reputation."""
+        self.collaborations_count = (self.collaborations_count or 0) + 1
+        self.compute_reputation_score()
     
     def verify_email(self):
         """Mark user's email as verified"""
@@ -562,24 +773,25 @@ class User(db.Model):
         )
         
         return verification_code
-    def to_dict(self, include_password=False, include_statistics=False, include_recent_activity=False):
+    def to_dict(self, include_password=False, include_statistics=False, include_recent_activity=False, public=False):
         data = {
             'id': self.id,
             'firstName': self.first_name,
             'lastName': self.last_name,
-            'email': self.email,
-            'isEmailVerified': self.is_email_verified,
-            'lastLogin': self.last_login.isoformat() if self.last_login else None,
-            'last_seen': self.last_login.isoformat() if self.last_login else None, 
+            'fullName': self.get_full_name(),
             'profile_picture': self.profile_picture,
             'status': self._enum_to_value(self.status),
             'role': self._enum_to_value(self.role),
             'xp_points': self.xp_points,
             'streak_days': self.streak_days,
             'last_activity_date': self.last_activity_date.isoformat() if self.last_activity_date else None,
-            'total_revenue': self.total_revenue,
-            'satisfaction_percentage': self.satisfaction_percentage,
             'active_startups_count': self.active_startups_count,
+            'reputation_score': self.reputation_score or 0.0,
+            'milestones_completed': self.milestones_completed or 0,
+            'milestones_on_time': self.milestones_on_time or 0,
+            'tasks_completed': self.tasks_completed or 0,
+            'tasks_on_time': self.tasks_on_time or 0,
+            'collaborations_count': self.collaborations_count or 0,
             'profile': {
                 'picture': self.profile_picture,
                 'bio': self.profile_bio,
@@ -587,51 +799,57 @@ class User(db.Model):
                 'socialLinks': self.profile_social_links or {},
                 'country': self.profile_country,
                 'city': self.profile_city,
-                'timezone': self.profile_timezone
             },
-            'preferences': {
-                'emailNotifications': self.pref_email_notifications,
-                'pushNotifications': self.pref_push_notifications,
-                'privacy': self._enum_to_value(self.pref_privacy),
-                'language': self.pref_language,
-                'timezone': self.pref_timezone,
-                'theme': self._enum_to_value(self.pref_theme),
-                'builderPreferences': self.pref_builder_preferences
-            },
-            'notificationSettings': {
-                'newComments': self.notif_new_comments,
-                'newLikes': self.notif_new_likes,
-                'newSuggestions': self.notif_new_suggestions,
-                'joinRequests': self.notif_join_requests,
-                'approvals': self.notif_approvals,
-                'storyViews': self.notif_story_views,
-                'postEngagement': self.notif_post_engagement,
-                'emailDigest': self._enum_to_value(self.notif_email_digest),
-                'quietHours': {
-                    'enabled': self.notif_quiet_hours_enabled,
-                    'start': self.notif_quiet_hours_start,
-                    'end': self.notif_quiet_hours_end
-                }
-            },
+            'builder_plan_id': self.builder_plan_id,
+            'founder_plan_id': self.founder_plan_id,
             'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat(),
-            'fullName': self.get_full_name(),
-            'timezone': self.get_timezone(),
-            'permissions': [perm.to_dict() for perm in self.permissions],
             'roles': [ur.role for ur in self.user_roles],
-            'credits': self.credits,
-            
-            # Multi-role profile data
-            # 'roles': self.roles or [],
-            # 'founderProfile': self.founder_profile or {},
-            # 'builderProfile': self.builder_profile or {},
-            # 'influencerProfile': self.influencer_profile or {},
-            # 'investorProfile': self.investor_profile or {},
-            # 'profileCompletion': {
-            #     'basicProfileSetup': self.profile_setup_completed,
-            #     'roleProfileCompleted': self.role_profile_completed
-            # }
+            'startupViews': self.startup_views.count(),
         }
+        
+        # Private fields — only visible to the user themselves
+        if not public:
+            data.update({
+                'email': self.email,
+                'isEmailVerified': self.is_email_verified,
+                'lastLogin': self.last_login.isoformat() if self.last_login else None,
+                'last_seen': self.last_seen.isoformat() if self.last_seen else (
+                    self.last_login.isoformat() if self.last_login else None
+                ),
+                'updatedAt': self.updated_at.isoformat(),
+                'timezone': self.get_timezone(),
+                'total_revenue': self.total_revenue,
+                'satisfaction_percentage': self.satisfaction_percentage,
+                'builder_plan_id': self.builder_plan_id,
+                'founder_plan_id': self.founder_plan_id,
+                'preferences': {
+                    'emailNotifications': self.pref_email_notifications,
+                    'pushNotifications': self.pref_push_notifications,
+                    'privacy': self._enum_to_value(self.pref_privacy),
+                    'language': self.pref_language,
+                    'timezone': self.pref_timezone,
+                    'theme': self._enum_to_value(self.pref_theme),
+                    'builderPreferences': self.pref_builder_preferences
+                },
+                'notificationSettings': {
+                    'newComments': self.notif_new_comments,
+                    'newLikes': self.notif_new_likes,
+                    'newSuggestions': self.notif_new_suggestions,
+                    'joinRequests': self.notif_join_requests,
+                    'approvals': self.notif_approvals,
+                    'storyViews': self.notif_story_views,
+                    'postEngagement': self.notif_post_engagement,
+                    'emailDigest': self._enum_to_value(self.notif_email_digest),
+                    'quietHours': {
+                        'enabled': self.notif_quiet_hours_enabled,
+                        'start': self.notif_quiet_hours_start,
+                        'end': self.notif_quiet_hours_end
+                    }
+                },
+                'permissions': [perm.to_dict() for perm in self.permissions],
+                'credits': self.credits,
+                'wallet': self.wallet.to_dict() if self.wallet else None,
+            })
         
         if include_password:
             data['password'] = self.password
@@ -643,4 +861,23 @@ class User(db.Model):
             data['recentActivity'] = self.get_recent_activity()
         
         return data
+    
+    def increase_storage_used(self, file_size_mb):
+        """ Increase user's used storage when a file is uploaded """
+        if not file_size_mb:
+            return
+        self.storage_used_mb = (self.storage_used_mb or 0) + file_size_mb
+
+    def decrease_storage_used(self, file_size_mb):
+        """ Decrease user's used storage when a file is deleted. """
+        if not file_size_mb:
+            return
+        self.storage_used_mb = max((self.storage_used_mb or 0) - file_size_mb, 0)
+
+    def update_storage_used(self, old_file_size_mb, new_file_size_mb):
+        """ Update user's used storage when a file is updated/replaced. """
+        if not old_file_size_mb or not new_file_size_mb:
+            return
+        self.storage_used_mb = max((self.storage_used_mb or 0) - old_file_size_mb + new_file_size_mb, 0)
+        
     

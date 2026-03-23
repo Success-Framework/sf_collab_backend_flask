@@ -6,7 +6,8 @@ class PostMedia(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('posts.id', ondelete='CASCADE'), nullable=False)
-    data = db.Column(db.LargeBinary)
+    # data = db.Column(db.LargeBinary)
+    media_url = db.Column(db.String(500), nullable=False)
     content_type = db.Column(db.String(100))
     file_name = db.Column(db.String(255))
     file_size = db.Column(db.Integer)  # Size in bytes
@@ -66,6 +67,7 @@ class PostMedia(db.Model):
             'postId': self.post_id,
             'contentType': self.content_type,
             'fileName': self.file_name,
+            'mediaUrl': self.media_url,
             'fileSize': self.file_size,
             'fileSizeFormatted': self.get_file_size_formatted(),
             'caption': self.caption,
@@ -76,7 +78,7 @@ class PostMedia(db.Model):
             'isVideo': self.is_video(),
             'isDocument': self.is_document(),
             'post': {
-                'id': self.post.id,
-                'content': self.post.content[:100] + '...' if len(self.post.content) > 100 else self.post.content
-            } if self.post else None
+                'id': self.parent_post.id,
+                'content': self.parent_post.content[:100] + '...' if len(self.parent_post.content) > 100 else self.parent_post.content
+            } if self.parent_post else None
         }

@@ -26,8 +26,10 @@ def get_user_full_name(user_id):
 
 
 @idea_comments_bp.route('', methods=['GET'])
+@jwt_required()
 def get_idea_comments():
     """Get all comments with filtering"""
+    current_user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     idea_id = request.args.get('idea_id', type=int)
@@ -43,7 +45,7 @@ def get_idea_comments():
     result = paginate(query.order_by(IdeaComment.created_at.desc()), page, per_page)
     
     return success_response({
-        'comments': [comment.to_dict() for comment in result['items']],
+        'comments': [comment.to_dict(current_user_id) for comment in result['items']],
         'pagination': {
             'page': result['page'],
             'per_page': result['per_page'],
@@ -75,7 +77,8 @@ def create_comment():
             content=data['content'],
             author_id=data['author_id'],
             author_first_name=data['author_first_name'],
-            author_last_name=data['author_last_name']
+            author_last_name=data['author_last_name'],
+            suggestion=data.get('suggestion', False)
         )
         
         db.session.add(comment)
@@ -225,3 +228,23 @@ def delete_comment(comment_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to delete comment: {str(e)}', 500)
+    
+@idea_comments_bp.route('/<int:comment_id>/like', methods=['POST'])
+@jwt_required()
+def toggle_like_comment(comment_id):
+    """Like or unlike a comment"""
+    current_user_id = get_jwt_identity()
+    
+    comment = IdeaComment.query.get(comment_id)
+    if not comment:
+        return error_response('Comment not found', 404)
+    
+    try:
+        comment.toggle_like(current_user_id)
+        return success_response({
+            'comment': comment.to_dict(),
+            'likes_count': comment.idea_comment_likes.count()
+        }, 'Comment like toggled successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to toggle like: {str(e)}', 500)

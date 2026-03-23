@@ -29,12 +29,12 @@ class StoryView(db.Model):
     
     def get_story_details(self):
         """Get story details"""
-        if self.story:
+        if self.viewed_story:
             return {
-                'media_url': self.story.media_url,
-                'caption': self.story.caption,
-                'type': self.story.type.value,
-                'author': f"{self.story.author_first_name} {self.story.author_last_name}"
+                'media_url': self.viewed_story.media_url,
+                'caption': self.viewed_story.caption,
+                'type': self.viewed_story.type.value,
+                'author': f"{self.viewed_story.author_first_name} {self.viewed_story.author_last_name}"
             }
         return None
     
@@ -50,9 +50,9 @@ class StoryView(db.Model):
             'is_recent': self.is_recent(),
             'story': self.get_story_details(),
             'user': {
-                'id': self.user.id,
-                'firstName': self.user.first_name,
-                'lastName': self.user.last_name,
-                'profilePicture': self.user.profile_picture
-            } if self.user else None
+                'id': self.view_owner.id,
+                'firstName': self.view_owner.first_name,
+                'lastName': self.view_owner.last_name,
+                'profilePicture': self.view_owner.profile_picture
+            } if self.view_owner else None
         }
