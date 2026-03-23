@@ -41,6 +41,7 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `is_email_verified` tinyint(1) DEFAULT NULL,
   `last_login` datetime DEFAULT NULL,
+  `last_seen` datetime DEFAULT NULL,
   `last_login_ip` varchar(45) DEFAULT NULL,
   `status` enum('active','deleted', 'banned') DEFAULT NULL,
   `role` enum('founder','contributor', 'influencer', 'content_creator', 'community_manager','hr_specialist','investor','advisor','mentor','partner','admin','moderator','member','technical_lead','engineering_manager','backend_engineer','frontend_engineer','fullstack_engineer','mobile_engineer','software_architect','qa_engineer','test_automation_engineer','devops_engineer','cloud_engineer','sre','infrastructure_engineer','platform_engineer','cybersecurity_engineer','data_scientist','data_engineer','machine_learning_engineer','ai_engineer','mlops_engineer','data_analyst','ai_researcher','product_manager','product_owner','ux_designer','ui_designer','product_designer','ux_researcher','growth_engineer','growth_marketer','seo_specialist','content_strategist') DEFAULT NULL,
@@ -218,7 +219,7 @@ CREATE TABLE `alembic_version` (
 
 LOCK TABLES `alembic_version` WRITE;
 /*!40000 ALTER TABLE `alembic_version` DISABLE KEYS */;
---INSERT INTO `alembic_version` VALUES ('55cb5f25f54c'),('d659945d25c6');
+INSERT INTO `alembic_version` VALUES ('ee78359866cc');
 /*!40000 ALTER TABLE `alembic_version` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -243,6 +244,7 @@ CREATE TABLE `calendar_events` (
   `color` varchar(20) DEFAULT NULL,
   `location` varchar(255) DEFAULT NULL,
   `is_recurring` tinyint(1) DEFAULT NULL,
+  `visible_by` varchar(255) DEFAULT NULL,
   `recurrence_rule` varchar(255) DEFAULT NULL,
   `reminder_minutes` int DEFAULT NULL,
   `created_at` datetime DEFAULT NULL,
@@ -850,6 +852,37 @@ LOCK TABLES `post_likes` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `post_likes`
+--
+
+DROP TABLE IF EXISTS `post_saves`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `post_saves` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `post_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `saved_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `post_id` (`post_id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `post_saves_ibfk_1` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `post_saves_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `post_saves`
+--
+
+LOCK TABLES `post_saves` WRITE;
+/*!40000 ALTER TABLE `post_saves` DISABLE KEYS */;
+/*!40000 ALTER TABLE `post_saves` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `post_media`
 --
 
@@ -859,7 +892,7 @@ DROP TABLE IF EXISTS `post_media`;
 CREATE TABLE `post_media` (
   `id` int NOT NULL AUTO_INCREMENT,
   `post_id` int NOT NULL,
-  `data` blob,
+  `media_url` varchar(500) NOT NULL,
   `content_type` varchar(100) DEFAULT NULL,
   `file_name` varchar(255) DEFAULT NULL,
   `file_size` int DEFAULT NULL,
@@ -2271,10 +2304,10 @@ DROP TABLE IF EXISTS `ai_news_articles`;
 CREATE TABLE `ai_news_articles` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(500) NOT NULL,
-  `url` varchar(1000) NOT NULL,
+  `url` varchar(750) NOT NULL,
   `summary` text,
   `author` varchar(255) DEFAULT NULL,
-  `image_url` varchar(1000) DEFAULT NULL,
+  `image_url` varchar(750) DEFAULT NULL,
   `source` varchar(100) NOT NULL,
   `source_label` varchar(100) DEFAULT NULL,
   `category` varchar(100) DEFAULT NULL,
@@ -2298,3 +2331,149 @@ LOCK TABLES `ai_news_articles` WRITE;
 /*!40000 ALTER TABLE `ai_news_articles` DISABLE KEYS */;
 /*!40000 ALTER TABLE `ai_news_articles` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `idea_collab_requests`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `idea_collab_requests` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `idea_id` int NOT NULL,
+  `idea_title` varchar(255) DEFAULT NULL,
+  `user_id` int NOT NULL,
+  `first_name` varchar(100) DEFAULT NULL,
+  `last_name` varchar(100) DEFAULT NULL,
+  `message` text,
+  `role` varchar(100) DEFAULT 'co-developer',
+  `status` enum('pending','approved','rejected','cancelled') DEFAULT 'pending',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idea_id` (`idea_id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `idea_collab_requests_ibfk_1` FOREIGN KEY (`idea_id`) REFERENCES `ideas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `idea_collab_requests_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `idea_collab_requests` WRITE;
+/*!40000 ALTER TABLE `idea_collab_requests` DISABLE KEYS */;
+/*!40000 ALTER TABLE `idea_collab_requests` ENABLE KEYS */;
+UNLOCK TABLES;
+--
+-- Table structure for table `startup_ratings`
+--
+
+DROP TABLE IF EXISTS `startup_ratings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `startup_ratings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `startup_id` int NOT NULL,
+  `rating` float NOT NULL,
+  `review_text` text,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_id` (`user_id`,`startup_id`),
+  KEY `startup_id` (`startup_id`),
+  CONSTRAINT `startup_ratings_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `startup_ratings_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `friend_request`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `friend_request` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `sender_id` int NOT NULL,
+  `receiver_id` int NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'pending',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_friend_request` (`sender_id`,`receiver_id`),
+  CHECK (`sender_id` != `receiver_id`),
+  KEY `ix_friend_request_sender_id` (`sender_id`),
+  KEY `ix_friend_request_receiver_id` (`receiver_id`),
+  KEY `ix_friend_request_status` (`status`),
+  CONSTRAINT `friend_request_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `friend_request_ibfk_2` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+LOCK TABLES `friend_request` WRITE;
+/*!40000 ALTER TABLE `friend_request` DISABLE KEYS */;
+/*!40000 ALTER TABLE `friend_request` ENABLE KEYS */;
+UNLOCK TABLES;
+-- ------------------------------------------------------
+-- ADDED VIA POWERSHELL: Economy & Escrow Layer
+-- ------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS crystal_wallets (
+  id int NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  alance int DEFAULT 0,
+  updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY user_id (user_id),
+  CONSTRAINT crystal_wallets_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS isibility_boosts (
+  id int NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  startup_id int NOT NULL,
+  oost_type varchar(50) NOT NULL,
+  expires_at datetime NOT NULL,
+  is_active tinyint(1) DEFAULT 1,
+  PRIMARY KEY (id),
+  CONSTRAINT isibility_boosts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS alances (
+  id int NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  vailable int NOT NULL DEFAULT 0,
+  pending int NOT NULL DEFAULT 0,
+  escrow_locked int NOT NULL DEFAULT 0,
+  	otal_deposited int NOT NULL DEFAULT 0,
+  	otal_withdrawn int NOT NULL DEFAULT 0,
+  	otal_paid_out int NOT NULL DEFAULT 0,
+  currency varchar(3) NOT NULL DEFAULT 'USD',
+  created_at datetime DEFAULT CURRENT_TIMESTAMP,
+  updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_balances_user_id (user_id),
+  CONSTRAINT alances_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS escrow_transactions (
+  id int NOT NULL AUTO_INCREMENT,
+  payer_id int NOT NULL,
+  payee_id int NOT NULL,
+  payer_balance_id int NOT NULL,
+  payee_balance_id int DEFAULT NULL,
+  mount_cents int NOT NULL,
+  currency varchar(3) NOT NULL DEFAULT 'USD',
+  status varchar(30) NOT NULL DEFAULT 'created',
+  created_at datetime DEFAULT CURRENT_TIMESTAMP,
+  updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT escrow_ibfk_1 FOREIGN KEY (payer_id) REFERENCES users (id),
+  CONSTRAINT escrow_ibfk_2 FOREIGN KEY (payee_id) REFERENCES users (id),
+  CONSTRAINT escrow_ibfk_3 FOREIGN KEY (payer_balance_id) REFERENCES alances (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS alance_transactions (
+  id int NOT NULL AUTO_INCREMENT,
+  alance_id int NOT NULL,
+  user_id int NOT NULL,
+  	x_type varchar(30) NOT NULL,
+  mount int NOT NULL,
+  alance_before int NOT NULL,
+  alance_after int NOT NULL,
+  created_at datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT alance_tx_ibfk_1 FOREIGN KEY (alance_id) REFERENCES alances (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

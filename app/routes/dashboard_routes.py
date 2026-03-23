@@ -70,7 +70,7 @@ def founder_dashboard():
 def builder_dashboard():
   user_id = get_jwt_identity()
 
-  memberships = StartupMember.queuser_idry.ficurrent_lter_by(
+  memberships = StartupMember.query.filter_by(
     user_id=user_id,
     is_active=True
   ).all()
@@ -95,7 +95,7 @@ def builder_dashboard():
         "items": [t.to_dict() for t in assigned_tasks]
       }
     })
-
+  print("Builder Dashboard Data:", startups_data)  # Debug print
   return success_response({"role": "builder", "startups": startups_data})
 
 @dashboard_bp.route("/overview", methods=["GET"])

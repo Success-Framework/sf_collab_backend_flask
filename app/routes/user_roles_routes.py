@@ -44,13 +44,10 @@ def create_user_role():
     data = request.json
     user_id = get_jwt_identity() or data.get('user_id')
     roles = data['roles']
-    # Delete all existing roles for the user first
-    UserRole.query.filter_by(user_id=user_id).delete()
-    db.session.commit()
-    user = User.query.get(user_id)
-    if not user.is_admin():
-      return error_response("Only admins can assign roles", 403)
     new_roles = []
+    existing_roles = UserRole.query.filter_by(user_id=user_id).all()
+    
+    new_roles.extend(existing_roles)
     for role in roles:
       new_role = UserRole(user_id=user_id, role=role)
       new_roles.append(new_role)

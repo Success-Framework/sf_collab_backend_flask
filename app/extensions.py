@@ -7,7 +7,9 @@ from flask_session import Session
 from app.config import Config
 from flask_socketio import SocketIO
 from flask_limiter import Limiter
+from celery import Celery
 import os
+
 oauth = OAuth()
 jwt = JWTManager()
 cors = CORS()
@@ -23,6 +25,43 @@ socketio = SocketIO(
     logger=True,
     engineio_logger=True,
 )
+
+# ---------------------------------------------------------------------------
+# Celery — used for background tasks (e.g. auto-expiring visibility boosts)
+# Broker and result backend are configured via REDIS_URL in config / .env
+# ---------------------------------------------------------------------------
+def make_celery(app=None):
+    """
+    Create and configure the Celery instance.
+    Call this inside your Flask app factory after app.config is loaded.
+
+    Usage in app factory:
+        from app.extensions import celery, make_celery
+        make_celery(app)
+    """
+    celery.conf.update(
+        broker_url=os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0")),
+        result_backend=os.getenv("CELERY_RESULT_BACKEND", os.getenv("REDIS_URL", "redis://localhost:6379/0")),
+        beat_schedule={
+            # Run every 10 minutes to expire finished visibility boosts
+            "expire-visibility-boosts": {
+                "task": "app.routes.payment_routes.expire_visibility_boosts",
+                "schedule": 600,  # seconds
+            },
+        },
+        timezone="UTC",
+    )
+    if app:
+        # Push Flask app context so tasks can use db, models etc.
+        class ContextTask(celery.Task):
+            def __call__(self, *args, **kwargs):
+                with app.app_context():
+                    return self.run(*args, **kwargs)
+        celery.Task = ContextTask
+    return celery
+
+
+celery = Celery(__name__)
 
 from flask_jwt_extended import get_jwt_identity
 from flask import request

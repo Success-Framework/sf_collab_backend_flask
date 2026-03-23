@@ -360,7 +360,7 @@ def on_user_profile_created(user):
 def on_founder_created(founder, team_name=None):
     """
     Hook called when a founder account is created.
-    Creates their team chat.
+    Creates their team chat and startup group chat.
     
     Usage:
         from app.utils.chat_utils import on_founder_created
@@ -369,14 +369,19 @@ def on_founder_created(founder, team_name=None):
     # Add to general chat
     add_user_to_general_chat(founder)
     
-    # Create team chat
-    return get_or_create_team_chat(founder, team_name)
+    # Create per-founder team chat (existing behaviour)
+    team_chat = get_or_create_team_chat(founder, team_name)
+
+    # ── NEW: create per-startup group chat and add founder immediately ────
+    _sync_founder_startup_chats(founder, match_name=team_name)
+
+    return team_chat
 
 
 def on_team_member_added(founder_id, team_member):
     """
     Hook called when a founder adds a team member.
-    Adds them to both general chat and the founder's team chat.
+    Adds them to general chat, the founder's team chat, and all startup group chats.
     
     Usage:
         from app.utils.chat_utils import on_team_member_added
@@ -385,20 +390,27 @@ def on_team_member_added(founder_id, team_member):
     # Add to general chat
     add_user_to_general_chat(team_member)
     
-    # Add to team chat
-    return add_member_to_team_chat(founder_id, team_member)
+    # Add to per-founder team chat (existing behaviour)
+    add_member_to_team_chat(founder_id, team_member)
+
+    # ── NEW: add to every startup group chat owned by this founder ────────
+    _sync_member_to_startup_chats(founder_id, team_member)
 
 
 def on_team_member_removed(founder_id, team_member):
     """
     Hook called when a founder removes a team member.
-    Removes them from the team chat (keeps them in general chat).
+    Removes them from the team chat and all startup group chats.
     
     Usage:
         from app.utils.chat_utils import on_team_member_removed
         on_team_member_removed(founder.id, removed_member)
     """
-    return remove_member_from_team_chat(founder_id, team_member)
+    # Remove from per-founder team chat (existing behaviour)
+    remove_member_from_team_chat(founder_id, team_member)
+
+    # ── NEW: remove from every startup group chat owned by this founder ───
+    _remove_member_from_startup_chats(founder_id, team_member)
 
 
 # ============================================
@@ -467,3 +479,98 @@ def get_chat_stats():
             } for tc in team_chats]
         }
     }
+
+
+# ============================================
+# STARTUP GROUP CHAT HELPERS  (private)
+# These are NOT exported — only called from the hooks above.
+# Uses ChatConversation.add_to_startup_chat / remove_from_startup_chat
+# which handle socket emission (conversation_added / conversation_removed /
+# conversation_updated) so the frontend updates with no refresh needed.
+# ============================================
+
+def _get_startups_by_founder(founder_id):
+    """
+    Return all Startup objects owned by this founder.
+    Tries ORM first, falls back to raw SQL so this works even if the
+    Startup model import path varies across environments.
+    """
+    try:
+        from app.models.startup import Startup
+        return Startup.query.filter_by(created_by_id=int(founder_id)).all()
+    except Exception:
+        pass
+
+    try:
+        rows = db.session.execute(
+            db.text("SELECT id, name FROM startups WHERE created_by_id = :fid"),
+            {'fid': int(founder_id)}
+        ).fetchall()
+
+        class _S:
+            def __init__(self, sid, name):
+                self.id = sid
+                self.name = name
+
+        return [_S(r[0], r[1]) for r in rows]
+    except Exception as e:
+        logging.warning(f"[_get_startups_by_founder] fallback failed: {e}")
+        return []
+
+
+def _sync_founder_startup_chats(founder, match_name=None):
+    """
+    Create/sync startup group chats for all startups owned by `founder`.
+    When match_name is provided (startup.name passed as team_name), only
+    that specific startup is synced — used on first creation so we don't
+    accidentally touch unrelated startups.
+    Called from on_founder_created.
+    """
+    try:
+        startups = _get_startups_by_founder(founder.id)
+        for startup in startups:
+            # If the caller passed the startup name, only sync the matching one
+            if match_name and startup.name and startup.name != match_name:
+                continue
+            ChatConversation.add_to_startup_chat(user=founder, startup=startup)
+            logging.info(
+                f"[_sync_founder_startup_chats] founder={founder.id} startup={startup.id}"
+            )
+    except Exception as e:
+        logging.warning(f"[_sync_founder_startup_chats] error: {e}")
+
+
+def _sync_member_to_startup_chats(founder_id, member):
+    """
+    Add `member` to every startup group chat owned by `founder_id`.
+    Called from on_team_member_added.
+    ChatConversation.add_to_startup_chat is idempotent — safe to call if
+    the member is already in the chat.
+    """
+    try:
+        startups = _get_startups_by_founder(founder_id)
+        for startup in startups:
+            ChatConversation.add_to_startup_chat(user=member, startup=startup)
+            logging.info(
+                f"[_sync_member_to_startup_chats] user={member.id} startup={startup.id}"
+            )
+    except Exception as e:
+        logging.warning(f"[_sync_member_to_startup_chats] error: {e}")
+
+
+def _remove_member_from_startup_chats(founder_id, member):
+    """
+    Remove `member` from every startup group chat owned by `founder_id`.
+    Called from on_team_member_removed.
+    """
+    try:
+        startups = _get_startups_by_founder(founder_id)
+        for startup in startups:
+            ChatConversation.remove_from_startup_chat(
+                user=member, startup_id=startup.id
+            )
+            logging.info(
+                f"[_remove_member_from_startup_chats] user={member.id} startup={startup.id}"
+            )
+    except Exception as e:
+        logging.warning(f"[_remove_member_from_startup_chats] error: {e}")

@@ -31,13 +31,11 @@ def home():
 def log_client_error():
     """Endpoint to receive client-side error logs"""
     data = request.get_json() or {}
-    data = request.get_json() or {}
     error_message = data.get('errorMessage', 'Unknown error')
     error_from_backend = data.get('errorFromBackend')
     stack = data.get('stack')
     page = data.get('page')
     component = data.get('component', 'Unknown Component')
-    timestamp = data.get('timestamp')
     user_agent = request.headers.get('User-Agent', 'Unknown')
     url = page or 'Unknown URL'
     # Check if error already exists by checking message, stack, and URL
@@ -51,8 +49,8 @@ def log_client_error():
         return  success_response({"message": "Error already logged"}, "Duplicate error", 200)
 
     error = Error(
-        error_message=error_message[:500],
-        error_from_backend=error_from_backend[:255],
+        error_message=error_message[:500] if error_message else None,
+        error_from_backend=error_from_backend[:255] if error_from_backend else None,
         stack=stack,
         page=url,
         component=component,

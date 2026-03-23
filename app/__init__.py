@@ -32,6 +32,94 @@ AVATAR_UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads', 'chat_avatars')
 def get_email_service():
     return EmailService()
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STARTUP MIGRATIONS
+# Safely adds missing columns every time Flask starts.
+# Add new columns here as the schema evolves — safe to re-run, skips existing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+SCHEMA_MIGRATIONS = [
+    # knowledge table
+    ("knowledge", "file_size_mb",            "FLOAT"),
+    ("knowledge", "image_buffer",            "BLOB"),
+    ("knowledge", "image_content_type",      "VARCHAR(100)"),
+
+    # startups table — lifecycle & execution (Week 1)
+    ("startups",  "lifecycle_state",         "VARCHAR(50) DEFAULT 'active'"),
+    ("startups",  "execution_score",         "FLOAT DEFAULT 0.0"),
+    ("startups",  "milestones_completed",    "INTEGER DEFAULT 0"),
+    ("startups",  "milestones_total",        "INTEGER DEFAULT 0"),
+    ("startups",  "last_activity_at",        "TIMESTAMP"),
+    ("startups",  "activity_score",          "FLOAT DEFAULT 0.0"),
+    ("startups",  "crowdfunding_unlocked",   "BOOLEAN DEFAULT 0"),
+    ("startups",  "crowdfunding_unlocked_at","TIMESTAMP"),
+
+    # ideas table — vision system (Week 1)
+    ("ideas", "vision_state",        "VARCHAR(50) DEFAULT 'public'"),
+    ("ideas", "readiness_score",     "FLOAT DEFAULT 0.0"),
+    ("ideas", "readiness_breakdown", "JSON"),
+    ("ideas", "problem_statement",   "TEXT"),
+    ("ideas", "outcome_goal",        "TEXT"),
+    ("ideas", "risk_level",          "VARCHAR(20) DEFAULT 'medium'"),
+    ("ideas", "required_roles",      "JSON"),
+    ("ideas", "roadmap_items",       "JSON"),
+]
+
+
+def _run_startup_migrations(app):
+    """
+    Run on every Flask startup inside app context.
+    Adds missing columns without touching existing data.
+    """
+    from sqlalchemy import text, inspect as sa_inspect
+
+    with app.app_context():
+        added = []
+        errors = []
+
+        # Cache existing columns per table to avoid repeated inspector calls
+        column_cache = {}
+
+        for table, column, col_def in SCHEMA_MIGRATIONS:
+            # Load columns for this table once
+            if table not in column_cache:
+                try:
+                    inspector = sa_inspect(db.engine)
+                    cols = inspector.get_columns(table)
+                    column_cache[table] = {c["name"] for c in cols}
+                except Exception:
+                    column_cache[table] = set()  # table may not exist yet
+
+            if column in column_cache[table]:
+                continue  # already exists, skip silently
+
+            try:
+                db.session.execute(
+                    text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
+                )
+                db.session.commit()
+                column_cache[table].add(column)
+                added.append(f"{table}.{column}")
+            except Exception as e:
+                db.session.rollback()
+                msg = str(e).lower()
+                # "duplicate column" means it already exists — safe to ignore
+                if "duplicate column" in msg or "already exists" in msg:
+                    column_cache[table].add(column)
+                else:
+                    errors.append(f"{table}.{column}: {e}")
+
+        if added:
+            print(f"✓ Migrations: added {len(added)} column(s): {', '.join(added)}")
+        if errors:
+            for err in errors:
+                print(f"⚠  Migration error: {err}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 def create_app(config_name=None):
     """Create and configure Flask application"""
 
@@ -45,14 +133,23 @@ def create_app(config_name=None):
 
     
     # JWT Configuration
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=6)
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY") or app.config.get("SECRET_KEY")
+    # JWT Cookie Configuration
+    app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
+    app.config["JWT_COOKIE_SECURE"] = True
+    app.config["JWT_COOKIE_SAMESITE"] = "None"
+    app.config["JWT_COOKIE_CSRF_PROTECT"] = True
+    app.config["JWT_ACCESS_COOKIE_PATH"] = "/"
+    app.config["JWT_REFRESH_COOKIE_PATH"] = "/api/auth/refresh"
+    app.config["JWT_COOKIE_DOMAIN"] = ".sfcollab.com"
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=15)
+    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=7)
+
+
 
     
     # Session configuration
     print(f"SESSION_TYPE from config: {app.config.get('SESSION_TYPE')}")
-    
-
     
     app.config['SESSION_PERMANENT'] = True
     app.config['SESSION_USE_SIGNER'] = True
@@ -99,10 +196,12 @@ def create_app(config_name=None):
     app.config['CORS_ORIGINS'] = Config.CORS_ORIGINS
     app.config['HF_PROXY_URL'] = os.getenv("HF_PROXY_URL")
     app.config['HF_PROXY_KEY'] = os.getenv("HF_PROXY_KEY")
+
     # STRIPE Configuration
     stripe.api_key = os.getenv('STRIPE_SECRET_KEY', '')
     app.config['STRIPE_SECRET_KEY'] = os.getenv('STRIPE_SECRET_KEY', '')
     app.config['STRIPE_WEBHOOK_SECRET'] = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+
     print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
     CORS(
         app,
@@ -111,15 +210,16 @@ def create_app(config_name=None):
         allow_headers=[
             "Content-Type",
             "Authorization",
-            "X-Requested-With"
+            "X-Requested-With",
+            "X-CSRF-TOKEN",
         ],
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     )
+
     # Request logging
     @app.before_request
     def start_request_timer():
         g.start_time = time.time()
-        
 
     @app.after_request
     def log_response(response):
@@ -127,12 +227,10 @@ def create_app(config_name=None):
         if request.path in ("/favicon.ico", "/health"):
             return response
         if request.method == "OPTIONS" and not response.headers.get("Access-Control-Allow-Origin"):
-            print("⚠️  CORS WARNING: Missing Access-Control-Allow-Origin header")
-
+            print("CORS WARNING: Missing Access-Control-Allow-Origin header")
 
         duration = round(time.time() - g.start_time, 4)
 
-        # Request info
         method = request.method
         path = request.path
         status = response.status_code
@@ -140,14 +238,10 @@ def create_app(config_name=None):
         origin = request.headers.get("Origin")
         user_agent = request.headers.get("User-Agent")
 
-        # Auth presence (do NOT log tokens)
         has_auth = "Authorization" in request.headers
         has_cookie = bool(request.headers.get("Cookie"))
-
-        # Request payload size (safe)
         content_length = request.content_length or 0
 
-        # Response preview (safe)
         response_preview = ""
         if response.is_json:
             try:
@@ -181,10 +275,11 @@ def create_app(config_name=None):
         
     # Initialize extensions
     db.init_app(app)
-    from app import models # Ensure models are loaded for migration
+    from app import models  # Ensure models are loaded for migration
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)
+
     if app.config.get("SESSION_TYPE") == "filesystem":
         app.config["SESSION_FILE_DIR"] = os.path.join(BASE_DIR, "flask_session")
         os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
@@ -201,20 +296,22 @@ def create_app(config_name=None):
             print(f"⚠ Sessions table race (harmless): {type(e).__name__}: {e}")
         else:
             raise
+        
+    with app.app_context():
+      from app.models.marketplace_category import seed_categories
+      try:
+          seed_categories()
+      except Exception:
+          pass
     
     # auth_routes.init_oauth(app)
+
+    # ── Run schema migrations on every startup ────────────────────────────────
+    _run_startup_migrations(app)
+    # ─────────────────────────────────────────────────────────────────────────
+
     socketio.init_app(app)
 
-    # socketio.init_app(
-    #     app,
-    #     async_mode="gevent",
-    #     cors_allowed_origins=app.config.get('CORS_ORIGINS', []),
-    #     allow_credentials=True,
-    #     logger=DEBUG,
-    #     engineio_logger=DEBUG,
-    #     ping_timeout=60,
-    #     ping_interval=25,
-    # )
     if app.config.get("GOOGLE_CLIENT_ID") and app.config.get("GOOGLE_CLIENT_SECRET"):
         auth_routes.init_oauth(app)
         print("✓ OAuth initialized")
@@ -226,9 +323,9 @@ def create_app(config_name=None):
         app.register_blueprint(blueprint["blueprint"], url_prefix=blueprint["url_prefix"])
     
     # Start AI news scheduler
-    print("Starting AI news scheduler...")
-    start_scheduler(app)
-    print("✓ Scheduler started")
+    # print("Starting AI news scheduler...")
+    # start_scheduler(app)
+    # print("✓ Scheduler started")
     
     @app.route('/uploads/<path:filename>')
     def uploaded_file(filename):
@@ -244,7 +341,6 @@ def create_app(config_name=None):
     def not_found(e):
         if request.path.startswith("/socket.io"):
             return e  # let Socket.IO handle it
-
         return {
             "success": False,
             "error": "Resource not found"
@@ -259,7 +355,6 @@ def create_app(config_name=None):
         traceback.print_exc()
         return {'success': False, 'error': str(error)}, 500
 
-    
     @app.route('/api/webhook/github', methods=['POST'])
     def github_webhook():
         signature = request.headers.get('X-Hub-Signature-256')

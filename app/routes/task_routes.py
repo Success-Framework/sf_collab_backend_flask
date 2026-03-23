@@ -308,12 +308,15 @@ def update_task(task_id):
     if not task:
         return error_response('Task not found', 404)
     
-    if task.user_id != current_user_id and task.assigned_to != current_user_id:
-        if task.startup_id:
-            if not has_startup_access(current_user_id, task.startup_id):
-                return error_response('Unauthorized to update this task', 403)
-        else:
-            return error_response('Unauthorized to update this task', 403)
+    # Allow: task owner, assignee, any startup member, or admin
+    _upd_user = User.query.get(current_user_id)
+    _is_admin = bool(_upd_user and _upd_user.role == 'admin')
+    _is_member = bool(task.startup_id and has_startup_access(current_user_id, task.startup_id))
+    if (task.user_id != current_user_id
+            and task.assigned_to != current_user_id
+            and not _is_member
+            and not _is_admin):
+        return error_response('Unauthorized to update this task', 403)
     
     data = request.get_json()
     old_status = task.status
@@ -531,6 +534,63 @@ def assign_task(task_id):
         return error_response(f'Failed to assign task: {str(e)}', 500)
 
 
+@tasks_bp.route('/<int:task_id>/claim', methods=['POST'])
+@jwt_required()
+def claim_task(task_id):
+    """Self-assign an unassigned task — any startup member can claim"""
+    current_user_id = int(get_jwt_identity())
+
+    task = Task.query.get(task_id)
+    if not task:
+        return error_response('Task not found', 404)
+
+    if task.assigned_to is not None:
+        return error_response('Task is already assigned', 400)
+
+    # Allow: startup member, task creator, or admin
+    _user = User.query.get(current_user_id)
+    _is_admin = bool(_user and _user.role == 'admin')
+    _is_member = bool(task.startup_id and has_startup_access(current_user_id, task.startup_id))
+    _is_creator = task.user_id == current_user_id
+
+    if not (_is_member or _is_admin or _is_creator):
+        return error_response('You must be a member of this startup to claim tasks', 403)
+
+    try:
+        task.assigned_to = current_user_id
+        task.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        # Notify the task creator that someone claimed it (only if different person)
+        try:
+            if task.user_id and task.user_id != current_user_id:
+                claimer_name = get_user_full_name(current_user_id)
+                notify_task_assigned(
+                    user_id=task.user_id,
+                    assigner_id=current_user_id,
+                    assigner_name=claimer_name,
+                    task_title=task.title,
+                    task_id=task.id
+                )
+        except Exception as e:
+            print(f"Claim task notification failed: {e}")
+
+        try:
+            task_dict = task.to_dict()
+        except Exception as e:
+            print(f"task.to_dict() failed: {e}")
+            task_dict = {
+                'id': task.id,
+                'title': task.title,
+                'assigned_to': task.assigned_to,
+                'status': task.status,
+            }
+
+        return success_response({'task': task_dict}, 'Task claimed successfully')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to claim task: {str(e)}', 500)
+
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
 @jwt_required()
 def delete_task(task_id):
@@ -555,58 +615,7 @@ def delete_task(task_id):
         return error_response(f'Failed to delete task: {str(e)}', 500)
 
 
-@tasks_bp.route('/stats', methods=['GET'])
-@jwt_required()
-def get_task_stats():
-    """Get task statistics for dashboard"""
-    current_user_id = int(get_jwt_identity())
-    
-    user_id = request.args.get('user_id', type=int)
-    startup_id = request.args.get('startup_id', type=int)
-    time_range = request.args.get('time_range', '30d')
-    
-    if not user_id:
-        user_id = current_user_id
-    
-    if user_id != current_user_id:
-        return error_response('Unauthorized to view other users stats', 403)
-    
-    now = datetime.utcnow()
-    if time_range == '7d':
-        start_date = now - timedelta(days=7)
-    elif time_range == '90d':
-        start_date = now - timedelta(days=90)
-    elif time_range == 'month':
-        start_date = datetime(now.year, now.month, 1)
-    else:
-        start_date = now - timedelta(days=30)
-    
-    query = Task.query.filter(
-        Task.user_id == user_id,
-        Task.created_at >= start_date
-    )
-    
-    if startup_id:
-        query = query.filter(Task.startup_id == startup_id)
-    
-    tasks = query.all()
-    
-    total_tasks = len(tasks)
-    completed_tasks = len([t for t in tasks if t.status == 'completed'])
-    in_progress_tasks = len([t for t in tasks if t.status == 'in_progress'])
-    overdue_tasks = len([t for t in tasks if t.is_overdue()])
-    
-    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
-    
-    return success_response({
-        'stats': {
-            'total_tasks': total_tasks,
-            'completed_tasks': completed_tasks,
-            'in_progress_tasks': in_progress_tasks,
-            'overdue_tasks': overdue_tasks,
-            'completion_rate': round(completion_rate, 1)
-        }
-    })
+
 
 
 @tasks_bp.route('/my-tasks', methods=['GET'])
