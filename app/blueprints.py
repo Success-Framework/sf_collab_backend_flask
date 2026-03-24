@@ -67,7 +67,7 @@ from .routes import (
     pitch_deck_routes,
     wallet_routes, 
     store_routes,
-    # ai_news_routes,
+    ai_news_routes,
     #! removed background_remover_route,
     #! removed anime_converter_route
     #! removed image_logo_generator_route,
