@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app.models.startup import Startup
 from app.models.startup_document import StartupDocument
 from app.models.startUpMember import StartupMember
@@ -232,8 +232,16 @@ def get_startup(startup_id):
     if current_user_id:
         startup.increment_views(current_user_id)
 
+    # get_current_user_startup_role calls get_jwt_identity() internally.
+    # This route has no @jwt_required, so we must set up the JWT context
+    # manually as optional — no token = identity stays None, no crash.
+    try:
+        verify_jwt_in_request(optional=True)
+    except Exception:
+        pass
+
     role = get_current_user_startup_role(startup_id)
-    
+
     if role == 'none' or not role:
         # Very limited view for normal logged-in users
         data = {
@@ -1596,6 +1604,29 @@ def change_member_role(startup_id, member_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to change member role: {str(e)}', 500)
+
+@startups_bp.route('/<int:startup_id>/invitations/mine', methods=['OPTIONS'])
+def get_my_startup_invitation_options(startup_id):
+    """CORS preflight handler for /invitations/mine"""
+    return success_response({'message': 'ok'})
+
+@startups_bp.route('/<int:startup_id>/invitations/mine', methods=['GET'])
+@jwt_required()
+def get_my_startup_invitation(startup_id):
+    """
+    Get the current user's pending invitation for a specific startup.
+    No manager role required — users can only see their own invitation.
+    """
+    current_user_id = int(get_jwt_identity())
+    invitation = StartupInvitation.query.filter_by(
+        startup_id=startup_id,
+        invited_user_id=current_user_id,
+        status=InvitationStatus.pending
+    ).first()
+    return success_response({
+        'invitation': invitation.to_dict() if invitation else None,
+        'has_pending_invitation': invitation is not None
+    })
 
 # STARTUP INVITATIONS CRUD
 @startups_bp.route('/<int:startup_id>/invitations', methods=['GET'])
