@@ -365,15 +365,47 @@ def send_verification_code():
         print(f"DEBUG: Exception in send_verification_code: {str(e)}")
         return error_response(str(e), 500)
 
+@bp.route('/verify-code', methods=['POST'])
+@limiter.limit("10 per minute")
+def verify_code():
+    data = request.get_json()
+
+    email = data.get("email")
+    submitted_code = data.get("code")
+
+    if not email or not submitted_code:
+        return error_response("Email and code are required", 400)
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        return error_response("User not found", 404)
+
+    print(f"DEBUG: Stored code: {user.verification_code}, Submitted: {submitted_code}")
+
+    if str(user.verification_code) != str(submitted_code):
+        return error_response("Invalid code", 400)
+
+    user.is_verified = True
+    user.verification_code = None
+    db.session.commit()
+
+    try:
+        notify_email_verified(user.id)
+    except Exception as e:
+        print(f"Error sending email verified notification: {e}")
+
+    return success_response({
+        "verified": True
+    })
 
 @bp.route('/verify-code', methods=['POST'])
 @limiter.limit("10 per minute")
 def verify_code():
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    claims = decode_token(token)
+    data = request.get_json()
 
-    parsed_token = claims.get("code")
-    user_id = claims.get("sub")
+    email = data.get("email")
+    submitted_code = data.get("code")
     data = request.get_json()
     print(f"DEBUG: Verifying code for user_id: {user_id}, Claims: {claims}, Data: {data}")
     parsed_token = claims.get("code")
