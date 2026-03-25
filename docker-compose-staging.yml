@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  api-staging:
+    image: sfcollab-api-new:latest
+    container_name: sfcollab-api-staging
+    ports:
+      - "5001:5000"
+    env_file:
+      - /home/ubuntu/.env.staging
+    depends_on:
+      - db-staging
+      - redis-staging
+    command: >
+      gunicorn run:app
+      -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker
+      -b 0.0.0.0:5000
+    restart: unless-stopped
+
+  db-staging:
+    image: mysql:8.4
+    container_name: sfcollab-mysql-staging
+    env_file:
+      - /home/ubuntu/.env.staging
+    volumes:
+      - mysqldata_staging:/var/lib/mysql
+    restart: unless-stopped
+
+  redis-staging:
+    image: redis:7
+    container_name: sfcollab-redis-staging
+    ports:
+      - "6380:6379"
+    restart: unless-stopped
+
+volumes:
+  mysqldata_staging:
