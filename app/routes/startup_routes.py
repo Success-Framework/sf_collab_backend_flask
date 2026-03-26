@@ -445,17 +445,19 @@ def register_startup():
             for doc_file in document_files:
                 try:
                     if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
-                        # Check if the storage limit of user's current plan allows file upload
-                        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
-                        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
-                        if not can_upload:
-                            return error_response(error_message, 500)
-
                         filename = secure_filename(doc_file.filename)
                         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
                         unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
                         doc_path = os.path.join(startup_upload_dir, unique_filename)
                         doc_file.save(doc_path)
+
+                        # Check storage limit after saving
+                        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+                        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+                        if not can_upload:
+                            if os.path.exists(doc_path):
+                                os.remove(doc_path)
+                            return error_response(error_message, 403)
                         
                         file_url = f"/startups/{startup.id}/documents/{unique_filename}"
 
@@ -651,17 +653,19 @@ def update_startup(startup_id):
         
         for doc_file in document_files:
             if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
-                # Check if the storage limit of user's current plan allows file update
-                file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
-                can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
-                if not can_upload:
-                    return error_response(error_message, 500)
-                
                 filename = secure_filename(doc_file.filename)
                 timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
                 unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
                 doc_path = os.path.join(startup_upload_dir, unique_filename)
                 doc_file.save(doc_path)
+
+                # Check storage limit after saving so file size is accurate
+                file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+                can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+                if not can_upload:
+                    if os.path.exists(doc_path):
+                        os.remove(doc_path)
+                    return error_response(error_message, 403)
                 
                 file_url = f"/startups/{startup.id}/documents/{unique_filename}"
                 
@@ -908,20 +912,23 @@ def upload_document(startup_id):
         return error_response('File size too large')
     
     try:
-        # Check if the storage limit of user's current plan allows file upload
-        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
-        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
-        if not can_upload:
-            return error_response(error_message, 500)
-
         # Create startup upload directory if it doesn't exist
         startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup_id))
         os.makedirs(startup_upload_dir, exist_ok=True)
         
-        # Save file to file system
+        # Save file to file system first so we can measure its size
         unique_filename = generate_unique_filename(document_file.filename)
         doc_path = os.path.join(startup_upload_dir, unique_filename)
         document_file.save(doc_path)
+
+        # Now check storage limit with the actual saved file size
+        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+        if not can_upload:
+            # Clean up the file we just saved since upload is not allowed
+            if os.path.exists(doc_path):
+                os.remove(doc_path)
+            return error_response(error_message, 403)
         
         # Create document with file_url
         file_url = f"/api/startups/uploads/{startup_id}/{unique_filename}"
@@ -1617,12 +1624,14 @@ def get_my_startup_invitation(startup_id):
     Get the current user's pending invitation for a specific startup.
     No manager role required — users can only see their own invitation.
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = get_jwt_identity()
+
     invitation = StartupInvitation.query.filter_by(
         startup_id=startup_id,
         invited_user_id=current_user_id,
         status=InvitationStatus.pending
     ).first()
+
     return success_response({
         'invitation': invitation.to_dict() if invitation else None,
         'has_pending_invitation': invitation is not None

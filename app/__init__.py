@@ -1,3 +1,4 @@
+ubuntu@ip-172-31-67-95:~$ cat /home/ubuntu/sf_collab_backend_flask/app/__init__.py
 from flask import Flask, request, abort, request, g, send_from_directory, make_response, session
 from flask_cors import CORS
 from .extensions import db, migrate, jwt, sess, limiter
@@ -64,6 +65,19 @@ SCHEMA_MIGRATIONS = [
     ("ideas", "risk_level",          "VARCHAR(20) DEFAULT 'medium'"),
     ("ideas", "required_roles",      "JSON"),
     ("ideas", "roadmap_items",       "JSON"),
+
+    # users table — fixes missing columns
+    ("users", "last_seen",           "DATETIME"),
+    ("users", "last_login_ip",       "VARCHAR(45)"),
+    ("users", "total_revenue",       "FLOAT DEFAULT 0.0"),
+    ("users", "reputation_score",    "FLOAT DEFAULT 0.0"),
+    ("users", "storage_used_mb",     "FLOAT DEFAULT 0.0"),
+    ("users", "stripe_connect_account_id", "VARCHAR(255)"),
+    ("users", "milestones_completed", "INTEGER DEFAULT 0"),
+    ("users", "milestones_on_time",  "INTEGER DEFAULT 0"),
+    ("users", "tasks_completed",     "INTEGER DEFAULT 0"),
+    ("users", "tasks_on_time",       "INTEGER DEFAULT 0"),
+    ("users", "collaborations_count","INTEGER DEFAULT 0"),
 ]
 
 
@@ -205,7 +219,7 @@ def create_app(config_name=None):
     print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
     CORS(
         app,
-        resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', [])}},
+        resources={r"/*": {"origins": ["https://staging.sfcollab.com"]}},
         supports_credentials=True,
         allow_headers=[
             "Content-Type",
@@ -215,6 +229,18 @@ def create_app(config_name=None):
         ],
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     )
+
+    @app.after_request
+    def handle_cors(response):
+        response.headers["Access-Control-Allow-Origin"] = "https://staging.sfcollab.com"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+            return response
+
+    @app.route('/<path:path>', methods=['OPTIONS'])
+        def options_handler(path):
+            return '', 200
 
     # Request logging
     @app.before_request
@@ -373,4 +399,4 @@ def create_app(config_name=None):
         print(event, payload)
         return '', 200
 
-    return app
+    return appubuntu@ip-172-31-67-95:~$ 
