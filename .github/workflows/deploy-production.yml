@@ -1,15 +1,15 @@
 name: Deploy Production
 
 on:
-  pull_request:
+  push:
     branches:
       - main
-    types:
-      - closed
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true
+    # ✅ Only deploy if commit message contains [deploy]
+    if: contains(github.event.head_commit.message, '[deploy]')
+    
     runs-on: ubuntu-latest
 
     environment:
