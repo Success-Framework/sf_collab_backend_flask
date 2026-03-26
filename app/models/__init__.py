@@ -65,3 +65,6 @@ from .EscrowTransaction import EscrowTransaction
 
 # Economy Layer 3: Crystals (visibility acceleration only — NOT money)
 from .Crystal import CrystalWallet, CrystalTransaction, VisibilityBoost
+
+from .marketplace_purchase import MarketplacePurchase
+from .mentor import MentorProfile, MentorSession, MentorshipRequest

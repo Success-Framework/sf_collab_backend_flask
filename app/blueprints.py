@@ -67,7 +67,7 @@ from .routes import (
     pitch_deck_routes,
     wallet_routes, 
     store_routes,
-    # ai_news_routes,
+    ai_news_routes,
     #! removed background_remover_route,
     #! removed anime_converter_route
     #! removed image_logo_generator_route,
@@ -77,6 +77,7 @@ from .routes import (
     readiness_routes,
     balance_routes,
     crystal_routes,
+    mentorship_routes
     
 )
 
@@ -154,4 +155,5 @@ blueprints = [
 { "blueprint": readiness_routes.readiness_bp, "url_prefix": '/api/readiness' },
 { "blueprint": balance_routes.balance_bp, "url_prefix": '/api/balance' },
 { "blueprint": crystal_routes.crystals_bp, "url_prefix": '/api/crystals' },
+{ "blueprint": mentorship_routes.mentorship_bp, "url_prefix": '/api/mentorship' },
 ]
