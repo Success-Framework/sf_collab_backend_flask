@@ -149,7 +149,6 @@ blueprints = [
 {"blueprint": pitch_deck_routes.pitch_decks_bp, "url_prefix":"/api/pitch-decks"},
 { "blueprint": wallet_routes.wallet_bp, "url_prefix": '/api/wallet'},
 { "blueprint": store_routes.store_bp, "url_prefix": '/api/store'},
-# { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
 { "blueprint": marketplace_routes.marketplace_bp, "url_prefix": '/api/marketplace'},
 # { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
 { "blueprint": readiness_routes.readiness_bp, "url_prefix": '/api/readiness' },
