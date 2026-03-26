@@ -149,7 +149,7 @@ blueprints = [
 { "blueprint": store_routes.store_bp, "url_prefix": '/api/store'},
 # { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
 { "blueprint": marketplace_routes.marketplace_bp, "url_prefix": '/api/marketplace'},
-#{ "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
+# { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
 { "blueprint": readiness_routes.readiness_bp, "url_prefix": '/api/readiness' },
 { "blueprint": balance_routes.balance_bp, "url_prefix": '/api/balance' },
 { "blueprint": crystal_routes.crystals_bp, "url_prefix": '/api/crystals' },
