@@ -79,6 +79,11 @@ docker logs sfcollab-api
 # Restart services
 docker-compose -f docker-compose-dev.yml restart
 
+test staging
+
 # Clean up
 docker-compose -f docker-compose-dev.yml down
 ```
+
+trigger staging deploy
+
