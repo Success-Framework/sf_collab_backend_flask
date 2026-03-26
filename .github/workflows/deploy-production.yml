@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    # ✅ Only deploy if commit message contains [deploy]
+    # Only deploy when commit message contains [deploy]
     if: contains(github.event.head_commit.message, '[deploy]')
     
     runs-on: ubuntu-latest
@@ -26,5 +26,14 @@ jobs:
           port: 22
           script: |
             cd /home/ubuntu/sf_collab_backend_flask
+
+            echo "📥 Pulling latest code..."
             git pull origin main
+
+            echo "🛑 Stopping existing containers..."
+            docker compose -f docker/docker-compose-prod.yml down
+
+            echo "🚀 Starting new containers..."
             docker compose -f docker/docker-compose-prod.yml up -d --build
+
+            echo "✅ Deployment complete!"
