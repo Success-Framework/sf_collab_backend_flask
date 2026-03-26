@@ -27,4 +27,4 @@ jobs:
           script: |
             cd /home/ubuntu/sf_collab_backend_flask
             git pull origin main
-            docker compose -f docker-compose-prod.yml up -d --build
+            docker compose -f docker/docker-compose-prod.yml up -d --build
