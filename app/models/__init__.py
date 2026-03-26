@@ -56,3 +56,18 @@ from .aiNews import AINewsArticle
 from .builder_profile import BuilderProfile
 from .vision import Vision
 from .collaboration_request import CollaborationRequest
+from .ideaCollabRequest import IdeaCollabRequest
+from .startup_rating import StartupRating
+from .marketplace_category import MarketplaceCategory
+from .marketplace_listing import MarketplaceListing
+from .marketplace_seller import Seller
+
+# Economy Layer 2: Real-money Balance + Escrow
+from .Balance import Balance, BalanceTransaction
+from .EscrowTransaction import EscrowTransaction
+
+# Economy Layer 3: Crystals (visibility acceleration only — NOT money)
+from .Crystal import CrystalWallet, CrystalTransaction, VisibilityBoost
+
+from .marketplace_purchase import MarketplacePurchase
+from .mentor import MentorProfile, MentorSession, MentorshipRequest

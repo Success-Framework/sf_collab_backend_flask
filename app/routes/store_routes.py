@@ -24,8 +24,9 @@ store_bp = Blueprint('store', __name__)
 
 def get_or_create_wallet(user_id):
     """Get user's wallet or create one if it doesn't exist"""
+    user_id = int(user_id)
     wallet = UserWallet.query.filter_by(user_id=user_id).first()
-    
+
     if not wallet:
         wallet = UserWallet(
             user_id=user_id,
@@ -36,8 +37,20 @@ def get_or_create_wallet(user_id):
             daily_earning_limit=1000
         )
         db.session.add(wallet)
+        db.session.flush()
+
+        WalletTransaction.record_transaction(
+            wallet_id=wallet.id,
+            user_id=user_id,
+            transaction_type='bonus',
+            currency_type='sf_coins',
+            amount=100,
+            balance_before=0,
+            balance_after=100,
+            description='Welcome bonus'
+        )
         db.session.commit()
-    
+
     return wallet
 
 
@@ -54,9 +67,9 @@ def get_products():
         product_type = request.args.get('product_type')
         currency_type = request.args.get('currency_type')
         is_featured = request.args.get('is_featured')
-        
+
         query = VirtualProduct.query.filter_by(is_active=True)
-        
+
         if category:
             query = query.filter_by(category=category)
         if product_type:
@@ -65,14 +78,14 @@ def get_products():
             query = query.filter_by(currency_type=currency_type)
         if is_featured:
             query = query.filter_by(is_featured=True)
-        
+
         products = query.order_by(desc(VirtualProduct.is_featured), VirtualProduct.name).all()
-        
+
         return jsonify({
             'success': True,
             'products': [p.to_dict() for p in products]
         }), 200
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -83,68 +96,65 @@ def get_featured_products():
     """Get featured products"""
     try:
         products = VirtualProduct.find_featured_products()
-        
         return jsonify({
             'success': True,
             'products': [p.to_dict() for p in products]
         }), 200
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@store_bp.route('/products/<product_id>', methods=['GET'])
+@store_bp.route('/products/<int:product_id>', methods=['GET'])
 @jwt_required()
 def get_product(product_id):
     """Get single product details"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         product = VirtualProduct.find_by_id(product_id)
-        
+
         if not product:
             return jsonify({'success': False, 'error': 'Product not found'}), 404
-        
-        # Check if user owns this product
+
         owned = UserInventory.find_user_product(user_id, product_id) is not None
-        
+
         return jsonify({
             'success': True,
             'product': product.to_dict(),
             'owned': owned
         }), 200
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@store_bp.route('/products/<product_id>/purchase', methods=['POST'])
+@store_bp.route('/products/<int:product_id>/purchase', methods=['POST'])
 @jwt_required()
 def purchase_product(product_id):
     """Purchase a product"""
     try:
-        user_id = get_jwt_identity()
-        
+        user_id = int(get_jwt_identity())
+
         product = VirtualProduct.find_by_id(product_id)
         if not product:
             return jsonify({'success': False, 'error': 'Product not found'}), 404
-        
-        # Check if product is available
+
         if not product.is_available():
             return jsonify({'success': False, 'error': 'Product is not available'}), 400
-        
+
         # Check purchase limits
         if product.max_purchases:
             existing_purchases = ProductPurchase.count_user_purchases(user_id, product_id)
             if existing_purchases >= product.max_purchases:
                 return jsonify({'success': False, 'error': 'Purchase limit reached'}), 400
-        
+
         # Check stock
         if product.stock_quantity is not None and product.stock_quantity <= 0:
             return jsonify({'success': False, 'error': 'Out of stock'}), 400
-        
+
         wallet = get_or_create_wallet(user_id)
-        
-        # Check balance based on currency type
+
+        # Deduct the appropriate currency
         if product.currency_type == 'sf_coins':
             if wallet.sf_coins < product.price:
                 return jsonify({
@@ -157,7 +167,7 @@ def purchase_product(product_id):
             wallet.sf_coins -= product.price
             wallet.total_coins_spent += product.price
             balance_after = wallet.sf_coins
-            
+
         elif product.currency_type == 'premium_gems':
             if wallet.premium_gems < product.price:
                 return jsonify({
@@ -169,8 +179,8 @@ def purchase_product(product_id):
             balance_before = wallet.premium_gems
             wallet.premium_gems -= product.price
             balance_after = wallet.premium_gems
-            
-        else:  # event_tokens
+
+        elif product.currency_type == 'event_tokens':
             if wallet.event_tokens < product.price:
                 return jsonify({
                     'success': False,
@@ -181,13 +191,16 @@ def purchase_product(product_id):
             balance_before = wallet.event_tokens
             wallet.event_tokens -= product.price
             balance_after = wallet.event_tokens
-        
-        # Calculate expiration date if applicable
+
+        else:
+            return jsonify({'success': False, 'error': f'Unknown currency type: {product.currency_type}'}), 400
+
+        # Calculate expiry
         expires_at = None
         if product.duration_days:
             expires_at = datetime.utcnow() + timedelta(days=product.duration_days)
-        
-        # Create purchase record
+
+        # Create purchase record and flush to get purchase.id
         purchase = ProductPurchase(
             user_id=user_id,
             product_id=product_id,
@@ -197,7 +210,8 @@ def purchase_product(product_id):
             expires_at=expires_at
         )
         db.session.add(purchase)
-        
+        db.session.flush()  # ← needed so purchase.id is available below
+
         # Add to inventory
         inventory_item = UserInventory(
             user_id=user_id,
@@ -208,16 +222,16 @@ def purchase_product(product_id):
             expires_at=expires_at
         )
         db.session.add(inventory_item)
-        
+
         # Update stock if limited
         if product.stock_quantity is not None:
             product.stock_quantity -= 1
-        
-        # Record transaction
+
+        # Record wallet transaction
         WalletTransaction.record_transaction(
             wallet_id=wallet.id,
             user_id=user_id,
-            transaction_type='purchase',
+            transaction_type='spend',       # 'spend' is cleaner than 'purchase' — matches frontend icons
             currency_type=product.currency_type,
             amount=product.price,
             balance_before=balance_before,
@@ -227,14 +241,14 @@ def purchase_product(product_id):
             description=f'Purchased: {product.name}'
         )
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'purchase': purchase.to_dict(),
             'inventory_item': inventory_item.to_dict(),
             'wallet': wallet.to_dict()
         }), 200
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -249,102 +263,104 @@ def purchase_product(product_id):
 def get_inventory():
     """Get user's inventory"""
     try:
-        user_id = get_jwt_identity()
-        
+        user_id = int(get_jwt_identity())
+
         product_type = request.args.get('product_type')
         is_equipped = request.args.get('is_equipped')
         include_expired = request.args.get('include_expired', 'false').lower() == 'true'
-        
+
         query = UserInventory.query.filter_by(user_id=user_id)
-        
+
         if not include_expired:
             query = query.filter_by(expired=False, is_consumed=False)
-        
+
         if is_equipped:
             query = query.filter_by(is_equipped=True)
-        
+
         items = query.all()
-        
-        # Filter by product type if specified
+
         if product_type:
             items = [item for item in items if item.product and item.product.product_type == product_type]
-        
+
         return jsonify({
             'success': True,
             'inventory': [item.to_dict() for item in items]
         }), 200
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@store_bp.route('/inventory/<item_id>/equip', methods=['POST'])
+@store_bp.route('/inventory/<int:item_id>/equip', methods=['POST'])
 @jwt_required()
 def equip_item(item_id):
-    """Equip an inventory item"""
+    """Toggle equip on an inventory item"""
     try:
-        user_id = get_jwt_identity()
-        
+        user_id = int(get_jwt_identity())
+
         item = UserInventory.find_by_id(item_id)
-        
-        if not item or str(item.user_id) != str(user_id):
+
+        if not item or item.user_id != user_id:
             return jsonify({'success': False, 'error': 'Item not found'}), 404
-        
+
         if not item.is_valid():
             return jsonify({'success': False, 'error': 'Item is expired or consumed'}), 400
-        
-        # Unequip other items of same type
-        if item.product:
-            other_items = UserInventory.query.filter(
-                UserInventory.user_id == user_id,
-                UserInventory.is_equipped == True,
-                UserInventory.id != item_id
-            ).join(VirtualProduct).filter(
-                VirtualProduct.product_type == item.product.product_type
-            ).all()
-            
-            for other in other_items:
+
+        # Unequip other items of same product_type before equipping this one
+        if item.product and not item.is_equipped:
+            same_type_equipped = (
+                UserInventory.query
+                .filter(
+                    UserInventory.user_id == user_id,
+                    UserInventory.is_equipped == True,
+                    UserInventory.id != item_id
+                )
+                .join(VirtualProduct)
+                .filter(VirtualProduct.product_type == item.product.product_type)
+                .all()
+            )
+            for other in same_type_equipped:
                 other.is_equipped = False
-        
-        item.is_equipped = not item.is_equipped  # Toggle
+
+        item.is_equipped = not item.is_equipped
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'item': item.to_dict()
         }), 200
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@store_bp.route('/inventory/<item_id>/use', methods=['POST'])
+@store_bp.route('/inventory/<int:item_id>/use', methods=['POST'])
 @jwt_required()
 def use_item(item_id):
     """Use a consumable item"""
     try:
-        user_id = get_jwt_identity()
-        
+        user_id = int(get_jwt_identity())
+
         item = UserInventory.find_by_id(item_id)
-        
-        if not item or str(item.user_id) != str(user_id):
+
+        if not item or item.user_id != user_id:
             return jsonify({'success': False, 'error': 'Item not found'}), 404
-        
+
         if not item.is_valid():
             return jsonify({'success': False, 'error': 'Item is expired or consumed'}), 400
-        
+
         if not item.product or not item.product.consumable:
             return jsonify({'success': False, 'error': 'Item is not consumable'}), 400
-        
+
         remaining = item.use_consumable()
-        
+
         return jsonify({
             'success': True,
             'item': item.to_dict(),
             'remaining_uses': remaining
         }), 200
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -359,21 +375,21 @@ def use_item(item_id):
 def get_purchases():
     """Get user's purchase history"""
     try:
-        user_id = get_jwt_identity()
-        
+        user_id = int(get_jwt_identity())
+
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         status = request.args.get('status')
-        
+
         query = ProductPurchase.query.filter_by(user_id=user_id)
-        
+
         if status:
             query = query.filter_by(status=status)
-        
+
         query = query.order_by(desc(ProductPurchase.purchased_at))
-        
+
         pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-        
+
         return jsonify({
             'success': True,
             'purchases': [p.to_dict() for p in pagination.items],
@@ -384,7 +400,7 @@ def get_purchases():
                 'pages': pagination.pages
             }
         }), 200
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -394,16 +410,21 @@ def get_purchases():
 def get_categories():
     """Get available product categories"""
     try:
-        categories = db.session.query(VirtualProduct.category).filter(
-            VirtualProduct.is_active == True,
-            VirtualProduct.category != None
-        ).distinct().all()
-        
+        categories = (
+            db.session.query(VirtualProduct.category)
+            .filter(
+                VirtualProduct.is_active == True,
+                VirtualProduct.category != None
+            )
+            .distinct()
+            .all()
+        )
+
         return jsonify({
             'success': True,
             'categories': [c[0] for c in categories if c[0]]
         }), 200
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -417,14 +438,19 @@ def get_categories():
 def create_product():
     """Create a new product (admin only)"""
     try:
-        admin_id = get_jwt_identity()
-        
+        admin_id = int(get_jwt_identity())
+
         admin_user = User.query.get(admin_id)
         if not admin_user or not getattr(admin_user, 'is_admin', False):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
-        
+
         data = request.get_json()
-        
+
+        required = ['name', 'product_type', 'currency_type', 'price']
+        missing = [f for f in required if not data.get(f)]
+        if missing:
+            return jsonify({'success': False, 'error': f'Missing fields: {", ".join(missing)}'}), 400
+
         product = VirtualProduct(
             name=data.get('name'),
             description=data.get('description'),
@@ -445,52 +471,81 @@ def create_product():
             icon_url=data.get('icon_url'),
             preview_url=data.get('preview_url')
         )
-        
+
         product.save()
-        
+
         return jsonify({
             'success': True,
             'product': product.to_dict()
         }), 201
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@store_bp.route('/admin/products/<product_id>', methods=['PUT'])
+@store_bp.route('/admin/products/<int:product_id>', methods=['PUT'])
 @jwt_required()
 def update_product(product_id):
     """Update a product (admin only)"""
     try:
-        admin_id = get_jwt_identity()
-        
+        admin_id = int(get_jwt_identity())
+
         admin_user = User.query.get(admin_id)
         if not admin_user or not getattr(admin_user, 'is_admin', False):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
-        
+
         product = VirtualProduct.find_by_id(product_id)
         if not product:
             return jsonify({'success': False, 'error': 'Product not found'}), 404
-        
+
         data = request.get_json()
-        
-        # Update fields
-        for field in ['name', 'description', 'product_type', 'currency_type', 'price',
-                      'original_price', 'discount_percent', 'duration_days', 'consumable',
-                      'max_purchases', 'stock_quantity', 'is_featured', 'badge_text',
-                      'category', 'tags', 'benefits', 'is_active', 'icon_url', 'preview_url']:
+
+        updatable_fields = [
+            'name', 'description', 'product_type', 'currency_type', 'price',
+            'original_price', 'discount_percent', 'duration_days', 'consumable',
+            'max_purchases', 'stock_quantity', 'is_featured', 'badge_text',
+            'category', 'tags', 'benefits', 'is_active', 'icon_url', 'preview_url'
+        ]
+
+        for field in updatable_fields:
             if field in data:
                 setattr(product, field, data[field])
-        
+
         product.updated_at = datetime.utcnow()
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'product': product.to_dict()
         }), 200
-        
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@store_bp.route('/admin/products/<int:product_id>', methods=['DELETE'])
+@jwt_required()
+def delete_product(product_id):
+    """Soft-delete a product (admin only) — sets is_active=False"""
+    try:
+        admin_id = int(get_jwt_identity())
+
+        admin_user = User.query.get(admin_id)
+        if not admin_user or not getattr(admin_user, 'is_admin', False):
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+
+        product = VirtualProduct.find_by_id(product_id)
+        if not product:
+            return jsonify({'success': False, 'error': 'Product not found'}), 404
+
+        product.is_active = False
+        product.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Product deactivated'}), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500

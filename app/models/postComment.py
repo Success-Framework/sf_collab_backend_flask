@@ -34,8 +34,8 @@ class PostComment(db.Model):
     
     def get_post_content_preview(self):
         """Get post content preview"""
-        if self.post:
-            return self.post.content[:100] + '...' if len(self.post.content) > 100 else self.post.content
+        if self.parent_post:
+            return self.parent_post.content[:100] + '...' if len(self.parent_post.content) > 100 else self.parent_post.content
         return None
     
     def is_recent(self, hours=24):
@@ -53,7 +53,7 @@ class PostComment(db.Model):
                 'firstName': self.author_first_name,
                 'lastName': self.author_last_name,
                 'fullName': self.get_author_name(),
-                'profilePicture': self.author.profile_picture if self.author else None
+                'profilePicture': self.comment_author.profile_picture if self.comment_author else None
             },
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),

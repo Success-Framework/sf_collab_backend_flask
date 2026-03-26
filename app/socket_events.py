@@ -44,11 +44,11 @@ def handle_connect(auth):
             "status": "online",
             "timestamp": datetime.utcnow().isoformat(),
         },
-        broadcast=True,
+        to="/",
     )
     print(f"✅ User {user_id} connected (sid={sid})")
 @socketio.on("disconnect")
-def handle_disconnect():
+def handle_disconnect(reason=None):
     sid = request.sid
     session = socket_sessions.pop(sid, None)
     if not session:
@@ -57,15 +57,29 @@ def handle_disconnect():
     connected_users[user_id].remove(sid)
     if not connected_users[user_id]:
         del connected_users[user_id]
+        now_iso = datetime.utcnow().isoformat()
+        # Persist last_seen timestamp in DB so other users see accurate "last seen" times
+        try:
+            from app.models.user import User
+            user = User.query.get(user_id)
+            if user and hasattr(user, 'last_seen'):
+                user.last_seen = datetime.utcnow()
+                db.session.commit()
+        except Exception as e:
+            logging.warning(f"Could not update last_seen for user {user_id}: {e}")
         emit(
             "user_status",
             {
                 "user_id": user_id,
                 "status": "offline",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": now_iso,
+                "last_seen": now_iso,
             },
-            broadcast=True,
+            to="/",
         )
+    # Clear away state on disconnect
+    _last_activity.pop(str(user_id), None)
+    _user_away_status.pop(str(user_id), None)
     print(f"🔌 User {user_id} disconnected")
 @socketio.on('join_conversation')
 def handle_join_conversation(data):
@@ -313,6 +327,17 @@ def handle_mark_read(data):
         # Mark as read in DB
         conversation.mark_as_read(user_id)
 
+        # Emit unread_count_update to THIS user so ChatDock/ChatPage badge clears instantly
+        try:
+            remaining = conversation.get_unread_message_count(user_id)
+        except Exception:
+            remaining = 0
+        socketio.emit('unread_count_update', {
+            'conversation_id': conversation_id,
+            'unread_count': remaining,
+            'user_id': user_id,
+        }, room=f"user_{user_id}")
+
         room = f"conversation_{conversation_id}"
         now_iso = datetime.utcnow().isoformat()
 
@@ -344,11 +369,108 @@ def handle_mark_read(data):
 
     except Exception as e:
         logging.error(f"Error marking as read: {e}")
+@socketio.on('join_notifications')
+def handle_join_notifications(data):
+    """User explicitly joins their notification room (called after connect)."""
+    sid = request.sid
+    if sid not in socket_sessions:
+        return
+    user_id = socket_sessions[sid]['user_id']
+    # Security: only allow joining own room
+    requested_user_id = str(data.get('user_id', '')) if data else ''
+    if requested_user_id and requested_user_id != str(user_id):
+        logging.warning(f"User {user_id} tried to join notifications room for user {requested_user_id}")
+        return
+    join_room(f'user_{user_id}')
+    emit('notifications_room_joined', {'user_id': user_id})
+    logging.info(f"User {user_id} joined notifications room")
+
+# Track per-user last activity timestamp for away detection
+# Key: user_id (str), Value: datetime of last ping
+_last_activity = {}
+# Track per-user whether they are currently marked as 'away'
+_user_away_status = {}
+
+@socketio.on('user_activity')
+def handle_user_activity(data):
+    """Track last-active timestamp for presence display.
+    
+    - Broadcasts the fresh timestamp to all clients so they can update idle timers.
+    - If a user was previously marked 'away' (3+ min silence), sends an 'online'
+      recovery event before updating the timestamp.
+    """
+    sid = request.sid
+    if sid not in socket_sessions:
+        return
+    user_id = str(socket_sessions[sid]['user_id'])
+    now = datetime.utcnow()
+    ts_str = now.isoformat()
+
+    # Check if user is recovering from 'away' state
+    last = _last_activity.get(user_id)
+    was_away = _user_away_status.get(user_id, False)
+    AWAY_THRESHOLD_SECS = 3 * 60  # 3 minutes
+
+    if last and was_away:
+        # User is back — broadcast online recovery
+        _user_away_status[user_id] = False
+        emit('user_status', {
+            'user_id': user_id,
+            'status': 'online',
+            'timestamp': ts_str,
+        }, to="/", include_self=False)
+
+    # Update last activity
+    _last_activity[user_id] = now
+
+    # Broadcast the fresh activity timestamp to all clients
+    emit('user_activity', {
+        'user_id': user_id,
+        'ts': ts_str,
+    }, to="/", include_self=False)
+
+
+def _check_away_users():
+    """Background thread: broadcast 'away' for users silent for 3+ minutes."""
+    import time
+    AWAY_THRESHOLD_SECS = 3 * 60
+    CHECK_INTERVAL = 30  # check every 30s
+
+    while True:
+        time.sleep(CHECK_INTERVAL)
+        try:
+            now = datetime.utcnow()
+            for user_id, last in list(_last_activity.items()):
+                # Only check users currently connected
+                if user_id not in connected_users:
+                    continue
+                gap = (now - last).total_seconds()
+                already_away = _user_away_status.get(user_id, False)
+                if gap >= AWAY_THRESHOLD_SECS and not already_away:
+                    _user_away_status[user_id] = True
+                    socketio.emit('user_status', {
+                        'user_id': user_id,
+                        'status': 'away',
+                        'timestamp': now.isoformat(),
+                    }, to="/")
+                    logging.info(f"User {user_id} marked away after {gap:.0f}s silence")
+        except Exception as e:
+            logging.warning(f"Away checker error: {e}")
+
+
+# Start away-detection thread when module loads
+import threading
+_away_thread = threading.Thread(target=_check_away_users, daemon=True)
+_away_thread.start()
+
 @socketio.on('get_online_users')
 def handle_get_online_users():
     """Get list of currently online users"""
     online_user_ids = list(connected_users.keys())
     emit('online_users', {'user_ids': online_user_ids})
+
+
+
 # Helper functions to emit from routes
 def emit_new_message(conversation_id, message_data):
     """Emit new message to conversation room (call from routes)"""

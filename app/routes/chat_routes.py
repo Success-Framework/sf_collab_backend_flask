@@ -230,6 +230,27 @@ def get_conversation(conversation_id):
         logging.error(f"Error getting conversation {conversation_id}: {str(e)}")
         return error_response(f"Failed to load conversation: {str(e)}", 500)
 
+@chat_bp.route("/conversations/<int:startup_id>", methods=["GET"])
+@jwt_required()
+def get_startup_conversation(startup_id):
+    try:
+        current_user_id = get_jwt_identity()
+
+        user = User.query.get(current_user_id)
+        conversation = ChatConversation.query.filter_by(parent_startup_id=startup_id).first()
+
+        if not user or not conversation:
+            return error_response("User or conversation not found", 404)
+
+        if not conversation.is_user_participant(current_user_id):
+            return error_response("Access denied", 403)
+
+        return success_response({"conversation": conversation.to_dict(for_user=user)})
+
+    except Exception as e:
+        logging.error(f"Error getting conversation for startup id:{startup_id}: {str(e)}")
+        return error_response(f"Failed to load conversation: {str(e)}", 500)
+
 
 @chat_bp.route("/conversations/with-user", methods=["POST"])
 @jwt_required()
@@ -380,7 +401,6 @@ def mark_conversation_read(conversation_id):
         logging.error(f"Error marking conversation as read: {str(e)}")
         return error_response(f"Failed to mark conversation as read: {str(e)}", 500)
 
-
 # ─────────────────────────────────────────────────────────────
 # GET MESSAGES
 # ─────────────────────────────────────────────────────────────
@@ -400,81 +420,105 @@ def get_messages(conversation_id):
 
         if not conversation.is_user_participant(current_user_id):
             return error_response("Access denied", 403)
-
-        messages = conversation.get_messages_for_user(user, limit, offset)
-
-        # ── Enrich messages with persistent read/delivered status ──────────────
-        # For each message sent by the current user, check if other participants
-        # have read past it using conversation_user_reads.last_read_at
-        try:
-            from app.models.chatConversation import conversation_user_reads
-            from sqlalchemy import and_
-
-            # Get last_read_at for every OTHER participant in this conversation
-            other_read_times = {}
-            for participant in conversation.participants:
-                if str(participant.id) == str(current_user_id):
-                    continue
-                row = db.session.execute(
-                    db.text(
-                        "SELECT last_read_at FROM conversation_user_reads "
-                        "WHERE conversation_id = :cid AND user_id = :uid"
-                    ),
-                    {"cid": conversation_id, "uid": participant.id}
-                ).first()
-                if row and row.last_read_at:
-                    other_read_times[participant.id] = row.last_read_at
-
-            # Enrich each message
-            for msg in messages:
-                # Only add status for messages sent by the current user
-                if str(msg.get("sender_id")) != str(current_user_id):
-                    continue
-
-                msg_time_str = msg.get("created_at") or msg.get("createdAt")
-                if not msg_time_str:
-                    continue
-
-                # Parse message time
-                from datetime import datetime
-                try:
-                    if isinstance(msg_time_str, str):
-                        msg_time = datetime.fromisoformat(msg_time_str.replace("Z", "+00:00").replace("+00:00", ""))
-                    else:
-                        msg_time = msg_time_str
-                except Exception:
-                    continue
-
-                # Check if any recipient has read at or after this message
-                is_read = any(
-                    read_time >= msg_time
-                    for read_time in other_read_times.values()
-                )
-
-                if is_read:
-                    msg["status"] = "read"
-                    msg["delivery_status"] = "read"
-                    # Find the latest read_at among recipients who have read it
-                    read_ats = [t for t in other_read_times.values() if t >= msg_time]
-                    msg["read_at"] = max(read_ats).isoformat() if read_ats else None
-                else:
-                    # Mark as delivered if the message was sent (it reached the server)
-                    msg["status"] = "delivered"
-                    msg["delivery_status"] = "delivered"
-                    msg["delivered_at"] = msg_time_str
-
-        except Exception as e:
-            logging.warning(f"Could not enrich message statuses: {e}")
-        # ── End status enrichment ───────────────────────────────────────────────
-
-        return success_response(
-            {"conversation": conversation.to_dict(for_user=user), "messages": messages}
-        )
-
+        return fetch_messages(conversation, user, limit, offset)
+    
     except Exception as e:
         logging.error(f"Error in get_messages: {str(e)}")
         return error_response(f"Failed to load messages: {str(e)}", 500)
 
+# ─────────────────────────────────────────────────────────────
+# HELPER FUNCTION TO GET MESSAGES
+# ─────────────────────────────────────────────────────────────
+def fetch_messages(conversation, user, limit, offset):
+    # ── Enrich messages with persistent read/delivered status ──────────────
+    # For each message sent by the current user, check if other participants
+    # have read past it using conversation_user_reads.last_read_at
+    try:
+        messages = conversation.get_messages_for_user(user, limit, offset)
+
+        from app.models.chatConversation import conversation_user_reads
+        from sqlalchemy import and_
+
+        # Get last_read_at for every OTHER participant in this conversation
+        other_read_times = {}
+        for participant in conversation.participants:
+            if str(participant.id) == str(current_user_id):
+                continue
+            row = db.session.execute(
+                db.text(
+                    "SELECT last_read_at FROM conversation_user_reads "
+                    "WHERE conversation_id = :cid AND user_id = :uid"
+                ),
+                {"cid": conversation_id, "uid": participant.id}
+            ).first()
+            if row and row.last_read_at:
+                other_read_times[participant.id] = row.last_read_at
+
+        # Enrich each message
+        for msg in messages:
+            # Only add status for messages sent by the current user
+            if str(msg.get("sender_id")) != str(current_user_id):
+                continue
+
+            msg_time_str = msg.get("created_at") or msg.get("createdAt")
+            if not msg_time_str:
+                continue
+
+            # Parse message time
+            from datetime import datetime
+            try:
+                if isinstance(msg_time_str, str):
+                    msg_time = datetime.fromisoformat(msg_time_str.replace("Z", "+00:00").replace("+00:00", ""))
+                else:
+                    msg_time = msg_time_str
+            except Exception:
+                continue
+
+            # Check if any recipient has read at or after this message
+            is_read = any(
+                read_time >= msg_time
+                for read_time in other_read_times.values()
+            )
+
+            if is_read:
+                msg["status"] = "read"
+                msg["delivery_status"] = "read"
+                # Find the latest read_at among recipients who have read it
+                read_ats = [t for t in other_read_times.values() if t >= msg_time]
+                msg["read_at"] = max(read_ats).isoformat() if read_ats else None
+            else:
+                # Mark as delivered if the message was sent (it reached the server)
+                msg["status"] = "delivered"
+                msg["delivery_status"] = "delivered"
+                msg["delivered_at"] = msg_time_str
+
+    except Exception as e:
+        logging.warning(f"Could not enrich message statuses: {e}")
+    # ── End status enrichment ───────────────────────────────────────────────
+
+    return success_response(
+        {"conversation": conversation.to_dict(for_user=user), "messages": messages}
+    )
+
+# ─────────────────────────────────────────────────────────────
+# GET MESSAGES BY STARTUP ID (for startup-specific conversations)
+# ─────────────────────────────────────────────────────────────
+@chat_bp.route("/conversations/<int:startup_id>/messages", methods=["GET"])
+@jwt_required()
+def get_startup_messages(startup_id):
+    try:
+        current_user_id = get_jwt_identity()
+        limit = request.args.get("limit", 50, type=int)
+        offset = request.args.get("offset", 0, type=int)
+
+        user = User.query.get(current_user_id)
+        conversation = ChatConversation.query.filter_by(parent_startup_id=startup_id).first()
+
+        return fetch_messages(conversation, user, limit, offset)
+
+    except Exception as e:
+        logging.error(f"Error in get_startup_messages: {str(e)}")
+        return error_response(f"Failed to load startup messages: {str(e)}", 500)
 
 # ─────────────────────────────────────────────────────────────
 # SEND MESSAGE (conversation_id)
@@ -846,7 +890,7 @@ def edit_message(conversation_id, message_id):
 )
 @jwt_required()
 def react_to_message(conversation_id, message_id):
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())  # cast to int — sender_id is int in DB
     data = request.get_json() or {}
     reaction_emoji = data.get("emoji")
 
@@ -866,6 +910,7 @@ def react_to_message(conversation_id, message_id):
         reactions = metadata.get("reactions", {})  # {"👍":[1,2], "❤️":[3]}
 
         users = reactions.get(reaction_emoji, [])
+        is_adding = current_user_id not in users  # True = adding, False = removing
         if current_user_id in users:
             users.remove(current_user_id)
             if users:
@@ -889,7 +934,8 @@ def react_to_message(conversation_id, message_id):
         try:
             from app.models.notification import Notification
 
-            if message.sender_id != current_user_id:
+            # Only notify when ADDING a reaction (not removing), and never notify yourself
+            if is_adding and message.sender_id != current_user_id:
                 reactor = User.query.get(current_user_id)
                 if reactor:
                     notification = Notification(

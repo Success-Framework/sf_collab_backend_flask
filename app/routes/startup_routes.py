@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_file
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app.models.startup import Startup
 from app.models.startup_document import StartupDocument
 from app.models.startUpMember import StartupMember
@@ -127,63 +127,80 @@ def calculate_total_positions(roles_data, fallback_positions=0):
 @jwt_required()
 def get_startups():
     """Get all startups with filtering, or user's startups if requested"""
-    current_user_id = get_jwt_identity()
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-    industry = request.args.get('industry', type=str)
-    stage = request.args.get('stage', type=str)
-    search = request.args.get('search', type=str)
-    my_startups = request.args.get('my_startups', 'false').lower() == 'true'
-    min_funding = request.args.get('min_funding', type=float)
-    max_funding = request.args.get('max_funding', type=float)
-    builder = request.args.get('builder', 'false').lower() == 'true'
-    query = Startup.query.filter(Startup.status != 'deleted')  # Exclude deleted startups
-    
+    try:
+        current_user_id = get_jwt_identity()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        industry = request.args.get('industry', type=str)
+        stage = request.args.get('stage', type=str)
+        search = request.args.get('search', type=str)
+        my_startups = request.args.get('my_startups', 'false').lower() == 'true'
+        min_funding = request.args.get('min_funding', type=float)
+        max_funding = request.args.get('max_funding', type=float)
+        builder = request.args.get('builder', 'false').lower() == 'true'
+        sort_by = request.args.get('sort_by', 'date', type=str)  # 'date', 'views', 'rating'
+        query = Startup.query.filter(Startup.status != 'deleted')  # Exclude deleted startups
 
-    
-    if builder:
-        print("Builder filter applied - showing startups where user is a member or creator")
-        query = query.join(Startup.startup_members).filter(
-            (StartupMember.user_id == current_user_id) & (Startup.creator_id != current_user_id) # Show startups where user is a member but not the creator
-        )
-    if page == 1:
-        query = query.order_by(Startup.created_at.desc())
-    else:
-        query = query.order_by(
-            Startup.created_at.desc(),
-            func.random()
-        )
+        if builder:
+            print("Builder filter applied - showing startups where user is a member but not creator")
+            query = query.join(StartupMember, StartupMember.startup_id == Startup.id).filter(
+                StartupMember.user_id == current_user_id,
+                StartupMember.is_active == True,
+                Startup.creator_id != current_user_id
+            )
 
-    # Apply filters
-    if industry:
-        query = query.filter(Startup.industry.ilike(f'%{industry}%'))
-    if stage:
-        query = query.filter(Startup.stage == stage)
-    if search:
-        query = query.filter(
-            (Startup.name.ilike(f'%{search}%')) |
-            (Startup.description.ilike(f'%{search}%'))
-        )
-    if min_funding is not None:
-        query = query.filter(Startup.funding_amount >= min_funding)
-    if max_funding is not None:
-        query = query.filter(Startup.funding_amount <= max_funding)
-    # Get user's startups if requested
-    if my_startups:
-        query = query.filter(Startup.creator_id == current_user_id)
-    result = paginate(query, page, per_page)
-    
-    return success_response({
-        'startups': [startup.to_dict() for startup in result['items']],
-        'pagination': {
-            'page': result['page'],
-            'per_page': result['per_page'],
-            'total': result['total'],
-            'pages': result['pages']
-        }
-    })
+        # Apply sorting based on sort_by parameter
+        if sort_by == 'views':
+            query = query.order_by(Startup.views.desc())
+        elif sort_by == 'rating':
+            from app.models.startup_rating import StartupRating
+            avg_rating_subquery = db.session.query(
+                StartupRating.startup_id,
+                func.avg(StartupRating.rating).label('avg_rating')
+            ).group_by(StartupRating.startup_id).subquery()
+
+            query = query.outerjoin(avg_rating_subquery, Startup.id == avg_rating_subquery.c.startup_id).order_by(
+                func.coalesce(avg_rating_subquery.c.avg_rating, 0).desc()
+            )
+        else:  # Default to 'date'
+            query = query.order_by(Startup.created_at.desc())
+
+        # Apply filters
+        if industry:
+            query = query.filter(Startup.industry.ilike(f'%{industry}%'))
+        if stage:
+            query = query.filter(Startup.stage == stage)
+        if search:
+            query = query.filter(
+                (Startup.name.ilike(f'%{search}%')) |
+                (Startup.description.ilike(f'%{search}%'))
+            )
+        if min_funding is not None:
+            query = query.filter(Startup.funding_amount >= min_funding)
+        if max_funding is not None:
+            query = query.filter(Startup.funding_amount <= max_funding)
+        if my_startups:
+            query = query.filter(Startup.creator_id == current_user_id)
+
+        result = paginate(query, page, per_page)
+
+        return success_response({
+            'startups': [startup.to_dict() for startup in result['items']],
+            'pagination': {
+                'page': result['page'],
+                'per_page': result['per_page'],
+                'total': result['total'],
+                'pages': result['pages']
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"🔥 GET_STARTUPS ERROR: {type(e).__name__}: {e}")
+        db.session.rollback()
+        return error_response(f'Failed to load startups: {str(e)}', 500)
+
 @startups_bp.route('/top', methods=['GET'])
-@jwt_required()
 def get_top_startups():
     """Get top startups by views"""
     page = request.args.get('page', 1, type=int)
@@ -207,16 +224,24 @@ def get_top_startups():
     })
 #! GET SINGLE STARTUP (Public - no auth required)
 @startups_bp.route('/<int:startup_id>', methods=['GET'])
-@jwt_required()
 def get_startup(startup_id):
-    current_user_id = get_jwt_identity()
+    current_user_id = request.args.get('user_id', type=int)  # Optional user_id for access level determination
     startup = Startup.query.get_or_404(startup_id)
     if startup.status == 'deleted':
         return error_response('Startup not found', 404)
-    startup.increment_views(current_user_id)
+    if current_user_id:
+        startup.increment_views(current_user_id)
+
+    # get_current_user_startup_role calls get_jwt_identity() internally.
+    # This route has no @jwt_required, so we must set up the JWT context
+    # manually as optional — no token = identity stays None, no crash.
+    try:
+        verify_jwt_in_request(optional=True)
+    except Exception:
+        pass
 
     role = get_current_user_startup_role(startup_id)
-    
+
     if role == 'none' or not role:
         # Very limited view for normal logged-in users
         data = {
@@ -229,7 +254,9 @@ def get_startup(startup_id):
             'banner_url': startup.banner_url,
             'member_count': startup.member_count,
             'views': startup.views,
-            'createdAt': startup.created_at.isoformat(),
+            'average_rating': startup._get_average_rating(),
+            'rating_count': startup._get_rating_count(),
+            'createdAt': startup.created_at.isoformat() if startup.created_at else None,
             'access_level': 'public_limited',
             'roles': startup.roles,
             'tech_stack': startup.tech_stack
@@ -418,17 +445,19 @@ def register_startup():
             for doc_file in document_files:
                 try:
                     if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
-                        # Check if the storage limit of user's current plan allows file upload
-                        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
-                        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
-                        if not can_upload:
-                            return error_response(error_message, 500)
-
                         filename = secure_filename(doc_file.filename)
                         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
                         unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
                         doc_path = os.path.join(startup_upload_dir, unique_filename)
                         doc_file.save(doc_path)
+
+                        # Check storage limit after saving
+                        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+                        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+                        if not can_upload:
+                            if os.path.exists(doc_path):
+                                os.remove(doc_path)
+                            return error_response(error_message, 403)
                         
                         file_url = f"/startups/{startup.id}/documents/{unique_filename}"
 
@@ -624,17 +653,19 @@ def update_startup(startup_id):
         
         for doc_file in document_files:
             if doc_file and doc_file.filename != '' and allowed_file(doc_file.filename):
-                # Check if the storage limit of user's current plan allows file update
-                file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
-                can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
-                if not can_upload:
-                    return error_response(error_message, 500)
-                
                 filename = secure_filename(doc_file.filename)
                 timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
                 unique_filename = f"{timestamp}_{uuid.uuid4().hex[:8]}_{filename}"
                 doc_path = os.path.join(startup_upload_dir, unique_filename)
                 doc_file.save(doc_path)
+
+                # Check storage limit after saving so file size is accurate
+                file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+                can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+                if not can_upload:
+                    if os.path.exists(doc_path):
+                        os.remove(doc_path)
+                    return error_response(error_message, 403)
                 
                 file_url = f"/startups/{startup.id}/documents/{unique_filename}"
                 
@@ -881,20 +912,23 @@ def upload_document(startup_id):
         return error_response('File size too large')
     
     try:
-        # Check if the storage limit of user's current plan allows file upload
-        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
-        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
-        if not can_upload:
-            return error_response(error_message, 500)
-
         # Create startup upload directory if it doesn't exist
         startup_upload_dir = os.path.join(UPLOAD_FOLDER, str(startup_id))
         os.makedirs(startup_upload_dir, exist_ok=True)
         
-        # Save file to file system
+        # Save file to file system first so we can measure its size
         unique_filename = generate_unique_filename(document_file.filename)
         doc_path = os.path.join(startup_upload_dir, unique_filename)
         document_file.save(doc_path)
+
+        # Now check storage limit with the actual saved file size
+        file_size_mb = (os.path.getsize(doc_path) / (1024 * 1024)) if os.path.exists(doc_path) else 0
+        can_upload, error_message = can_upload_file(current_user_id, file_size_mb)
+        if not can_upload:
+            # Clean up the file we just saved since upload is not allowed
+            if os.path.exists(doc_path):
+                os.remove(doc_path)
+            return error_response(error_message, 403)
         
         # Create document with file_url
         file_url = f"/api/startups/uploads/{startup_id}/{unique_filename}"
@@ -1012,7 +1046,7 @@ def get_startup_stats(startup_id):
         'views': startup.views,
         'member_count': startup.member_count,
         'positions': startup.positions,
-        'created_at': startup.created_at.isoformat(),
+        'created_at': startup.created_at.isoformat() if startup.created_at else None,
         'stage': startup._enum_to_value(startup.stage)
     }
     
@@ -1344,7 +1378,7 @@ def has_startup_access(user_id, startup_id):
     """Check if user has access to view startup data"""
     # Admin users can access all startups
     current_user = User.query.get(user_id)
-    if current_user and (current_user.role == 'admin' or current_user.admin):
+    if current_user and current_user.role == 'admin':
         return True
     
     # Check if user is a member of the startup
@@ -1359,7 +1393,7 @@ def has_startup_management_access(user_id, startup_id):
     """Check if user has permission to manage startup data"""
     # Admin users can manage all startups
     current_user = User.query.get(user_id)
-    if current_user and (current_user.role == 'admin' or current_user.admin):
+    if current_user and current_user.role == 'admin':
         return True
     # Check if user is the creator or has admin/manager role in the startup
     startup = Startup.query.get(startup_id)
@@ -1577,6 +1611,31 @@ def change_member_role(startup_id, member_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'Failed to change member role: {str(e)}', 500)
+
+@startups_bp.route('/<int:startup_id>/invitations/mine', methods=['OPTIONS'])
+def get_my_startup_invitation_options(startup_id):
+    """CORS preflight handler for /invitations/mine"""
+    return success_response({'message': 'ok'})
+
+@startups_bp.route('/<int:startup_id>/invitations/mine', methods=['GET'])
+@jwt_required()
+def get_my_startup_invitation(startup_id):
+    """
+    Get the current user's pending invitation for a specific startup.
+    No manager role required — users can only see their own invitation.
+    """
+    current_user_id = get_jwt_identity()
+
+    invitation = StartupInvitation.query.filter_by(
+        startup_id=startup_id,
+        invited_user_id=current_user_id,
+        status=InvitationStatus.pending
+    ).first()
+
+    return success_response({
+        'invitation': invitation.to_dict() if invitation else None,
+        'has_pending_invitation': invitation is not None
+    })
 
 # STARTUP INVITATIONS CRUD
 @startups_bp.route('/<int:startup_id>/invitations', methods=['GET'])
@@ -1876,3 +1935,275 @@ def get_my_invitations():
         'count': len(invitations),
         'filter': status_filter
     })
+
+# ==================== RATING ENDPOINTS ====================
+
+@startups_bp.route('/<int:startup_id>/rate', methods=['POST'])
+@jwt_required()
+def rate_startup(startup_id):
+    """Submit or update a rating for a startup"""
+    current_user_id = get_jwt_identity()
+    
+    startup = Startup.query.get(startup_id)
+    if not startup:
+        return error_response('Startup not found', 404)
+    
+    data = request.get_json()
+    rating = data.get('rating')
+    review_text = data.get('review_text', '')
+    
+    # Validate rating
+    if rating is None or not isinstance(rating, (int, float)):
+        return error_response('Rating is required and must be a number', 400)
+    
+    if rating < 1 or rating > 5:
+        return error_response('Rating must be between 1 and 5', 400)
+    
+    try:
+        from app.models.startup_rating import StartupRating
+        
+        # Check if user already rated this startup
+        existing_rating = StartupRating.query.filter_by(
+            user_id=current_user_id,
+            startup_id=startup_id
+        ).first()
+        
+        if existing_rating:
+            # Update existing rating
+            existing_rating.rating = float(rating)
+            existing_rating.review_text = review_text
+        else:
+            # Create new rating
+            new_rating = StartupRating(
+                user_id=current_user_id,
+                startup_id=startup_id,
+                rating=float(rating),
+                review_text=review_text
+            )
+            db.session.add(new_rating)
+        
+        db.session.commit()
+        
+        return success_response({
+            'message': 'Rating submitted successfully',
+            'rating': float(rating)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'Failed to submit rating: {str(e)}', 500)
+
+
+@startups_bp.route('/<int:startup_id>/ratings', methods=['GET'])
+def get_startup_ratings(startup_id):
+    """Get all ratings for a startup and calculate average"""
+    startup = Startup.query.get(startup_id)
+    if not startup:
+        return error_response('Startup not found', 404)
+    
+    try:
+        from app.models.startup_rating import StartupRating
+
+        
+        ratings = StartupRating.query.filter_by(startup_id=startup_id).all()
+        
+        # Calculate average rating
+        if ratings:
+            avg_rating = sum(r.rating for r in ratings) / len(ratings)
+        else:
+            avg_rating = 0
+        
+        return success_response({
+            'startup_id': startup_id,
+            'ratings': [{
+                'id': r.id,
+                'user_id': r.user_id,
+                'rating': r.rating,
+                'review_text': r.review_text,
+                'created_at': r.created_at.isoformat()
+            } for r in ratings],
+            'average_rating': round(avg_rating, 2),
+            'total_ratings': len(ratings)
+        })
+    except Exception as e:
+        return error_response(f'Failed to fetch ratings: {str(e)}', 500)
+from app.utils.ai_helpers import get_response
+import re
+@startups_bp.route('/<int:startup_id>/launch-data', methods=['GET'])
+@jwt_required()
+def get_startup_launch_data(startup_id):
+    """
+    AI endpoint to generate startup registration suggestions based on an existing idea.
+    Fetches idea data and returns pre-filled startup registration data.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    if not user:
+        return error_response('User not found', 404)
+    
+    # Fetch the idea by startup_id (assuming it's passed as idea_id)
+    from app.models.idea import Idea
+    idea = Idea.query.get(startup_id)
+    
+    if not idea:
+        return error_response('Idea not found', 404)
+    
+    try:
+        system_prompt = (
+            "You are a startup registration assistant. "
+            "Based on the provided idea data, generate startup registration suggestions. "
+            "Return ONLY valid JSON with no markdown formatting.\n\n"
+            "Schema:\n"
+            "{\n"
+            '  "name": "string (suggested startup name based on idea title)",\n'
+            '  "industry": "string (industry category)",\n'
+            '  "description": "string (2-3 sentence description based on idea)",\n'
+            '  "stage": "string (idea|mvp|beta|launched|growth)",\n'
+            '  "roles": {\n'
+            '    "role_name": {"positionsNumber": number}\n'
+            '  },\n'
+            '  "tech_stack": ["string (technologies)"],\n'
+            '  "location": "string (optional location)",\n'
+            '  "funding_round": "string (pre-seed|seed|seriesA|seriesB|etc)"\n'
+            "}"
+        )
+        
+        user_prompt = (
+            f"Based on this idea, suggest startup registration details:\n\n"
+            f"Title: {idea.title}\n"
+            f"Industry: {idea.industry}\n"
+            f"Stage: {idea.stage}\n"
+            f"Description: {idea.description}\n"
+            f"Project Details: {idea.project_details}\n"
+            f"Tags: {', '.join(idea.tags or [])}\n\n"
+            f"Generate realistic suggestions for a startup registration form."
+        )
+        
+        response_text, tokens_used = get_response(
+            model="qwen/qwen3-32b",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.7,
+            max_tokens=1024
+        )
+        
+        # Parse JSON response
+        try:
+            suggestions = json.loads(response_text)
+        except json.JSONDecodeError:
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                suggestions = json.loads(json_match.group())
+            else:
+                return error_response('Failed to parse AI suggestions', 500)
+        
+        return success_response({
+            'suggestions': suggestions,
+            'tokens_used': tokens_used
+        }, 'Suggestions generated successfully')
+        
+    except Exception as e:
+        print(f"❌ [AI_LAUNCH_DATA] Error: {str(e)}")
+        return error_response(f'Failed to generate suggestions: {str(e)}', 500)
+@startups_bp.route('/<int:startup_id>/ai/refine-description', methods=['POST'])
+@jwt_required()
+def refine_startup_description(startup_id):
+    """
+    AI endpoint to refine and improve startup description.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    if not user:
+        return error_response('User not found', 404)
+    
+    data = request.get_json() or {}
+    description = data.get('description', '').strip()
+    
+    if not description:
+        return error_response('Please provide a description to refine', 400)
+    
+    try:
+        system_prompt = (
+            "You are a professional startup copywriter. "
+            "Improve and refine the given startup description to be more compelling, "
+            "professional, and investor-ready. Keep it concise (2-3 sentences). "
+            "Return ONLY the refined description text, no JSON."
+        )
+        
+        response_text, tokens_used = get_response(
+            model="qwen/qwen3-32b",
+            system_prompt=system_prompt,
+            user_prompt=f"Refine this startup description:\n\n{description}",
+            temperature=0.7,
+            max_tokens=256
+        )
+        
+        return success_response({
+            'refined_description': response_text.strip(),
+            'tokens_used': tokens_used
+        })
+        
+    except Exception as e:
+        print(f"❌ [AI_REFINE_DESCRIPTION] Error: {str(e)}")
+        return error_response(f'Failed to refine description: {str(e)}', 500)
+@startups_bp.route('/<int:startup_id>/ai/suggest-roles', methods=['POST'])
+@jwt_required()
+def suggest_startup_roles(startup_id):
+    """
+    AI endpoint to suggest team roles based on startup description.
+    """
+    current_user_id = get_jwt_identity()
+    
+    data = request.get_json() or {}
+    startup_description = data.get('description', '').strip()
+    industry = data.get('industry', '').strip()
+    
+    if not startup_description:
+        return error_response('Please provide a startup description', 400)
+    
+    try:
+        system_prompt = (
+            "You are a startup HR consultant. "
+            "Based on the startup description and industry, suggest key team roles needed. "
+            "Return ONLY valid JSON with no markdown.\n\n"
+            "Schema:\n"
+            "{\n"
+            '  "roles": {\n'
+            '    "role_name": {"positionsNumber": number}\n'
+            '  }\n'
+            "}"
+        )
+        
+        user_prompt = (
+            f"Suggest team roles for this startup:\n"
+            f"Industry: {industry}\n"
+            f"Description: {startup_description}\n\n"
+            f"Suggest 3-5 key roles with position counts."
+        )
+        
+        response_text, tokens_used = get_response(
+            model="qwen/qwen3-32b",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.7,
+            max_tokens=512
+        )
+        
+        try:
+            roles_data = json.loads(response_text)
+        except json.JSONDecodeError:
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                roles_data = json.loads(json_match.group())
+            else:
+                return error_response('Failed to parse role suggestions', 500)
+        
+        return success_response({
+            'roles': roles_data.get('roles', {}),
+            'tokens_used': tokens_used
+        })
+        
+    except Exception as e:
+        print(f"❌ [AI_SUGGEST_ROLES] Error: {str(e)}")
+        return error_response(f'Failed to suggest roles: {str(e)}', 500)

@@ -6,6 +6,7 @@ import warnings
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.extensions import socketio
 from app import create_app
+from flask_cors import CORS
 
 # =====================================================
 # ENV SETUP
@@ -18,7 +19,7 @@ PORT = int(os.getenv("PORT", 5001))
 DEBUG = ENV != "production"
 
 print("=" * 60)
-print("🚀 SF COLLAB API STARTING")
+print("SF COLLAB API STARTING")
 print(f"ENV: {ENV}")
 print(f"PORT: {PORT}")
 print("=" * 60)
@@ -27,6 +28,8 @@ print("=" * 60)
 # CREATE APP
 # =====================================================
 app = create_app(ENV)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
 print("DB URI:", app.config["SQLALCHEMY_DATABASE_URI"])
 # =====================================================
 # PROXY FIX (PRODUCTION ONLY)

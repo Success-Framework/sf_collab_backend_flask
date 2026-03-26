@@ -148,7 +148,7 @@ def view_story(story_id):
         return error_response('User ID is required', 400)
     
     # Check if user already viewed this story
-    from models.storyView import StoryView
+    from app.models.storyView import StoryView
     existing_view = StoryView.query.filter_by(story_id=story_id, user_id=user_id).first()
     
     if existing_view:

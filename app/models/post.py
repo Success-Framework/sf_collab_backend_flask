@@ -79,6 +79,12 @@ class Post(db.Model):
         """Increment save count"""
         self.saves += 1
         db.session.commit()
+
+    def decrement_saves(self):
+        """Decrement save count"""
+        if self.saves > 0:
+            self.saves -= 1
+        db.session.commit()
     
     def add_tag(self, tag):
         """Add tag to post"""
@@ -128,7 +134,8 @@ class Post(db.Model):
             'saves': self.saves,
             'createdAt': self.created_at.isoformat(),
             'updatedAt': self.updated_at.isoformat(),
-            'mediaCount': self.get_media_count()
+            'mediaCount': self.get_media_count(),
+            'mediaItems': [media.to_dict() for media in self.media_items.all()] if include_media else []
         }
         
         if user_id:

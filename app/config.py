@@ -186,13 +186,21 @@ class Config:
     # Timezone
     TIMEZONE = 'UTC'
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-    
-    
-    
+
+    # Required for verifying that webhook calls genuinely come from Stripe.
+    # Get this from: Stripe Dashboard → Developers → Webhooks → your endpoint → Signing secret
+    STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+    # Required for Stripe Connect payouts to contributors/mentors.
+    # Get this from: Stripe Dashboard → Settings → Connect settings → Client ID
+    STRIPE_CONNECT_CLIENT_ID = os.getenv("STRIPE_CONNECT_CLIENT_ID")
+
     @staticmethod
     def init_stripe():
         if not Config.STRIPE_SECRET_KEY:
             print("WARNING: STRIPE_SECRET_KEY is missing. Payments will fail.")
+        if not Config.STRIPE_WEBHOOK_SECRET:
+            print("WARNING: STRIPE_WEBHOOK_SECRET is missing. Webhook verification will fail.")
         stripe.api_key = Config.STRIPE_SECRET_KEY
 
 
