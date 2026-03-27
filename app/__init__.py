@@ -65,19 +65,6 @@ SCHEMA_MIGRATIONS = [
     ("ideas", "risk_level",          "VARCHAR(20) DEFAULT 'medium'"),
     ("ideas", "required_roles",      "JSON"),
     ("ideas", "roadmap_items",       "JSON"),
-
-    # users table — fixes missing columns
-    ("users", "last_seen",           "DATETIME"),
-    ("users", "last_login_ip",       "VARCHAR(45)"),
-    ("users", "total_revenue",       "FLOAT DEFAULT 0.0"),
-    ("users", "reputation_score",    "FLOAT DEFAULT 0.0"),
-    ("users", "storage_used_mb",     "FLOAT DEFAULT 0.0"),
-    ("users", "stripe_connect_account_id", "VARCHAR(255)"),
-    ("users", "milestones_completed", "INTEGER DEFAULT 0"),
-    ("users", "milestones_on_time",  "INTEGER DEFAULT 0"),
-    ("users", "tasks_completed",     "INTEGER DEFAULT 0"),
-    ("users", "tasks_on_time",       "INTEGER DEFAULT 0"),
-    ("users", "collaborations_count","INTEGER DEFAULT 0"),
 ]
 
 
