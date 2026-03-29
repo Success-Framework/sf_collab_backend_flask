@@ -76,6 +76,8 @@ from .routes import (
     readiness_routes,
     balance_routes,
     crystal_routes,
+    activation_routes,
+    mentorship_routes,
     
 )
 
@@ -149,8 +151,14 @@ blueprints = [
 { "blueprint": store_routes.store_bp, "url_prefix": '/api/store'},
 # { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
 { "blueprint": marketplace_routes.marketplace_bp, "url_prefix": '/api/marketplace'},
+<<<<<<< HEAD
 # { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
+=======
+#{ "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
+>>>>>>> d9826f0 (vision and market place)
 { "blueprint": readiness_routes.readiness_bp, "url_prefix": '/api/readiness' },
 { "blueprint": balance_routes.balance_bp, "url_prefix": '/api/balance' },
 { "blueprint": crystal_routes.crystals_bp, "url_prefix": '/api/crystals' },
+{ "blueprint": activation_routes.activation_bp, "url_prefix": '/api/activation' },
+{ "blueprint": mentorship_routes.mentorship_bp, "url_prefix": '/api/mentorship' },
 ]
