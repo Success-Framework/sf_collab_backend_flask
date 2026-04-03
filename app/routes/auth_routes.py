@@ -15,7 +15,7 @@ from flask_jwt_extended import (
     get_jwt,
     set_access_cookies, 
     set_refresh_cookies,
-    unset_jwt_cookies
+    unset_jwt_cookies,
     decode_token
 )
 import traceback
