@@ -3,7 +3,6 @@ consumer_template.py
 Theme: Coral Energy — Coral (#F96167) + Bold Black (#1A1A2E) + Warm White (#FFF8F0)
 Visual motif: Bold top header bar on dark slides, warm cards on light slides
 """
-
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
 from .base_template import (

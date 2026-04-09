@@ -15,12 +15,13 @@ from pathlib import Path
 from datetime import datetime
 
 from .content_generator import generate_slide_content
-from .templates import (
+from .templates import  (
     build_general_deck,
     build_saas_deck,
     build_fintech_deck,
     build_consumer_deck,
 )
+
 
 logger = logging.getLogger(__name__)
 
