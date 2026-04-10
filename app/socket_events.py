@@ -142,12 +142,21 @@ def handle_send_message(data):
     file_url = data.get('file_url')
     file_name = data.get('file_name')
     file_type = data.get('file_type')
-    is_image = data.get('is_image', False)
-    message_type = data.get('message_type', 'text')
+    message_type = str(data.get('message_type', 'text') or 'text').lower()
     reply_to_id = data.get('reply_to_id')
+    skip_persist = bool(data.get('skip_persist'))
+    persisted_message_id = data.get('persisted_message_id')
+
+    has_file_url = bool(file_url)
+    file_type_is_image = isinstance(file_type, str) and file_type.startswith('image/')
+    derived_is_image = message_type == 'image' or file_type_is_image
     
-    if not content and not file_url:
+    if not skip_persist and not content and not has_file_url:
         emit('error', {'message': 'Message content or file URL is required'})
+        return
+
+    if not skip_persist and message_type in ('image', 'file') and not has_file_url:
+        emit('error', {'message': 'file_url is required for image/file messages'})
         return
         
     
@@ -163,33 +172,56 @@ def handle_send_message(data):
             emit('error', {'message': 'Not a participant'})
             return
         
-        # Create message - Now including file fields
-        message = ChatMessage(
-            conversation_id=conversation_id,
-            sender_id=user_id,
-            original_content=content,
-            message_type=message_type,
-            reply_to_id=reply_to_id,
-            file_url=file_url,
-            file_name=file_name,
-            file_type=file_type,
-            is_image=is_image,
-            sender_timezone=user.get_timezone() if hasattr(user, 'get_timezone') else 'UTC'
-        )
-        
-        db.session.add(message)
-        conversation.updated_at = datetime.utcnow()
-        conversation.increment_unread_count(user_id)
-        db.session.commit()
-        
-        # Prepare message data
-        message_data = message.to_dict(for_user=user)
-        message_data['sender'] = {
-            'id': user.id,
-            'firstName': user.first_name,
-            'lastName': user.last_name,
-            'profilePicture': user.profile_picture
-        }
+        if skip_persist:
+            # Broadcast an already-persisted REST message to user rooms only.
+            if not persisted_message_id:
+                emit('error', {'message': 'persisted_message_id is required when skip_persist is true'})
+                return
+
+            message = ChatMessage.query.get(persisted_message_id)
+            if not message:
+                emit('error', {'message': 'Persisted message not found'})
+                return
+
+            if str(message.conversation_id) != str(conversation_id) or str(message.sender_id) != str(user_id):
+                emit('error', {'message': 'Persisted message does not match sender/conversation'})
+                return
+
+            message_data = message.to_dict(for_user=user)
+            message_data['sender'] = {
+                'id': user.id,
+                'firstName': user.first_name,
+                'lastName': user.last_name,
+                'profilePicture': user.profile_picture
+            }
+        else:
+            # Create message - Now including file fields
+            message = ChatMessage(
+                conversation_id=conversation_id,
+                sender_id=user_id,
+                original_content=content,
+                message_type=message_type,
+                reply_to_id=reply_to_id,
+                file_url=file_url,
+                file_name=file_name,
+                file_type=file_type,
+                metadata_data={'is_image': derived_is_image} if (has_file_url or message_type in ('image', 'file')) else {},
+                sender_timezone=user.get_timezone() if hasattr(user, 'get_timezone') else 'UTC'
+            )
+
+            db.session.add(message)
+            conversation.updated_at = datetime.utcnow()
+            conversation.increment_unread_count(user_id)
+            db.session.commit()
+
+            # Prepare message data
+            message_data = message.to_dict(for_user=user)
+            message_data['sender'] = {
+                'id': user.id,
+                'firstName': user.first_name,
+                'lastName': user.last_name,
+                'profilePicture': user.profile_picture
+            }
 
         # For each participant who had hidden this conversation, un-hide it
         # so the new message reappears in their list
@@ -206,13 +238,15 @@ def handle_send_message(data):
             'name': conversation.name,
         }
         
-        # Broadcast to conversation room
-        emit('new_message', {
-            'message': message_data,
-            'conversation_id': conversation_id,
-            'conversation': conversation_meta,
-        }, room=room)
-        # 2️⃣ Emit to each participant's user room (GLOBAL updates)
+        # Broadcast to active room only when this path created the message.
+        if not skip_persist:
+            emit('new_message', {
+                'message': message_data,
+                'conversation_id': conversation_id,
+                'conversation': conversation_meta,
+            }, room=room)
+
+        # Emit to each participant's user room (GLOBAL updates)
         for participant in conversation.participants:
             emit('conversation_message', {
                 'conversation_id': conversation_id,
