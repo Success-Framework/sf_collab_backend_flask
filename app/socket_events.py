@@ -142,12 +142,19 @@ def handle_send_message(data):
     file_url = data.get('file_url')
     file_name = data.get('file_name')
     file_type = data.get('file_type')
-    is_image = data.get('is_image', False)
-    message_type = data.get('message_type', 'text')
+    message_type = str(data.get('message_type', 'text') or 'text').lower()
     reply_to_id = data.get('reply_to_id')
+
+    has_file_url = bool(file_url)
+    file_type_is_image = isinstance(file_type, str) and file_type.startswith('image/')
+    derived_is_image = message_type == 'image' or file_type_is_image
     
-    if not content and not file_url:
+    if not content and not has_file_url:
         emit('error', {'message': 'Message content or file URL is required'})
+        return
+
+    if message_type in ('image', 'file') and not has_file_url:
+        emit('error', {'message': 'file_url is required for image/file messages'})
         return
         
     
@@ -173,7 +180,7 @@ def handle_send_message(data):
             file_url=file_url,
             file_name=file_name,
             file_type=file_type,
-            is_image=is_image,
+            metadata_data={'is_image': derived_is_image} if (has_file_url or message_type in ('image', 'file')) else {},
             sender_timezone=user.get_timezone() if hasattr(user, 'get_timezone') else 'UTC'
         )
         
