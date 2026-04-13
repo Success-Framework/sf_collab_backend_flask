@@ -399,34 +399,34 @@ def verify_code():
         "verified": True
     })
 
-@bp.route('/verify-code', methods=['POST'])
-@limiter.limit("10 per minute")
-def verify_code():
-    data = request.get_json()
+# @bp.route('/verify-code', methods=['POST'])
+# @limiter.limit("10 per minute")
+# def verify_code():
+#     data = request.get_json()
 
-    email = data.get("email")
-    submitted_code = data.get("code")
-    data = request.get_json()
-    print(f"DEBUG: Verifying code for user_id: {user_id}, Claims: {claims}, Data: {data}")
-    parsed_token = claims.get("code")
-    submitted_code = data.get("code")
-    print(f"DEBUG: Parsed token code: {parsed_token}, Submitted code: {submitted_code}")
-    if str(parsed_token) != str(submitted_code):
-        return error_response("Invalid code", 400)
+#     email = data.get("email")
+#     submitted_code = data.get("code")
+#     data = request.get_json()
+#     print(f"DEBUG: Verifying code for user_id: {user_id}, Claims: {claims}, Data: {data}")
+#     parsed_token = claims.get("code")
+#     submitted_code = data.get("code")
+#     print(f"DEBUG: Parsed token code: {parsed_token}, Submitted code: {submitted_code}")
+#     if str(parsed_token) != str(submitted_code):
+#         return error_response("Invalid code", 400)
     
-    user = User.query.get(int(user_id))
-    user.is_email_verified = True
-    db.session.commit()
+#     user = User.query.get(int(user_id))
+#     user.is_email_verified = True
+#     db.session.commit()
     
-    # ===== SEND NOTIFICATION =====
-    try:
-        notify_email_verified(user.id)
-    except Exception as e:
-        print(f"Error sending email verified notification: {e}")
+#     # ===== SEND NOTIFICATION =====
+#     try:
+#         notify_email_verified(user.id)
+#     except Exception as e:
+#         print(f"Error sending email verified notification: {e}")
     
-    return success_response({
-        "verified": True
-    }, "Email verified successfully")
+#     return success_response({
+#         "verified": True
+#     }, "Email verified successfully")
 
 
 # ========================== PASSWORD RESET ==========================

@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 
 from .content_generator import generate_slide_content
-from .templates import (
+from .ppt_templates import (
     build_general_deck,
     build_saas_deck,
     build_fintech_deck,

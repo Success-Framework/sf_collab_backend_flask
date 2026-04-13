@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import current_app
 from groq import Groq
 
-from app.services.pitch_deck.templates import get_template
+from app.services.pitch_deck.ppt_templates import get_template
 
 
 class PitchDeckGenerator:

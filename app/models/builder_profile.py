@@ -3,7 +3,7 @@ from app.extensions import db
 
 
 class BuilderProfile(db.Model):
-    __tablename__ = "builder_profiles"
+    __tablename__ = "builder_profile"
 
     id = db.Column(db.Integer, primary_key=True)
 

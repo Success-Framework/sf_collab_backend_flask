@@ -16,7 +16,7 @@ from .routes import (
     team_performance_routes,
     achievement_routes,
     calendar_event_routes,
-    chat_routes,
+    # chat_routes,
     conversation_routes,
     goal_milestone_routes,
     idea_bookmark_routes,
