@@ -1,4 +1,3 @@
-ubuntu@ip-172-31-67-95:~$ cat /home/ubuntu/sf_collab_backend_flask/app/__init__.py
 from flask import Flask, request, abort, request, g, send_from_directory, make_response, session
 from flask_cors import CORS
 from .extensions import db, migrate, jwt, sess, limiter
@@ -66,18 +65,18 @@ SCHEMA_MIGRATIONS = [
     ("ideas", "required_roles",      "JSON"),
     ("ideas", "roadmap_items",       "JSON"),
 
-    # users table — fixes missing columns
-    ("users", "last_seen",           "DATETIME"),
-    ("users", "last_login_ip",       "VARCHAR(45)"),
-    ("users", "total_revenue",       "FLOAT DEFAULT 0.0"),
-    ("users", "reputation_score",    "FLOAT DEFAULT 0.0"),
-    ("users", "storage_used_mb",     "FLOAT DEFAULT 0.0"),
-    ("users", "stripe_connect_account_id", "VARCHAR(255)"),
-    ("users", "milestones_completed", "INTEGER DEFAULT 0"),
-    ("users", "milestones_on_time",  "INTEGER DEFAULT 0"),
-    ("users", "tasks_completed",     "INTEGER DEFAULT 0"),
-    ("users", "tasks_on_time",       "INTEGER DEFAULT 0"),
-    ("users", "collaborations_count","INTEGER DEFAULT 0"),
+    # users table — fixes missing columns needed by auth/profile flows
+    ("users", "last_seen",                    "DATETIME"),
+    ("users", "last_login_ip",                "VARCHAR(45)"),
+    ("users", "total_revenue",                "FLOAT DEFAULT 0.0"),
+    ("users", "reputation_score",             "FLOAT DEFAULT 0.0"),
+    ("users", "storage_used_mb",              "FLOAT DEFAULT 0.0"),
+    ("users", "stripe_connect_account_id",    "VARCHAR(255)"),
+    ("users", "milestones_completed",         "INTEGER DEFAULT 0"),
+    ("users", "milestones_on_time",           "INTEGER DEFAULT 0"),
+    ("users", "tasks_completed",              "INTEGER DEFAULT 0"),
+    ("users", "tasks_on_time",                "INTEGER DEFAULT 0"),
+    ("users", "collaborations_count",         "INTEGER DEFAULT 0"),
 ]
 
 
@@ -148,16 +147,26 @@ def create_app(config_name=None):
     
     # JWT Configuration
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY") or app.config.get("SECRET_KEY")
-    # JWT Cookie Configuration
-    app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
-    app.config["JWT_COOKIE_SECURE"] = True
-    app.config["JWT_COOKIE_SAMESITE"] = "None"
-    app.config["JWT_COOKIE_CSRF_PROTECT"] = True
-    app.config["JWT_ACCESS_COOKIE_PATH"] = "/"
-    app.config["JWT_REFRESH_COOKIE_PATH"] = "/api/auth/refresh"
-    app.config["JWT_COOKIE_DOMAIN"] = ".sfcollab.com"
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=15)
     app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=7)
+    app.config["JWT_ACCESS_COOKIE_PATH"] = "/"
+    app.config["JWT_REFRESH_COOKIE_PATH"] = "/api/auth/refresh"
+
+    # Support Bearer tokens for local dev onboarding flows while preserving
+    # cookie support for deployed environments.
+    is_production = os.getenv("FLASK_ENV") == "production"
+    if is_production:
+        app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+        app.config["JWT_COOKIE_SECURE"] = True
+        app.config["JWT_COOKIE_SAMESITE"] = "None"
+        app.config["JWT_COOKIE_CSRF_PROTECT"] = True
+        app.config["JWT_COOKIE_DOMAIN"] = ".sfcollab.com"
+    else:
+        app.config["JWT_TOKEN_LOCATION"] = ["headers", "cookies"]
+        app.config["JWT_COOKIE_SECURE"] = False
+        app.config["JWT_COOKIE_SAMESITE"] = "Lax"
+        app.config["JWT_COOKIE_CSRF_PROTECT"] = False
+        app.config["JWT_COOKIE_DOMAIN"] = None
 
 
 
@@ -171,7 +180,7 @@ def create_app(config_name=None):
     app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     
-    if os.getenv("FLASK_ENV") == "production":
+    if is_production:
         app.config["SESSION_COOKIE_SAMESITE"] = "None"
         app.config["SESSION_COOKIE_SECURE"] = True
     else:
@@ -217,9 +226,10 @@ def create_app(config_name=None):
     app.config['STRIPE_WEBHOOK_SECRET'] = os.getenv('STRIPE_WEBHOOK_SECRET', '')
 
     print("Initializing CORS with origins:", app.config.get('CORS_ORIGINS', []))
+    allowed_origins = app.config.get('CORS_ORIGINS', [])
     CORS(
         app,
-        resources={r"/*": {"origins": ["https://staging.sfcollab.com"]}},
+        resources={r"/*": {"origins": allowed_origins}},
         supports_credentials=True,
         allow_headers=[
             "Content-Type",
@@ -232,15 +242,17 @@ def create_app(config_name=None):
 
     @app.after_request
     def handle_cors(response):
-        response.headers["Access-Control-Allow-Origin"] = "https://staging.sfcollab.com"
+        request_origin = request.headers.get("Origin")
+        if request_origin and request_origin in allowed_origins:
+            response.headers["Access-Control-Allow-Origin"] = request_origin
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Credentials"] = "true"
-            return response
+        return response
 
     @app.route('/<path:path>', methods=['OPTIONS'])
-        def options_handler(path):
-            return '', 200
+    def options_handler(path):
+        return '', 200
 
     # Request logging
     @app.before_request
@@ -399,4 +411,4 @@ def create_app(config_name=None):
         print(event, payload)
         return '', 200
 
-    return appubuntu@ip-172-31-67-95:~$ 
+    return app
