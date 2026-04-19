@@ -2199,23 +2199,23 @@ DROP TABLE IF EXISTS `pitch_decks`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `pitch_decks` (
-  `id` varchar(36) NOT NULL,
+  `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,
-  `startup_id` int DEFAULT NULL,
-  `title` varchar(255) NOT NULL,
-  `template_type` varchar(100) NOT NULL,
-  `theme_type` varchar(100) NOT NULL,
-  `slides_json` json NOT NULL,
-  `credits_used` int DEFAULT 20,
-  `status` varchar(50) DEFAULT 'draft',
+  `company_name` varchar(255) NOT NULL,
+  `tagline` varchar(500) DEFAULT NULL,
+  `template` varchar(50) NOT NULL DEFAULT 'general',
+  `sector` varchar(100) DEFAULT NULL,
+  `form_data` json DEFAULT NULL,
+  `generated_content` json DEFAULT NULL,
+  `file_path` varchar(500) DEFAULT NULL,
+  `file_name` varchar(255) DEFAULT NULL,
+  `status` varchar(50) DEFAULT 'pending',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
-  KEY `startup_id` (`startup_id`),
   KEY `status` (`status`),
-  CONSTRAINT `pitch_decks_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `pitch_decks_ibfk_2` FOREIGN KEY (`startup_id`) REFERENCES `startups` (`id`) ON DELETE CASCADE
+  CONSTRAINT `pitch_decks_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2223,6 +2223,7 @@ LOCK TABLES `pitch_decks` WRITE;
 /*!40000 ALTER TABLE `pitch_decks` DISABLE KEYS */;
 /*!40000 ALTER TABLE `pitch_decks` ENABLE KEYS */;
 UNLOCK TABLES;
+
 --
 -- Table structure for table `sessions` (Flask-Session)
 --

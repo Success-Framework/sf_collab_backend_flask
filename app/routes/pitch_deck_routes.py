@@ -58,7 +58,7 @@ def generate_deck():
         "use_of_funds":        "string"
     }
     """
-    user_id   = get_jwt_identity()
+    user_id   = int(get_jwt_identity())
     form_data = request.get_json(silent=True)
 
     if not form_data:
@@ -116,8 +116,7 @@ def generate_deck():
 @jwt_required()
 def my_decks():
     """Return a list of all pitch decks created by the current user."""
-    user_id = get_jwt_identity()
-
+    user_id = int(get_jwt_identity())
     decks = (
         PitchDeck.query
         .filter_by(user_id=user_id)
@@ -134,7 +133,7 @@ def my_decks():
 @jwt_required()
 def download_deck(deck_id):
     """Download the PPTX file for a specific deck (must belong to requesting user)."""
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
 
     deck = PitchDeck.query.filter_by(id=deck_id, user_id=user_id).first()
     if not deck:
@@ -157,7 +156,7 @@ def download_deck(deck_id):
 @jwt_required()
 def delete_deck(deck_id):
     """Delete a pitch deck record and its associated file."""
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
 
     deck = PitchDeck.query.filter_by(id=deck_id, user_id=user_id).first()
     if not deck:
