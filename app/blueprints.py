@@ -145,8 +145,7 @@ blueprints = [
 { "blueprint": user_social_routes.user_social_bp, "url_prefix": '/api/user-social' },
 { "blueprint": dashboard_routes.dashboard_bp, "url_prefix": '/api/dashboard' },
 # { "blueprint": video_gen_routes.video_bp, "url_prefix": '/api/video' },
-{
-    "blueprint": pitch_deck_routes.pitch_deck_bp,"url_prefix": "/api/pitch-deck"},
+{ "blueprint": pitch_deck_routes.pitch_deck_bp,"url_prefix": "/api/pitch-deck"},
 { "blueprint": wallet_routes.wallet_bp, "url_prefix": '/api/wallet'},
 { "blueprint": store_routes.store_bp, "url_prefix": '/api/store'},
 # { "blueprint": ai_news_routes.ai_news_bp, "url_prefix": '/api'},
